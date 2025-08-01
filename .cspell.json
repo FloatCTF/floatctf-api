@@ -1,0 +1,13 @@
+{
+    "words": [
+        "actix",
+        "chrono",
+        "dotenv",
+        "dotenvy",
+        "floatctf",
+        "floatctfdb",
+        "serde",
+        "sqlx",
+        "thiserror"
+    ]
+}
