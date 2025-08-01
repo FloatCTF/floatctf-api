@@ -33,14 +33,11 @@ type UpdateChallengeRequest = CreateChallengeRequest;
 pub async fn update_challenge(
     db: WebDb,
     ucr: Json<UpdateChallengeRequest>,
-    challenge_id: Path<i32>,
+    id: Path<i32>,
 ) -> UniResult<()> {
     let ucr = ucr.into_inner();
 
-    match Challenges::find_by_id(*challenge_id)
-        .one(db.get_ref())
-        .await?
-    {
+    match Challenges::find_by_id(*id).one(db.get_ref()).await? {
         Some(challenge) => {
             let mut m_challenge = challenge.into_active_model();
 
@@ -55,7 +52,7 @@ pub async fn update_challenge(
 
             UniResponse::ok_none().into()
         }
-        None => UniError::NotFound(format!("challenge_id {} not exist", challenge_id)).into(),
+        None => UniError::NotFound(format!(" {} not exist", id)).into(),
     }
 }
 
@@ -71,13 +68,10 @@ pub struct PatchChallengeRequest {
 pub async fn patch_challenge(
     db: WebDb,
     pcr: Json<PatchChallengeRequest>,
-    challenge_id: Path<i32>,
+    id: Path<i32>,
 ) -> UniResult<()> {
     let pcr = pcr.into_inner();
-    match Challenges::find_by_id(*challenge_id)
-        .one(db.get_ref())
-        .await?
-    {
+    match Challenges::find_by_id(*id).one(db.get_ref()).await? {
         Some(challenge) => {
             let mut m_challenge = challenge.into_active_model();
 
@@ -104,7 +98,7 @@ pub async fn patch_challenge(
 
             UniResponse::ok_none().into()
         }
-        None => UniError::NotFound(format!("challenge_id {} not exist", challenge_id)).into(),
+        None => UniError::NotFound(format!(" {} not exist", id)).into(),
     }
 }
 

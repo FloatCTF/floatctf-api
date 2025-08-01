@@ -43,11 +43,7 @@ pub async fn create_user(db: WebDb, cur: Json<CreateUserRequest>) -> UniResult<(
 
 type UpdateUserRequest = CreateUserRequest;
 #[put("/{id}")]
-pub async fn update_user(
-    db: WebDb,
-    uur: Json<UpdateUserRequest>,
-    user_id: Path<i32>,
-) -> UniResult<()> {
+pub async fn update_user(db: WebDb, uur: Json<UpdateUserRequest>, id: Path<i32>) -> UniResult<()> {
     let uur = uur.into_inner();
 
     let hashed_password = {
@@ -62,7 +58,7 @@ pub async fn update_user(
         password_hash
     };
 
-    match Users::find_by_id(*user_id).one(db.get_ref()).await? {
+    match Users::find_by_id(*id).one(db.get_ref()).await? {
         Some(user) => {
             let mut m_user = user.into_active_model();
 
@@ -75,7 +71,7 @@ pub async fn update_user(
 
             UniResponse::ok_none().into()
         }
-        None => UniError::NotFound(format!("user_id {} not exist", user_id)).into(),
+        None => UniError::NotFound(format!(" {} not exist", id)).into(),
     }
 }
 
@@ -86,14 +82,10 @@ pub struct PathUserRequest {
     email: Option<String>,
 }
 #[patch("/{id}")]
-pub async fn patch_user(
-    db: WebDb,
-    pur: Json<PathUserRequest>,
-    user_id: Path<i32>,
-) -> UniResult<()> {
+pub async fn patch_user(db: WebDb, pur: Json<PathUserRequest>, id: Path<i32>) -> UniResult<()> {
     let pur = pur.into_inner();
 
-    match Users::find_by_id(*user_id).one(db.get_ref()).await? {
+    match Users::find_by_id(*id).one(db.get_ref()).await? {
         Some(user) => {
             let mut m_user = user.into_active_model();
 
@@ -126,7 +118,7 @@ pub async fn patch_user(
             let _user = m_user.update(db.get_ref()).await?;
             UniResponse::ok_none().into()
         }
-        None => UniError::NotFound(format!("user_id {} not exist", user_id)).into(),
+        None => UniError::NotFound(format!(" {} not exist", id)).into(),
     }
 }
 

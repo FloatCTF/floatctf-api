@@ -11,6 +11,8 @@ pub enum UniError {
     InternalError(String),
     #[error("Not Found: {0}")]
     NotFound(String),
+    #[error("Authentication error")]
+    AuthError,
     #[error("{0}")]
     CustomError(String),
 }
@@ -21,6 +23,7 @@ impl UniError {
             UniError::DatabaseError(_) => 1,
             UniError::InternalError(_) => 2,
             UniError::NotFound(_) => 404,
+            UniError::AuthError => 403,
             UniError::CustomError(_) => -1,
         }
     }

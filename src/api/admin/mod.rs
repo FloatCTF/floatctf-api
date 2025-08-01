@@ -21,4 +21,13 @@ pub fn config(cfg: &mut ServiceConfig) {
             .service(challenges::get_challenges)
             .service(challenges::get_challenge),
     );
+
+    cfg.service(
+        scope("/super_admin")
+            .service(super_admin::create_super_admin)
+            .service(super_admin::update_super_admin)
+            .service(super_admin::patch_super_admin)
+            .service(super_admin::get_super_admins)
+            .service(super_admin::get_super_admin),
+    );
 }

@@ -6,6 +6,7 @@
         "dotenvy",
         "floatctf",
         "floatctfdb",
+        "jsonwebtoken",
         "serde",
         "sqlx",
         "thiserror"

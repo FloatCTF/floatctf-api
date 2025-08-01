@@ -1,6 +1,9 @@
 mod api;
+mod auth;
 mod db;
 mod entity;
+mod middleware;
+
 use actix_web::{App, HttpServer, web};
 use dotenvy::dotenv;
 
@@ -18,9 +21,11 @@ async fn main() -> std::io::Result<()> {
 
     HttpServer::new(move || {
         App::new().app_data(db.clone()).service(
-            web::scope("/api")
-                .configure(api::service_config)
-                .service(web::scope("/admin").configure(api::admin_config)),
+            web::scope("/api").configure(api::service_config).service(
+                web::scope("/admin")
+                    .wrap(middleware::SuperAdminGuardMiddleware)
+                    .configure(api::admin_config),
+            ),
         )
     })
     .bind(("127.0.0.1", 8080))?
