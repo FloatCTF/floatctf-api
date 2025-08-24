@@ -11,7 +11,10 @@ pub struct CreateSuperAdminRequest {
     email: String,
 }
 #[post("")]
-pub async fn create_super_admin(db: WebDb, csr: Json<CreateSuperAdminRequest>) -> UniResult<()> {
+pub async fn create_super_admin(
+    db: WebDb,
+    csr: Json<CreateSuperAdminRequest>,
+) -> UniResult<super_admin::Model> {
     let csr = csr.into_inner();
 
     let hashed_password = {
@@ -33,9 +36,9 @@ pub async fn create_super_admin(db: WebDb, csr: Json<CreateSuperAdminRequest>) -
         ..Default::default()
     };
 
-    let _super_admin = new_super_admin.insert(db.get_ref()).await?;
+    let super_admin = new_super_admin.insert(db.get_ref()).await?;
 
-    UniResponse::ok_none().into()
+    UniResponse::ok(super_admin.into()).into()
 }
 
 type UpdateSuperAdminRequest = CreateSuperAdminRequest;
@@ -43,8 +46,8 @@ type UpdateSuperAdminRequest = CreateSuperAdminRequest;
 pub async fn update_super_admin(
     db: WebDb,
     usr: Json<UpdateSuperAdminRequest>,
-    id: Path<i32>,
-) -> UniResult<()> {
+    id: Path<Uuid>,
+) -> UniResult<super_admin::Model> {
     let usr = usr.into_inner();
     let hashed_password = {
         let salt = SaltString::generate(&mut OsRng);
@@ -58,20 +61,20 @@ pub async fn update_super_admin(
         password_hash
     };
 
-    match SuperAdmin::find_by_id(*id).one(db.get_ref()).await? {
-        Some(super_admin) => {
-            let mut m_super_admin = super_admin.into_active_model();
+    let super_admin = SuperAdmin::find_by_id(*id)
+        .one(db.get_ref())
+        .await?
+        .ok_or_else(|| UniError::NotFound(format!("{} not exist", id)))?;
 
-            m_super_admin.username = Set(usr.username);
-            m_super_admin.password_hash = Set(hashed_password);
-            m_super_admin.email = Set(usr.email);
+    let mut m_super_admin = super_admin.into_active_model();
 
-            let _super_admin = m_super_admin.update(db.get_ref()).await?;
+    m_super_admin.username = Set(usr.username);
+    m_super_admin.password_hash = Set(hashed_password);
+    m_super_admin.email = Set(usr.email);
 
-            UniResponse::ok_none().into()
-        }
-        None => UniError::NotFound(format!("{} not exist", id)).into(),
-    }
+    let super_admin = m_super_admin.update(db.get_ref()).await?;
+
+    UniResponse::ok(super_admin.into()).into()
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -84,43 +87,43 @@ pub struct PatchSuperAdminRequest {
 pub async fn patch_super_admin(
     db: WebDb,
     psr: Json<PatchSuperAdminRequest>,
-    id: Path<i32>,
-) -> UniResult<()> {
+    id: Path<Uuid>,
+) -> UniResult<super_admin::Model> {
     let psr = psr.into_inner();
 
-    match SuperAdmin::find_by_id(*id).one(db.get_ref()).await? {
-        Some(super_admin) => {
-            let mut m_super_admin = super_admin.into_active_model();
+    let super_admin = SuperAdmin::find_by_id(*id)
+        .one(db.get_ref())
+        .await?
+        .ok_or_else(|| UniError::NotFound(format!("{} not exist", id)))?;
 
-            psr.username.map(|u| {
-                m_super_admin.username = Set(u);
-            });
+    let mut m_super_admin = super_admin.into_active_model();
 
-            if let Some(p) = psr.password {
-                let hashed_password = {
-                    let salt = SaltString::generate(&mut OsRng);
-                    let argon2 = Argon2::default();
+    psr.username.map(|u| {
+        m_super_admin.username = Set(u);
+    });
 
-                    let password_hash = argon2
-                        .hash_password(p.as_bytes(), &salt)
-                        .map_err(|e| UniError::CustomError(format!("{}", e.to_string())))?
-                        .to_string();
+    if let Some(p) = psr.password {
+        let hashed_password = {
+            let salt = SaltString::generate(&mut OsRng);
+            let argon2 = Argon2::default();
 
-                    password_hash
-                };
-                m_super_admin.password_hash = Set(hashed_password);
-            }
+            let password_hash = argon2
+                .hash_password(p.as_bytes(), &salt)
+                .map_err(|e| UniError::CustomError(format!("{}", e.to_string())))?
+                .to_string();
 
-            psr.email.map(|e| {
-                m_super_admin.email = Set(e);
-            });
-
-            let _super_admin = m_super_admin.update(db.get_ref()).await?;
-
-            UniResponse::ok_none().into()
-        }
-        None => UniError::NotFound(format!("{} not exist", id)).into(),
+            password_hash
+        };
+        m_super_admin.password_hash = Set(hashed_password);
     }
+
+    psr.email.map(|e| {
+        m_super_admin.email = Set(e);
+    });
+
+    let super_admin = m_super_admin.update(db.get_ref()).await?;
+
+    UniResponse::ok(super_admin.into()).into()
 }
 
 #[get("")]
@@ -134,8 +137,8 @@ pub async fn get_super_admins(
 
     if let (Some(limit), Some(page)) = (query_params.limit, query_params.page) {
         let paginator = stmt.paginate(db.get_ref(), limit);
-        let items = paginator.fetch_page(page - 1).await?;
-        query_params.total = Some(items.len());
+        let items = paginator.fetch_page(page.saturating_sub(1)).await?;
+        query_params.total = Some(paginator.num_items().await? as usize);
 
         UniResponse::ok_meta(items.into(), query_params.into()).into()
     } else {
@@ -147,9 +150,49 @@ pub async fn get_super_admins(
 }
 
 #[get("/{id}")]
-pub async fn get_super_admin(db: WebDb, id: Path<i32>) -> UniResult<super_admin::Model> {
-    match SuperAdmin::find_by_id(*id).one(db.get_ref()).await? {
-        Some(model) => UniResponse::ok(model.into()).into(),
-        None => UniError::NotFound(format!(" {} not exist", id)).into(),
-    }
+pub async fn get_super_admin(db: WebDb, id: Path<Uuid>) -> UniResult<super_admin::Model> {
+    let model = SuperAdmin::find_by_id(*id)
+        .one(db.get_ref())
+        .await?
+        .ok_or_else(|| UniError::NotFound(format!("{} not exist", id)))?;
+
+    UniResponse::ok(model.into()).into()
+}
+
+#[delete("/{id}")]
+pub async fn delete_super_admin(db: WebDb, id: Path<Uuid>) -> UniResult<u64> {
+    let super_admin = SuperAdmin::find_by_id(*id)
+        .one(db.get_ref())
+        .await?
+        .ok_or_else(|| UniError::NotFound(format!("{} not exist", id)))?;
+
+    let r = super_admin.delete(db.get_ref()).await?;
+
+    UniResponse::ok(r.rows_affected.into()).into()
+}
+
+#[actix_web::test]
+pub async fn add_admin() {
+    dotenvy::dotenv().ok();
+    let db = crate::db::init_db().await.unwrap();
+    let password = "admin";
+    let username = "admin";
+    let email = "admin@admin.com";
+
+    let salt = SaltString::generate(&mut OsRng);
+    let hashed_password = {
+        let argon2 = Argon2::default();
+        let password_hash = argon2.hash_password(password.as_bytes(), &salt).unwrap();
+
+        password_hash
+    };
+
+    let new_super_admin = super_admin::ActiveModel {
+        username: Set(username.into()),
+        password_hash: Set(hashed_password.to_string()),
+        email: Set(email.into()),
+        ..Default::default()
+    };
+
+    let _super_admin = new_super_admin.insert(&db).await.unwrap();
 }

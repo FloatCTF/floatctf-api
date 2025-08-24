@@ -3,7 +3,7 @@ use std::future::{Ready, ready};
 use actix_web::{
     Error, HttpMessage,
     dev::{Service, ServiceRequest, ServiceResponse, Transform, forward_ready},
-    http::header,
+    http::Method,
 };
 use futures_util::future::LocalBoxFuture;
 
@@ -52,6 +52,10 @@ where
     forward_ready!(service);
 
     fn call(&self, req: ServiceRequest) -> Self::Future {
+        if req.method() == Method::OPTIONS {
+            let fut = self.service.call(req);
+            return Box::pin(async move { fut.await });
+        }
         if let Some(auth_header) = req.headers().get("Authorization") {
             let token = String::from_utf8_lossy(auth_header.as_bytes());
             if token.starts_with("Bearer ") {

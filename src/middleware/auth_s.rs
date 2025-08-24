@@ -3,11 +3,12 @@ use std::future::{Ready, ready};
 use actix_web::{
     Error, HttpMessage,
     dev::{Service, ServiceRequest, ServiceResponse, Transform, forward_ready},
+    http::Method,
 };
 use futures_util::future::LocalBoxFuture;
 
 use crate::auth::{Role, validate_jwt};
-
+use actix_web::HttpResponse;
 // There are two steps in middleware processing.
 // 1. Middleware initialization, middleware factory gets called with
 //    next service in chain as parameter.
@@ -51,6 +52,8 @@ where
     forward_ready!(service);
 
     fn call(&self, req: ServiceRequest) -> Self::Future {
+        println!("{}", &req.method());
+
         if let Some(auth_header) = req.headers().get("Authorization") {
             let token = String::from_utf8_lossy(auth_header.as_bytes());
             if token.starts_with("Bearer ") {

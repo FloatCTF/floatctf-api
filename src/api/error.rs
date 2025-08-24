@@ -20,11 +20,11 @@ pub enum UniError {
 impl UniError {
     pub fn code(&self) -> i32 {
         match self {
-            UniError::DatabaseError(_) => 1,
-            UniError::InternalError(_) => 2,
+            UniError::DatabaseError(_) => 500,
+            UniError::InternalError(_) => 500,
             UniError::NotFound(_) => 404,
-            UniError::AuthError => 403,
-            UniError::CustomError(_) => -1,
+            UniError::AuthError => 401,
+            UniError::CustomError(_) => 500,
         }
     }
 
@@ -35,7 +35,8 @@ impl UniError {
 
 impl ResponseError for UniError {
     fn error_response(&self) -> HttpResponse {
-        HttpResponse::Ok().json(self.to_response())
+        // HttpResponse::Ok().json(self.to_response())
+        HttpResponse::build(self.status_code()).json(self.to_response())
     }
 }
 

@@ -6,21 +6,61 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq, Serialize, Deserialize)]
 #[sea_orm(table_name = "users")]
 pub struct Model {
-    #[sea_orm(primary_key)]
-    pub id: i32,
-    #[sea_orm(column_type = "Text", unique)]
-    pub uuid: String,
+    #[sea_orm(primary_key, auto_increment = false)]
+    pub id: Uuid,
     #[sea_orm(column_type = "Text", unique)]
     pub username: String,
     #[sea_orm(column_type = "Text")]
     pub password_hash: String,
-    #[sea_orm(column_type = "Text")]
+    #[sea_orm(column_type = "Text", unique)]
     pub email: String,
     pub created_at: DateTime,
     pub updated_at: DateTime,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-pub enum Relation {}
+pub enum Relation {
+    #[sea_orm(has_many = "super::challenge_solves::Entity")]
+    ChallengeSolves,
+    #[sea_orm(has_many = "super::event_team_members::Entity")]
+    EventTeamMembers,
+    #[sea_orm(has_many = "super::event_users::Entity")]
+    EventUsers,
+    #[sea_orm(has_many = "super::instances::Entity")]
+    Instances,
+}
+
+impl Related<super::challenge_solves::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::ChallengeSolves.def()
+    }
+}
+
+impl Related<super::event_team_members::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::EventTeamMembers.def()
+    }
+}
+
+impl Related<super::event_users::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::EventUsers.def()
+    }
+}
+
+impl Related<super::instances::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Instances.def()
+    }
+}
+
+impl Related<super::events::Entity> for Entity {
+    fn to() -> RelationDef {
+        super::event_users::Relation::Events.def()
+    }
+    fn via() -> Option<RelationDef> {
+        Some(super::event_users::Relation::Users.def().rev())
+    }
+}
 
 impl ActiveModelBehavior for ActiveModel {}

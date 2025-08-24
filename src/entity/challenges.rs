@@ -6,8 +6,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq, Serialize, Deserialize)]
 #[sea_orm(table_name = "challenges")]
 pub struct Model {
-    #[sea_orm(primary_key)]
-    pub id: i32,
+    #[sea_orm(primary_key, auto_increment = false)]
+    pub id: Uuid,
     #[sea_orm(column_type = "Text", unique)]
     pub name: String,
     #[sea_orm(column_type = "Text")]
@@ -16,6 +16,7 @@ pub struct Model {
     pub description: String,
     #[sea_orm(column_type = "Text", nullable)]
     pub attachment: Option<String>,
+    pub hidden: bool,
     #[sea_orm(column_type = "Text")]
     pub toml_str: String,
     pub created_at: DateTime,
@@ -23,6 +24,40 @@ pub struct Model {
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-pub enum Relation {}
+pub enum Relation {
+    #[sea_orm(has_many = "super::challenge_solves::Entity")]
+    ChallengeSolves,
+    #[sea_orm(has_many = "super::event_challenges::Entity")]
+    EventChallenges,
+    #[sea_orm(has_many = "super::instances::Entity")]
+    Instances,
+}
+
+impl Related<super::challenge_solves::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::ChallengeSolves.def()
+    }
+}
+
+impl Related<super::event_challenges::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::EventChallenges.def()
+    }
+}
+
+impl Related<super::instances::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Instances.def()
+    }
+}
+
+impl Related<super::events::Entity> for Entity {
+    fn to() -> RelationDef {
+        super::event_challenges::Relation::Events.def()
+    }
+    fn via() -> Option<RelationDef> {
+        Some(super::event_challenges::Relation::Challenges.def().rev())
+    }
+}
 
 impl ActiveModelBehavior for ActiveModel {}
