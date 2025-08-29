@@ -4,6 +4,7 @@ use tempfile::NamedTempFile;
 
 use super::super::preclude::*;
 use crate::{
+    auth::SuperAdminJwtGuard,
     db::WebDocker,
     entity::{challenges, prelude::Challenges},
 };
@@ -21,6 +22,7 @@ pub struct CreateChallengeRequest {
 
 #[post("")]
 pub async fn create_challenge(
+    _user: SuperAdminJwtGuard,
     db: WebDb,
     ccr: Json<CreateChallengeRequest>,
 ) -> UniResult<challenges::Model> {
@@ -44,6 +46,7 @@ pub async fn create_challenge(
 type UpdateChallengeRequest = CreateChallengeRequest;
 #[put("/{id}")]
 pub async fn update_challenge(
+    _user: SuperAdminJwtGuard,
     db: WebDb,
     ucr: Json<UpdateChallengeRequest>,
     id: Path<Uuid>,
@@ -81,6 +84,7 @@ pub struct PatchChallengeRequest {
 }
 #[patch("/{id}")]
 pub async fn patch_challenge(
+    _user: SuperAdminJwtGuard,
     db: WebDb,
     pcr: Json<PatchChallengeRequest>,
     id: Path<Uuid>,
@@ -124,6 +128,7 @@ pub async fn patch_challenge(
 
 #[get("")]
 pub async fn get_challenges(
+    _user: SuperAdminJwtGuard,
     db: WebDb,
     query_params: Query<QueryParams>,
 ) -> UniResult<Vec<challenges::Model>> {
@@ -146,7 +151,11 @@ pub async fn get_challenges(
 }
 
 #[get("/{id}")]
-pub async fn get_challenge(db: WebDb, id: Path<Uuid>) -> UniResult<challenges::Model> {
+pub async fn get_challenge(
+    _user: SuperAdminJwtGuard,
+    db: WebDb,
+    id: Path<Uuid>,
+) -> UniResult<challenges::Model> {
     let model = Challenges::find_by_id(*id)
         .one(db.get_ref())
         .await?
@@ -156,7 +165,11 @@ pub async fn get_challenge(db: WebDb, id: Path<Uuid>) -> UniResult<challenges::M
 }
 
 #[delete("/{id}")]
-pub async fn delete_challenge(db: WebDb, id: Path<Uuid>) -> UniResult<u64> {
+pub async fn delete_challenge(
+    _user: SuperAdminJwtGuard,
+    db: WebDb,
+    id: Path<Uuid>,
+) -> UniResult<u64> {
     let challenge = Challenges::find_by_id(*id)
         .one(db.get_ref())
         .await?
@@ -178,6 +191,7 @@ struct UploadForm {
 
 #[post("/import")]
 pub async fn web_import_challenge(
+    _user: SuperAdminJwtGuard,
     db: WebDb,
     MultipartForm(form): MultipartForm<UploadForm>,
 ) -> UniResult<Vec<challenges::Model>> {
@@ -393,6 +407,7 @@ pub struct ChallengeCheckResult {
 
 #[get("/check")]
 pub async fn check_challenges(
+    _user: SuperAdminJwtGuard,
     db: WebDb,
     docker: WebDocker,
 ) -> UniResult<Vec<ChallengeCheckResult>> {

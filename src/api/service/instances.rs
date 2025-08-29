@@ -1,6 +1,6 @@
 use super::super::preclude::*;
 use crate::{
-    api::service::get_user,
+    auth::UserJwtGuard,
     db::WebDocker,
     entity::{
         challenges, instances,
@@ -16,6 +16,7 @@ use sea_orm::{ColumnTrait, ModelTrait, QueryFilter};
 
 #[get("")]
 pub async fn get_instances(
+    _user: UserJwtGuard,
     db: WebDb,
     query_params: Query<QueryParams>,
     request: HttpRequest,
@@ -56,6 +57,7 @@ pub async fn get_instances(
 
 #[get("/{id}")]
 pub async fn get_instance(
+    _user: UserJwtGuard,
     db: WebDb,
     id: Path<Uuid>,
     request: HttpRequest,
@@ -87,6 +89,7 @@ pub struct LaunchInstanceRequest {
 
 #[post("/launch")]
 pub async fn launch_instance(
+    user: UserJwtGuard,
     db: WebDb,
     docker: WebDocker,
     lir: Json<LaunchInstanceRequest>,
@@ -94,7 +97,7 @@ pub async fn launch_instance(
 ) -> UniResult<instances::Model> {
     let lir = lir.into_inner();
 
-    let user = get_user(&db, &request).await?;
+    let user = user.into_inner();
 
     // 题目是否可见
     // 每个人能启动的最大实例数为1
@@ -120,12 +123,13 @@ pub async fn launch_instance(
 
 #[delete("/{id}")]
 pub async fn destroy_instance(
+    user: UserJwtGuard,
     db: WebDb,
     docker: WebDocker,
     id: Path<Uuid>,
     request: HttpRequest,
 ) -> UniResult<()> {
-    let user = get_user(&db, &request).await?;
+    let user = user.into_inner();
 
     __destroy_instance(db, docker, *id, user).await
 }

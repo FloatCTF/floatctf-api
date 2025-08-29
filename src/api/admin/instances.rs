@@ -1,8 +1,12 @@
 use super::super::preclude::*;
-use crate::entity::{instances, prelude::Instances};
+use crate::{
+    auth::SuperAdminJwtGuard,
+    entity::{instances, prelude::Instances},
+};
 
 #[get("")]
 pub async fn get_instances(
+    _user: SuperAdminJwtGuard,
     db: WebDb,
     query_params: Query<QueryParams>,
 ) -> UniResult<Vec<instances::Model>> {
@@ -25,7 +29,11 @@ pub async fn get_instances(
 }
 
 #[get("/{id}")]
-pub async fn get_instance(db: WebDb, id: Path<Uuid>) -> UniResult<instances::Model> {
+pub async fn get_instance(
+    _user: SuperAdminJwtGuard,
+    db: WebDb,
+    id: Path<Uuid>,
+) -> UniResult<instances::Model> {
     let model = Instances::find_by_id(*id)
         .one(db.get_ref())
         .await?

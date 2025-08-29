@@ -1,5 +1,8 @@
 use super::super::preclude::*;
-use crate::entity::{prelude::Users, users};
+use crate::{
+    auth::SuperAdminJwtGuard,
+    entity::{prelude::Users, users},
+};
 use argon2::{
     Argon2,
     password_hash::{PasswordHasher, SaltString, rand_core::OsRng},
@@ -12,7 +15,11 @@ pub struct CreateUserRequest {
     email: String,
 }
 #[post("")]
-pub async fn create_user(db: WebDb, cur: Json<CreateUserRequest>) -> UniResult<users::Model> {
+pub async fn create_user(
+    _user: SuperAdminJwtGuard,
+    db: WebDb,
+    cur: Json<CreateUserRequest>,
+) -> UniResult<users::Model> {
     let cur = cur.into_inner();
 
     let hashed_password = {
@@ -42,6 +49,7 @@ pub async fn create_user(db: WebDb, cur: Json<CreateUserRequest>) -> UniResult<u
 type UpdateUserRequest = CreateUserRequest;
 #[put("/{id}")]
 pub async fn update_user(
+    _user: SuperAdminJwtGuard,
     db: WebDb,
     uur: Json<UpdateUserRequest>,
     id: Path<Uuid>,
@@ -85,6 +93,7 @@ pub struct PathUserRequest {
 }
 #[patch("/{id}")]
 pub async fn patch_user(
+    _user: SuperAdminJwtGuard,
     db: WebDb,
     pur: Json<PathUserRequest>,
     id: Path<Uuid>,
@@ -130,6 +139,7 @@ pub async fn patch_user(
 
 #[get("")]
 pub async fn get_users(
+    _user: SuperAdminJwtGuard,
     db: WebDb,
     query_params: Query<QueryParams>,
 ) -> UniResult<Vec<users::Model>> {
@@ -152,7 +162,11 @@ pub async fn get_users(
 }
 
 #[get("/{id}")]
-pub async fn get_user(db: WebDb, id: Path<Uuid>) -> UniResult<users::Model> {
+pub async fn get_user(
+    _user: SuperAdminJwtGuard,
+    db: WebDb,
+    id: Path<Uuid>,
+) -> UniResult<users::Model> {
     let model = Users::find_by_id(*id)
         .one(db.get_ref())
         .await?
@@ -162,7 +176,7 @@ pub async fn get_user(db: WebDb, id: Path<Uuid>) -> UniResult<users::Model> {
 }
 
 #[delete("/{id}")]
-pub async fn delete_user(db: WebDb, id: Path<Uuid>) -> UniResult<u64> {
+pub async fn delete_user(_user: SuperAdminJwtGuard, db: WebDb, id: Path<Uuid>) -> UniResult<u64> {
     let user = Users::find_by_id(*id)
         .one(db.get_ref())
         .await?

@@ -3,7 +3,8 @@ use sea_orm::{ColumnTrait, QueryFilter};
 
 use super::super::preclude::*;
 use crate::{
-    api::service::{get_user, instances::__destroy_instance},
+    api::service::instances::__destroy_instance,
+    auth::UserJwtGuard,
     db::WebDocker,
     entity::{
         challenge_solves, challenges, instances,
@@ -26,13 +27,14 @@ pub struct SubmitFlagRequest {
 
 #[post("/flag")]
 pub async fn submit_flag(
+    user: UserJwtGuard,
     db: WebDb,
     docker: WebDocker,
     sfr: Json<SubmitFlagRequest>,
     request: HttpRequest,
 ) -> UniResult<challenge_solves::Model> {
     // TODO: Implement submit_flag
-    let user = get_user(&db, &request).await?;
+    let user = user.into_inner();
     let sfr = sfr.into_inner();
 
     // practice
@@ -129,7 +131,7 @@ pub async fn jeopardy_event_team_submit_handler(
 
 // now just for the event
 #[post("writeup")]
-pub async fn submit_writeup(db: WebDb) -> UniResult<()> {
+pub async fn submit_writeup(_user: UserJwtGuard, db: WebDb) -> UniResult<()> {
     // TODO: Implement submit_writeup
     unimplemented!()
 }

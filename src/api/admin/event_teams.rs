@@ -1,10 +1,13 @@
 use sea_orm::{ColumnTrait, QueryFilter};
 
 use super::super::preclude::*;
-use crate::entity::{
-    event_team_members, event_teams, event_users,
-    prelude::{EventTeams, Events, Users},
-    users,
+use crate::{
+    auth::SuperAdminJwtGuard,
+    entity::{
+        event_team_members, event_teams, event_users,
+        prelude::{EventTeams, Events, Users},
+        users,
+    },
 };
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -55,6 +58,7 @@ pub async fn remove_team(db: WebDb, path: Path<(Uuid, Uuid)>) -> UniResult<u64> 
 
 #[get("")]
 pub async fn get_teams(
+    _user: SuperAdminJwtGuard,
     db: WebDb,
     id: Path<Uuid>,
     query_params: Query<QueryParams>,
@@ -90,6 +94,7 @@ pub struct GetTeamMembersResult {
 
 #[get("/{team_id}")]
 pub async fn get_team_members(
+    _user: SuperAdminJwtGuard,
     db: WebDb,
     path: Path<(Uuid, Uuid)>,
     query_params: Query<QueryParams>,
@@ -142,6 +147,7 @@ pub struct AddUserToTeamRequest {
 }
 #[post("/{team_id}/users")]
 pub async fn add_user_to_team(
+    _user: SuperAdminJwtGuard,
     db: WebDb,
     path: Path<(Uuid, Uuid)>,
     utt: Json<AddUserToTeamRequest>,
@@ -181,7 +187,11 @@ pub async fn add_user_to_team(
 }
 
 #[delete("/{team_id}/users/{user_id}")]
-pub async fn remove_user_from_team(db: WebDb, path: Path<(Uuid, Uuid, Uuid)>) -> UniResult<u64> {
+pub async fn remove_user_from_team(
+    _user: SuperAdminJwtGuard,
+    db: WebDb,
+    path: Path<(Uuid, Uuid, Uuid)>,
+) -> UniResult<u64> {
     let (id, team_id, user_id) = path.into_inner();
 
     let event_team_member = event_team_members::Entity::find()

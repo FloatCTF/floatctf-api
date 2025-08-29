@@ -1,5 +1,8 @@
 use super::super::preclude::*;
-use crate::entity::{prelude::SuperAdmin, super_admin};
+use crate::{
+    auth::SuperAdminJwtGuard,
+    entity::{prelude::SuperAdmin, super_admin},
+};
 use argon2::{
     Argon2,
     password_hash::{PasswordHasher, SaltString, rand_core::OsRng},
@@ -12,6 +15,7 @@ pub struct CreateSuperAdminRequest {
 }
 #[post("")]
 pub async fn create_super_admin(
+    _user: SuperAdminJwtGuard,
     db: WebDb,
     csr: Json<CreateSuperAdminRequest>,
 ) -> UniResult<super_admin::Model> {
@@ -44,6 +48,7 @@ pub async fn create_super_admin(
 type UpdateSuperAdminRequest = CreateSuperAdminRequest;
 #[post("/{id}")]
 pub async fn update_super_admin(
+    _user: SuperAdminJwtGuard,
     db: WebDb,
     usr: Json<UpdateSuperAdminRequest>,
     id: Path<Uuid>,
@@ -85,6 +90,7 @@ pub struct PatchSuperAdminRequest {
 }
 #[post("/{id}")]
 pub async fn patch_super_admin(
+    _user: SuperAdminJwtGuard,
     db: WebDb,
     psr: Json<PatchSuperAdminRequest>,
     id: Path<Uuid>,
@@ -128,6 +134,7 @@ pub async fn patch_super_admin(
 
 #[get("")]
 pub async fn get_super_admins(
+    _user: SuperAdminJwtGuard,
     db: WebDb,
     query_params: Query<QueryParams>,
 ) -> UniResult<Vec<super_admin::Model>> {
@@ -150,7 +157,11 @@ pub async fn get_super_admins(
 }
 
 #[get("/{id}")]
-pub async fn get_super_admin(db: WebDb, id: Path<Uuid>) -> UniResult<super_admin::Model> {
+pub async fn get_super_admin(
+    _user: SuperAdminJwtGuard,
+    db: WebDb,
+    id: Path<Uuid>,
+) -> UniResult<super_admin::Model> {
     let model = SuperAdmin::find_by_id(*id)
         .one(db.get_ref())
         .await?
@@ -160,7 +171,11 @@ pub async fn get_super_admin(db: WebDb, id: Path<Uuid>) -> UniResult<super_admin
 }
 
 #[delete("/{id}")]
-pub async fn delete_super_admin(db: WebDb, id: Path<Uuid>) -> UniResult<u64> {
+pub async fn delete_super_admin(
+    _user: SuperAdminJwtGuard,
+    db: WebDb,
+    id: Path<Uuid>,
+) -> UniResult<u64> {
     let super_admin = SuperAdmin::find_by_id(*id)
         .one(db.get_ref())
         .await?

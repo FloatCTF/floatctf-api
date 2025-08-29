@@ -1,9 +1,12 @@
 use sea_orm::{ColumnTrait, QueryFilter};
 
 use super::super::preclude::*;
-use crate::entity::{
-    challenges, event_challenges,
-    prelude::{Challenges, EventChallenges, Events},
+use crate::{
+    auth::SuperAdminJwtGuard,
+    entity::{
+        challenges, event_challenges,
+        prelude::{Challenges, EventChallenges, Events},
+    },
 };
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -14,6 +17,7 @@ pub struct AddChallengeRequest {
 
 #[post("")]
 pub async fn add_challenge(
+    _user: SuperAdminJwtGuard,
     db: WebDb,
     id: Path<Uuid>,
     acr: Json<AddChallengeRequest>,
@@ -67,6 +71,7 @@ pub async fn add_challenge(
 pub type DeleteChallengeRequest = AddChallengeRequest;
 #[delete("")]
 pub async fn remove_challenge(
+    _user: SuperAdminJwtGuard,
     db: WebDb,
     id: Path<Uuid>,
     dcr: Json<DeleteChallengeRequest>,
@@ -126,7 +131,11 @@ pub struct EventChallengeResult {
 }
 
 #[get("")]
-pub async fn get_challenges(db: WebDb, id: Path<Uuid>) -> UniResult<Vec<EventChallengeResult>> {
+pub async fn get_challenges(
+    _user: SuperAdminJwtGuard,
+    db: WebDb,
+    id: Path<Uuid>,
+) -> UniResult<Vec<EventChallengeResult>> {
     let event = Events::find_by_id(*id)
         .one(db.get_ref())
         .await?
@@ -159,6 +168,7 @@ pub async fn get_challenges(db: WebDb, id: Path<Uuid>) -> UniResult<Vec<EventCha
 pub type HiddenChallengeRequest = AddChallengeRequest;
 #[post("/hidden")]
 pub async fn hidden_challenges(
+    _user: SuperAdminJwtGuard,
     db: WebDb,
     id: Path<Uuid>,
     hcr: Json<HiddenChallengeRequest>,
@@ -220,6 +230,7 @@ pub async fn hidden_challenges(
 pub type OpenChallengeRequest = AddChallengeRequest;
 #[post("/open")]
 pub async fn open_challenges(
+    _user: SuperAdminJwtGuard,
     db: WebDb,
     id: Path<Uuid>,
     ocr: Json<OpenChallengeRequest>,

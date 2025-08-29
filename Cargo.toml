@@ -30,3 +30,12 @@ bollard = "0.19.1"
 zip = "4.3.0"
 tempfile = "3.20.0"
 actix-cors = "0.7.1"
+# logging
+tracing = "0.1" # 核心 tracing
+tracing-subscriber = { version = "0.3", features = [
+    "env-filter",
+    "fmt",
+    "chrono",
+] }
+tracing-appender = "0.2" # 支持日志写入文件
+tracing-actix-web = "0.7.19" # Actix Web 的 TracingLogger middleware

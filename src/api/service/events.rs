@@ -3,13 +3,16 @@ use std::result;
 use sea_orm::{ColumnTrait, QueryFilter};
 
 use super::super::preclude::*;
-use crate::entity::{
-    challenges, event_challenges, events,
-    prelude::{Challenges, EventChallenges, Events},
+use crate::{
+    auth::UserJwtGuard,
+    entity::{
+        challenges, event_challenges, events,
+        prelude::{Challenges, EventChallenges, Events},
+    },
 };
 
 #[get("")]
-pub async fn get_events(db: WebDb) -> UniResult<Vec<events::Model>> {
+pub async fn get_events(_user: UserJwtGuard, db: WebDb) -> UniResult<Vec<events::Model>> {
     let events = Events::find()
         .filter(events::Column::Hidden.eq(false))
         .all(db.get_ref())
@@ -19,7 +22,11 @@ pub async fn get_events(db: WebDb) -> UniResult<Vec<events::Model>> {
 }
 
 #[get("/{event_id}/challenges")]
-pub async fn get_event_challenges(db: WebDb, id: Path<Uuid>) -> UniResult<Vec<challenges::Model>> {
+pub async fn get_event_challenges(
+    _user: UserJwtGuard,
+    db: WebDb,
+    id: Path<Uuid>,
+) -> UniResult<Vec<challenges::Model>> {
     let event = Events::find_by_id(*id)
         .filter(events::Column::Hidden.eq(false))
         .one(db.get_ref())

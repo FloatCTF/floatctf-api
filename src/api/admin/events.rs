@@ -1,5 +1,8 @@
 use super::super::preclude::*;
-use crate::entity::{events, prelude::Events, sea_orm_active_enums::EventType};
+use crate::{
+    auth::SuperAdminJwtGuard,
+    entity::{events, prelude::Events, sea_orm_active_enums::EventType},
+};
 use chrono::NaiveDateTime;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -13,7 +16,11 @@ pub struct CreateEventRequest {
 }
 
 #[post("")]
-pub async fn create_event(db: WebDb, cer: Json<CreateEventRequest>) -> UniResult<events::Model> {
+pub async fn create_event(
+    _user: SuperAdminJwtGuard,
+    db: WebDb,
+    cer: Json<CreateEventRequest>,
+) -> UniResult<events::Model> {
     let cer = cer.into_inner();
 
     let new_event = events::ActiveModel {
@@ -34,6 +41,7 @@ pub async fn create_event(db: WebDb, cer: Json<CreateEventRequest>) -> UniResult
 type UpdateEventRequest = CreateEventRequest;
 #[put("/{id}")]
 pub async fn update_event(
+    _user: SuperAdminJwtGuard,
     db: WebDb,
     uer: Json<UpdateEventRequest>,
     id: Path<Uuid>,
@@ -69,12 +77,13 @@ pub struct PatchEventRequest {
 }
 #[patch("/{id}")]
 pub async fn patch_event(
+    _user: SuperAdminJwtGuard,
     db: WebDb,
     per: Json<PatchEventRequest>,
     id: Path<Uuid>,
 ) -> UniResult<events::Model> {
     let per = per.into_inner();
-
+    dbg!(&per);
     let event = Events::find_by_id(*id)
         .one(db.get_ref())
         .await?
@@ -108,6 +117,7 @@ pub async fn patch_event(
 }
 #[get("")]
 pub async fn get_events(
+    _user: SuperAdminJwtGuard,
     db: WebDb,
     query_params: Query<QueryParams>,
 ) -> UniResult<Vec<events::Model>> {
@@ -130,7 +140,11 @@ pub async fn get_events(
 }
 
 #[get("/{id}")]
-pub async fn get_event(db: WebDb, id: Path<Uuid>) -> UniResult<events::Model> {
+pub async fn get_event(
+    _user: SuperAdminJwtGuard,
+    db: WebDb,
+    id: Path<Uuid>,
+) -> UniResult<events::Model> {
     let event = Events::find_by_id(*id)
         .one(db.get_ref())
         .await?
@@ -140,7 +154,7 @@ pub async fn get_event(db: WebDb, id: Path<Uuid>) -> UniResult<events::Model> {
 }
 
 #[delete("/{id}")]
-pub async fn delete_event(db: WebDb, id: Path<Uuid>) -> UniResult<u64> {
+pub async fn delete_event(_user: SuperAdminJwtGuard, db: WebDb, id: Path<Uuid>) -> UniResult<u64> {
     let event = Events::find_by_id(*id)
         .one(db.get_ref())
         .await?

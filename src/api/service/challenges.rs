@@ -1,10 +1,14 @@
 use sea_orm::{ColumnTrait, QueryFilter};
 
 use super::super::preclude::*;
-use crate::entity::{challenges, prelude::Challenges};
+use crate::{
+    auth::UserJwtGuard,
+    entity::{challenges, prelude::Challenges},
+};
 
 #[get("")]
 pub async fn get_challenges(
+    _user: UserJwtGuard,
     db: WebDb,
     query_params: Query<QueryParams>,
 ) -> UniResult<Vec<challenges::Model>> {
@@ -27,7 +31,11 @@ pub async fn get_challenges(
 }
 
 #[get("/{id}")]
-pub async fn get_challenge(db: WebDb, id: Path<Uuid>) -> UniResult<challenges::Model> {
+pub async fn get_challenge(
+    _user: UserJwtGuard,
+    db: WebDb,
+    id: Path<Uuid>,
+) -> UniResult<challenges::Model> {
     match Challenges::find_by_id(*id)
         .filter(challenges::Column::Hidden.eq(false))
         .one(db.get_ref())

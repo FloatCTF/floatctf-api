@@ -1,10 +1,13 @@
 use futures_util::future::join_all;
 
 use super::super::preclude::*;
-use crate::entity::{
-    event_users,
-    prelude::{EventUsers, Events, Users},
-    users,
+use crate::{
+    auth::SuperAdminJwtGuard,
+    entity::{
+        event_users,
+        prelude::{EventUsers, Events, Users},
+        users,
+    },
 };
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -14,6 +17,7 @@ pub struct AddUserRequest {
 
 #[post("")]
 pub async fn add_user(
+    _user: SuperAdminJwtGuard,
     db: WebDb,
     id: Path<Uuid>,
     aur: Json<AddUserRequest>,
@@ -42,7 +46,11 @@ pub async fn add_user(
 }
 
 #[delete("/{user_id}")]
-pub async fn remove_user(db: WebDb, path: Path<(Uuid, Uuid)>) -> UniResult<u64> {
+pub async fn remove_user(
+    _user: SuperAdminJwtGuard,
+    db: WebDb,
+    path: Path<(Uuid, Uuid)>,
+) -> UniResult<u64> {
     let (id, user_id) = path.into_inner();
 
     let event = Events::find_by_id(id)
@@ -70,6 +78,7 @@ pub async fn remove_user(db: WebDb, path: Path<(Uuid, Uuid)>) -> UniResult<u64> 
 
 #[get("")]
 pub async fn get_users(
+    _user: SuperAdminJwtGuard,
     db: WebDb,
     id: Path<Uuid>,
     query_params: Query<QueryParams>,
