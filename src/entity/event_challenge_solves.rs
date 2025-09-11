@@ -3,16 +3,18 @@
 use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq, Serialize, Deserialize)]
-#[sea_orm(table_name = "event_instances")]
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel, Serialize, Deserialize)]
+#[sea_orm(table_name = "event_challenge_solves")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub event_id: Uuid,
     #[sea_orm(primary_key, auto_increment = false)]
-    pub instance_id: Uuid,
     pub challenge_id: Uuid,
+    #[sea_orm(primary_key, auto_increment = false)]
     pub user_id: Uuid,
-    pub team_id: Option<Uuid>,
+    pub created_at: DateTime,
+    #[sea_orm(column_type = "Double")]
+    pub bonus_points: f64,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -26,14 +28,6 @@ pub enum Relation {
     )]
     Challenges,
     #[sea_orm(
-        belongs_to = "super::event_teams::Entity",
-        from = "Column::TeamId",
-        to = "super::event_teams::Column::Id",
-        on_update = "NoAction",
-        on_delete = "Cascade"
-    )]
-    EventTeams,
-    #[sea_orm(
         belongs_to = "super::events::Entity",
         from = "Column::EventId",
         to = "super::events::Column::Id",
@@ -41,14 +35,6 @@ pub enum Relation {
         on_delete = "Cascade"
     )]
     Events,
-    #[sea_orm(
-        belongs_to = "super::instances::Entity",
-        from = "Column::InstanceId",
-        to = "super::instances::Column::Id",
-        on_update = "NoAction",
-        on_delete = "Cascade"
-    )]
-    Instances,
     #[sea_orm(
         belongs_to = "super::users::Entity",
         from = "Column::UserId",
@@ -65,21 +51,9 @@ impl Related<super::challenges::Entity> for Entity {
     }
 }
 
-impl Related<super::event_teams::Entity> for Entity {
-    fn to() -> RelationDef {
-        Relation::EventTeams.def()
-    }
-}
-
 impl Related<super::events::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::Events.def()
-    }
-}
-
-impl Related<super::instances::Entity> for Entity {
-    fn to() -> RelationDef {
-        Relation::Instances.def()
     }
 }
 

@@ -3,7 +3,11 @@ use sea_orm::{ColumnTrait, QueryFilter};
 use super::super::preclude::*;
 use crate::{
     auth::UserJwtGuard,
-    entity::{challenges, prelude::Challenges},
+    entity::{
+        challenges, instances,
+        prelude::{Challenges, Instances},
+        sea_orm_active_enums::InstanceStatus,
+    },
 };
 
 #[get("")]
@@ -46,4 +50,21 @@ pub async fn get_challenge(
     }
 }
 
-// #[get("/{id}")]
+#[get("/{id}/instance")]
+pub async fn get_challenge_instance(
+    user: UserJwtGuard,
+    db: WebDb,
+    id: Path<Uuid>,
+) -> UniResult<instances::Model> {
+    let user = user.into_inner();
+
+    let instance = Instances::find()
+        .filter(instances::Column::ChallengeId.eq(*id))
+        .filter(instances::Column::Status.eq(InstanceStatus::Running))
+        .filter(instances::Column::UserId.eq(user.id))
+        .filter(instances::Column::Ref.eq("Training"))
+        .one(db.get_ref())
+        .await?;
+
+    UniResponse::ok(instance).into()
+}

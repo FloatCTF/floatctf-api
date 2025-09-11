@@ -3,12 +3,15 @@
 pub mod prelude;
 
 pub mod challenge_solves;
+pub mod challenge_writeup;
 pub mod challenges;
+pub mod event_challenge_solves;
 pub mod event_challenges;
 pub mod event_instances;
 pub mod event_team_members;
 pub mod event_teams;
 pub mod event_users;
+pub mod event_writeup;
 pub mod events;
 pub mod instances;
 pub mod sea_orm_active_enums;

@@ -3,6 +3,8 @@ mod auth;
 mod db;
 mod entity;
 
+use std::env;
+
 use actix_cors::Cors;
 use actix_web::middleware::Logger;
 use actix_web::{App, HttpServer, web};
@@ -39,10 +41,18 @@ async fn main() -> std::io::Result<()> {
     let docker: db::WebDocker =
         web::Data::new(db::init_docker().await.expect("no docker installed!"));
 
+    let ip = env::var("SERVER_LISTEN_IP").unwrap_or("127.0.0.1".to_string());
+    let port = env::var("SERVER_LISTEN_PORT")
+        .unwrap_or("8080".to_string())
+        .parse::<u16>()
+        .unwrap();
+
     // for server
     HttpServer::new(move || {
         let cors = Cors::default()
             .allowed_origin("http://localhost:3000")
+            .allowed_origin("http://127.0.0.1")
+            .allowed_origin("http://39.107.235.13:18008")
             .allow_any_header()
             .allow_any_method()
             .supports_credentials()
@@ -61,7 +71,7 @@ async fn main() -> std::io::Result<()> {
             )
         // 将公共 API 放在另一个作用域，不受认证中间件影响
     })
-    .bind(("127.0.0.1", 8080))?
+    .bind((ip, port))?
     .run()
     .await
 }

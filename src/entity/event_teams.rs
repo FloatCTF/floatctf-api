@@ -3,7 +3,7 @@
 use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel, Serialize, Deserialize)]
 #[sea_orm(table_name = "event_teams")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
@@ -15,12 +15,18 @@ pub struct Model {
     pub description: Option<String>,
     pub created_at: DateTime,
     pub updated_at: DateTime,
+    #[sea_orm(column_type = "Double")]
+    pub points: f64,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
+    #[sea_orm(has_many = "super::event_instances::Entity")]
+    EventInstances,
     #[sea_orm(has_many = "super::event_team_members::Entity")]
     EventTeamMembers,
+    #[sea_orm(has_many = "super::event_writeup::Entity")]
+    EventWriteup,
     #[sea_orm(
         belongs_to = "super::events::Entity",
         from = "Column::EventId",
@@ -31,9 +37,21 @@ pub enum Relation {
     Events,
 }
 
+impl Related<super::event_instances::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::EventInstances.def()
+    }
+}
+
 impl Related<super::event_team_members::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::EventTeamMembers.def()
+    }
+}
+
+impl Related<super::event_writeup::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::EventWriteup.def()
     }
 }
 

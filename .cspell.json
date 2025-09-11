@@ -2,6 +2,7 @@
     "words": [
         "actix",
         "chrono",
+        "codegen",
         "dotenv",
         "dotenvy",
         "floatctf",

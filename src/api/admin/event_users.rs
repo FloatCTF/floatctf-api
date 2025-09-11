@@ -12,7 +12,8 @@ use crate::{
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AddUserRequest {
-    pub user_id: Uuid,
+    pub user_id: Option<Uuid>,
+    pub user_ids: Option<Vec<Uuid>>,
 }
 
 #[post("")]
@@ -21,7 +22,7 @@ pub async fn add_user(
     db: WebDb,
     id: Path<Uuid>,
     aur: Json<AddUserRequest>,
-) -> UniResult<event_users::Model> {
+) -> UniResult<()> {
     let aur = aur.into_inner();
 
     let event = Events::find_by_id(*id)
@@ -29,20 +30,44 @@ pub async fn add_user(
         .await?
         .ok_or(UniError::NotFound(format!(" {} not exist", id)))?;
 
-    let user = Users::find_by_id(aur.user_id)
-        .one(db.get_ref())
-        .await?
-        .ok_or(UniError::NotFound(format!(" {} not exist", aur.user_id)))?;
+    if aur.user_ids.is_some() {
+        let user_ids = aur.user_ids.unwrap();
+        for user_id in user_ids {
+            let user = Users::find_by_id(user_id)
+                .one(db.get_ref())
+                .await?
+                .ok_or(UniError::NotFound(format!(" {} not exist", user_id)))?;
 
-    let new_event_user = event_users::ActiveModel {
-        event_id: Set(event.id),
-        user_id: Set(user.id),
-        ..Default::default()
-    };
+            let new_event_user = event_users::ActiveModel {
+                event_id: Set(event.id),
+                user_id: Set(user.id),
+                ..Default::default()
+            };
 
-    let event_user = new_event_user.insert(db.get_ref()).await?;
+            new_event_user.insert(db.get_ref()).await?;
+        }
 
-    UniResponse::ok(event_user.into()).into()
+        return UniResponse::ok_none().into();
+    }
+    if aur.user_id.is_some() {
+        let user_id = aur.user_id.unwrap();
+        let user = Users::find_by_id(user_id)
+            .one(db.get_ref())
+            .await?
+            .ok_or(UniError::NotFound(format!(" {} not exist", user_id)))?;
+
+        let new_event_user = event_users::ActiveModel {
+            event_id: Set(event.id),
+            user_id: Set(user.id),
+            ..Default::default()
+        };
+
+        new_event_user.insert(db.get_ref()).await?;
+
+        return UniResponse::ok_none().into();
+    }
+
+    UniError::CustomError("user_id or user_ids is required".to_string()).into()
 }
 
 #[delete("/{user_id}")]

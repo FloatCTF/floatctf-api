@@ -16,16 +16,26 @@ pub struct Model {
     pub email: String,
     pub created_at: DateTime,
     pub updated_at: DateTime,
+    #[sea_orm(column_type = "Text", unique)]
+    pub nickname: String,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
     #[sea_orm(has_many = "super::challenge_solves::Entity")]
     ChallengeSolves,
+    #[sea_orm(has_many = "super::challenge_writeup::Entity")]
+    ChallengeWriteup,
+    #[sea_orm(has_many = "super::event_challenge_solves::Entity")]
+    EventChallengeSolves,
+    #[sea_orm(has_many = "super::event_instances::Entity")]
+    EventInstances,
     #[sea_orm(has_many = "super::event_team_members::Entity")]
     EventTeamMembers,
     #[sea_orm(has_many = "super::event_users::Entity")]
     EventUsers,
+    #[sea_orm(has_many = "super::event_writeup::Entity")]
+    EventWriteup,
     #[sea_orm(has_many = "super::instances::Entity")]
     Instances,
 }
@@ -33,6 +43,24 @@ pub enum Relation {
 impl Related<super::challenge_solves::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::ChallengeSolves.def()
+    }
+}
+
+impl Related<super::challenge_writeup::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::ChallengeWriteup.def()
+    }
+}
+
+impl Related<super::event_challenge_solves::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::EventChallengeSolves.def()
+    }
+}
+
+impl Related<super::event_instances::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::EventInstances.def()
     }
 }
 
@@ -45,6 +73,12 @@ impl Related<super::event_team_members::Entity> for Entity {
 impl Related<super::event_users::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::EventUsers.def()
+    }
+}
+
+impl Related<super::event_writeup::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::EventWriteup.def()
     }
 }
 

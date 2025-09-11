@@ -19,12 +19,16 @@ pub struct Model {
     pub end_time: DateTime,
     pub created_at: DateTime,
     pub updated_at: DateTime,
+    #[sea_orm(column_type = "Text")]
+    pub rules: String,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
     #[sea_orm(has_many = "super::challenge_solves::Entity")]
     ChallengeSolves,
+    #[sea_orm(has_many = "super::event_challenge_solves::Entity")]
+    EventChallengeSolves,
     #[sea_orm(has_many = "super::event_challenges::Entity")]
     EventChallenges,
     #[sea_orm(has_many = "super::event_instances::Entity")]
@@ -35,11 +39,19 @@ pub enum Relation {
     EventTeams,
     #[sea_orm(has_many = "super::event_users::Entity")]
     EventUsers,
+    #[sea_orm(has_many = "super::event_writeup::Entity")]
+    EventWriteup,
 }
 
 impl Related<super::challenge_solves::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::ChallengeSolves.def()
+    }
+}
+
+impl Related<super::event_challenge_solves::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::EventChallengeSolves.def()
     }
 }
 
@@ -73,21 +85,18 @@ impl Related<super::event_users::Entity> for Entity {
     }
 }
 
+impl Related<super::event_writeup::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::EventWriteup.def()
+    }
+}
+
 impl Related<super::challenges::Entity> for Entity {
     fn to() -> RelationDef {
         super::event_challenges::Relation::Challenges.def()
     }
     fn via() -> Option<RelationDef> {
         Some(super::event_challenges::Relation::Events.def().rev())
-    }
-}
-
-impl Related<super::instances::Entity> for Entity {
-    fn to() -> RelationDef {
-        super::event_instances::Relation::Instances.def()
-    }
-    fn via() -> Option<RelationDef> {
-        Some(super::event_instances::Relation::Events.def().rev())
     }
 }
 

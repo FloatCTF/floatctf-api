@@ -3,6 +3,7 @@ CREATE EXTENSION "uuid-ossp";
 CREATE TABLE IF NOT EXISTS "users" (
     "id" UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
     "username" TEXT NOT NULL UNIQUE,
+    "nickname" TEXT NOT NULL UNIQUE,
     "password_hash" TEXT NOT NULL,
     "email" TEXT NOT NULL,
     "created_at" TIMESTAMP NOT NULL DEFAULT now(),
@@ -40,8 +41,10 @@ CREATE TABLE IF NOT EXISTS "instances" (
     "content" TEXT,
     "challenge_id" UUID NOT NULL REFERENCES "challenges" (id) ON DELETE CASCADE,
     "user_id" UUID NOT NULL REFERENCES "users" (id) ON DELETE CASCADE,
+    "identifier" TEXT NOT NULL,
     "created_at" TIMESTAMP NOT NULL DEFAULT now(),
-    "updated_at" TIMESTAMP NOT NULL DEFAULT now()
+    "updated_at" TIMESTAMP NOT NULL DEFAULT now(),
+    "destroy_at" TIMESTAMP NOT NULL
 );
 
 CREATE TYPE "event_type" AS ENUM ('jeopardy_single', 'jeopardy_team', 'awd_team');
@@ -55,6 +58,7 @@ CREATE TABLE IF NOT EXISTS "events" (
     "description" TEXT,
     "hidden" BOOLEAN NOT NULL DEFAULT TRUE,
     "start_time" TIMESTAMP NOT NULL,
+    "rules" TEXT NOT NULL DEFAULT 'do not cheat',
     "end_time" TIMESTAMP NOT NULL,
     "created_at" TIMESTAMP NOT NULL DEFAULT now(),
     "updated_at" TIMESTAMP NOT NULL DEFAULT now()
@@ -63,19 +67,37 @@ CREATE TABLE IF NOT EXISTS "events" (
 CREATE TABLE IF NOT EXISTS "event_challenges" (
     "event_id" UUID NOT NULL REFERENCES "events" ("id") ON DELETE CASCADE,
     "challenge_id" UUID NOT NULL REFERENCES "challenges" ("id") ON DELETE CASCADE,
+    "points" DOUBLE PRECISION NOT NULL DEFAULT 100,
     "hidden" BOOLEAN NOT NULL DEFAULT TRUE,
     PRIMARY KEY ("event_id", "challenge_id")
+);
+
+CREATE TABLE IF NOT EXISTS "event_challenge_solves" (
+    "event_id" UUID NOT NULL REFERENCES "events" ("id") ON DELETE CASCADE,
+    "challenge_id" UUID NOT NULL REFERENCES "challenges" ("id") ON DELETE CASCADE,
+    "user_id" UUID NOT NULL REFERENCES "users" ("id") ON DELETE CASCADE,
+    "obtained_points" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "created_at" TIMESTAMP NOT NULL DEFAULT now(),
+    PRIMARY KEY (
+        "event_id",
+        "challenge_id",
+        "user_id"
+    )
 );
 
 CREATE TABLE IF NOT EXISTS "event_instances" (
     "event_id" UUID NOT NULL REFERENCES "events" ("id") ON DELETE CASCADE,
     "instance_id" UUID NOT NULL REFERENCES "instances" ("id") ON DELETE CASCADE,
+    "challenge_id" UUID NOT NULL REFERENCES "challenges" ("id") ON DELETE CASCADE,
+    "user_id" UUID NOT NULL REFERENCES "users" ("id") ON DELETE CASCADE,
+    "team_id" UUID NULL REFERENCES "event_teams" ("id") ON DELETE CASCADE,
     PRIMARY KEY ("event_id", "instance_id")
 );
 
 CREATE TABLE IF NOT EXISTS "event_users" (
     "event_id" UUID NOT NULL REFERENCES "events" ("id") ON DELETE CASCADE,
     "user_id" UUID NOT NULL REFERENCES "users" ("id") ON DELETE CASCADE,
+    "points" DOUBLE PRECISION NOT NULL DEFAULT 0,
     "joined_at" TIMESTAMP NOT NULL DEFAULT now(),
     PRIMARY KEY ("event_id", "user_id")
 );
@@ -85,6 +107,7 @@ CREATE TABLE IF NOT EXISTS "event_teams" (
     "event_id" UUID NOT NULL REFERENCES events ("id") ON DELETE CASCADE,
     "name" TEXT NOT NULL,
     "description" TEXT,
+    "points" DOUBLE PRECISION NOT NULL DEFAULT 0,
     "created_at" TIMESTAMP NOT NULL DEFAULT now(),
     "updated_at" TIMESTAMP NOT NULL DEFAULT now(),
     UNIQUE ("event_id", "name")
@@ -113,6 +136,22 @@ CREATE TABLE IF NOT EXISTS "challenge_solves" (
     "created_at" TIMESTAMP NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS "challenge_writeup" (
+    "id" UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
+    "challenge_id" UUID NOT NULL REFERENCES "challenges" ("id") ON DELETE CASCADE,
+    "user_id" UUID NOT NULL REFERENCES "users" ("id") ON DELETE CASCADE,
+    "content" TEXT NOT NULL,
+    "created_at" TIMESTAMP NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS "event_writeup" (
+    "id" UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
+    "event_id" UUID NOT NULL REFERENCES "events" ("id") ON DELETE CASCADE,
+    "user_id" UUID NOT NULL REFERENCES "users" ("id") ON DELETE CASCADE,
+    "team_id" UUID NULL REFERENCES "event_teams" ("id") ON DELETE CASCADE,
+    "file_url" TEXT NOT NULL,
+    "created_at" TIMESTAMP NOT NULL DEFAULT now()
+);
 -- users 表索引
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_users_username" ON "users" ("username");
 
@@ -150,6 +189,17 @@ CREATE INDEX IF NOT EXISTS "idx_event_team_members_team_id" ON "event_team_membe
 
 CREATE INDEX IF NOT EXISTS "idx_event_team_members_user_id" ON "event_team_members" ("user_id");
 
+CREATE INDEX "idx_event_user_challenge" ON "event_instances" (
+    "event_id",
+    "user_id",
+    "challenge_id"
+);
+
+CREATE INDEX "idx_event_team_challenge" ON "event_instances" (
+    "event_id",
+    "team_id",
+    "challenge_id"
+);
 -- for updated_at
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
