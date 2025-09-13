@@ -11,7 +11,7 @@ use crate::{
 };
 use actix_web::{HttpMessage, HttpRequest, delete};
 use anyhow::{Context, Result, anyhow};
-use cm::ChallengeMeta;
+use fcmc::ChallengeMeta;
 use sea_orm::{ColumnTrait, JoinType, ModelTrait, QueryFilter};
 use sea_orm::{QuerySelect, entity::prelude::Uuid};
 

@@ -6,7 +6,6 @@ mod events;
 mod instances;
 mod super_admin;
 mod users;
-mod utils;
 use actix_web::web::{ServiceConfig, scope};
 
 pub fn config(cfg: &mut ServiceConfig) {

@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS "challenges" (
     "category" TEXT NOT NULL DEFAULT 'other',
     "description" TEXT NOT NULL DEFAULT 'no description',
     "attachment" TEXT NULL,
-    "hidden" BOOLEAN NOT NULL DEFAULT FALSE,
+    "hidden" BOOLEAN NOT NULL DEFAULT TRUE,
     "toml_str" TEXT NOT NULL,
     "created_at" TIMESTAMP NOT NULL DEFAULT now(),
     "updated_at" TIMESTAMP NOT NULL DEFAULT now()
@@ -98,6 +98,7 @@ CREATE TABLE IF NOT EXISTS "event_users" (
     "event_id" UUID NOT NULL REFERENCES "events" ("id") ON DELETE CASCADE,
     "user_id" UUID NOT NULL REFERENCES "users" ("id") ON DELETE CASCADE,
     "points" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "banned" BOOLEAN NOT NULL DEFAULT false,
     "joined_at" TIMESTAMP NOT NULL DEFAULT now(),
     PRIMARY KEY ("event_id", "user_id")
 );
@@ -110,6 +111,7 @@ CREATE TABLE IF NOT EXISTS "event_teams" (
     "points" DOUBLE PRECISION NOT NULL DEFAULT 0,
     "created_at" TIMESTAMP NOT NULL DEFAULT now(),
     "updated_at" TIMESTAMP NOT NULL DEFAULT now(),
+    "banned" BOOLEAN NOT NULL DEFAULT false,
     UNIQUE ("event_id", "name")
 );
 
@@ -145,12 +147,12 @@ CREATE TABLE IF NOT EXISTS "challenge_writeup" (
 );
 
 CREATE TABLE IF NOT EXISTS "event_writeup" (
-    "id" UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
     "event_id" UUID NOT NULL REFERENCES "events" ("id") ON DELETE CASCADE,
     "user_id" UUID NOT NULL REFERENCES "users" ("id") ON DELETE CASCADE,
     "team_id" UUID NULL REFERENCES "event_teams" ("id") ON DELETE CASCADE,
     "file_url" TEXT NOT NULL,
-    "created_at" TIMESTAMP NOT NULL DEFAULT now()
+    "created_at" TIMESTAMP NOT NULL DEFAULT now(),
+    CONSTRAINT event_writeup_pkey PRIMARY KEY ("event_id", "user_id")
 );
 -- users 表索引
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_users_username" ON "users" ("username");

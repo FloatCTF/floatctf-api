@@ -1,6 +1,4 @@
 use base64::Engine;
-use sea_orm::DatabaseConnection;
-use tempfile::NamedTempFile;
 
 use super::super::preclude::*;
 use crate::{
@@ -9,7 +7,11 @@ use crate::{
     entity::{challenges, prelude::Challenges},
 };
 use actix_multipart::form::{MultipartForm, tempfile::TempFile, text::Text};
-
+use fcmc::ChallengeMeta;
+use sea_orm::{
+    ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set, sea_query::OnConflict,
+};
+use tempfile::NamedTempFile;
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CreateChallengeRequest {
     pub name: String,
@@ -249,20 +251,41 @@ pub async fn import_challenge(
     db: &DatabaseConnection,
     challenge_toml_str: String,
 ) -> anyhow::Result<challenges::Model> {
-    let c = cm::ChallengeMeta::from_toml_str(&challenge_toml_str)?;
+    let c = ChallengeMeta::from_toml_str(&challenge_toml_str)?;
 
     let new_challenge = challenges::ActiveModel {
-        name: Set(c.name),
+        name: Set(c.name.clone()),
         category: Set(c.category),
         description: Set(c.description),
         attachment: Set(c.attachment),
+
         toml_str: Set(challenge_toml_str),
         ..Default::default()
     };
 
-    let challenge = new_challenge.insert(db).await?;
+    // 关键：按 name 唯一键 UPSERT（存在则覆盖更新）
+    challenges::Entity::insert(new_challenge)
+        .on_conflict(
+            OnConflict::column(challenges::Column::Name)
+                .update_columns([
+                    challenges::Column::Category,
+                    challenges::Column::Description,
+                    challenges::Column::Attachment,
+                    challenges::Column::TomlStr,
+                ])
+                .to_owned(),
+        )
+        .exec(db)
+        .await?;
 
-    Ok(challenge)
+    // 返回最新记录（无论是插入还是更新）
+    let model = challenges::Entity::find()
+        .filter(challenges::Column::Name.eq(c.name))
+        .one(db)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("challenge not found after upsert"))?;
+
+    Ok(model)
 }
 
 pub async fn import_challenge_zip(
@@ -284,21 +307,22 @@ pub async fn import_challenge_zip(
         }
     };
 
-    // Extract the file inside the zip
-
     let output_path = std::env::var("CHALLENGES_DIR").expect("YOU must set CHALLENGES_DIR");
     let output_path = std::path::Path::new(&output_path).join(&name);
 
-    // 解压zip文件
+    // >>> 新增：如果目录已存在，先删再解压（确保覆盖）
+    if output_path.exists() {
+        std::fs::remove_dir_all(&output_path)?;
+    }
+
+    // 解压zip文件（原逻辑保持不变）
     for i in 0..archive.len() {
         let mut file = archive.by_index(i)?;
 
         let file_path = std::path::Path::new(file.name());
-
         let out_path = output_path.join(file_path);
 
         if file.name().ends_with('/') || file.name().ends_with('\\') {
-            // 这是目录，创建目录即可，不创建文件
             std::fs::create_dir_all(&out_path)?;
             continue;
         }
@@ -312,7 +336,6 @@ pub async fn import_challenge_zip(
     }
 
     let toml_str = std::fs::read_to_string(output_path.join("meta.toml"))?;
-
     Ok(toml_str)
 }
 
@@ -364,6 +387,11 @@ pub async fn import_challenge_list_zip(
             // 解压目标路径
             let out_path = challenge_dir_path.join(dir_name);
 
+            // >>> 新增：如果同名目录已存在，先删除，确保覆盖解压
+            if out_path.exists() {
+                std::fs::remove_dir_all(&out_path)?;
+            }
+
             // 创建目录
             std::fs::create_dir_all(&out_path)?;
 
@@ -387,6 +415,8 @@ pub async fn import_challenge_list_zip(
                 let mut outfile = std::fs::File::create(&inner_out_path)?;
                 std::io::copy(&mut file, &mut outfile)?;
             }
+
+            // 读取 meta.toml
             let meta_path = out_path.join("meta.toml");
             let meta_str = std::fs::read_to_string(&meta_path)
                 .map_err(|e| anyhow::anyhow!("read meta.toml failed: {}", e))?;
@@ -425,12 +455,12 @@ pub async fn check_challenges(
             challenge_dir.join(attachment).exists()
         });
 
-        let cm = cm::ChallengeMeta::from_toml_str(&challenge.toml_str)
+        let cm = ChallengeMeta::from_toml_str(&challenge.toml_str)
             .map_err(|e| UniError::CustomError(format!("parse challenge meta error: {}", e)))?;
 
         let docker_image_ok = match &cm.docker {
             Some(d) => docker.inspect_image(&d.image_tag).await.is_ok(),
-            None => true,
+            None => true, // 非docker 题目 默认为true
         };
 
         challenge_check_results.push(ChallengeCheckResult {

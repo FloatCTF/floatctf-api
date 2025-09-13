@@ -5,6 +5,7 @@
         "codegen",
         "dotenv",
         "dotenvy",
+        "fcmc",
         "floatctf",
         "floatctfdb",
         "jsonwebtoken",

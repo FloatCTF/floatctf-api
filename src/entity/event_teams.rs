@@ -17,6 +17,7 @@ pub struct Model {
     pub updated_at: DateTime,
     #[sea_orm(column_type = "Double")]
     pub points: f64,
+    pub banned: bool,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

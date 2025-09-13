@@ -36,7 +36,11 @@ pub fn config(cfg: &mut ServiceConfig) {
             .service(instances::launch_instance)
             .service(instances::destroy_instance),
     );
-    cfg.service(scope("/solves").service(challenge_solves::get_solves));
+    cfg.service(
+        scope("/solves")
+            .service(challenge_solves::get_solves)
+            .service(challenge_solves::get_top_15_users),
+    );
     cfg.service(
         scope("/events")
             .service(events::get_events)

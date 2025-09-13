@@ -376,8 +376,10 @@ pub async fn get_scoreboard(
                 challenges.into_iter().map(|c| (c.id, c)).collect();
 
             // 3. 获取所有 event_users
+            // banned
             let event_users = EventUsers::find()
                 .filter(event_users::Column::EventId.eq(*event_id))
+                .filter(event_users::Column::Banned.eq(false))
                 .order_by_desc(event_users::Column::Points)
                 .all(db.get_ref())
                 .await?;

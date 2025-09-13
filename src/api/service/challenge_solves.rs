@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use super::super::preclude::*;
 use crate::{
     auth::UserJwtGuard,
@@ -10,7 +12,8 @@ use crate::{
     },
 };
 use actix_web::{HttpMessage, HttpRequest, delete};
-use cm::ChallengeMeta;
+use chrono::NaiveDateTime;
+use fcmc::ChallengeMeta;
 use sea_orm::entity::prelude::Uuid;
 use sea_orm::{ColumnTrait, ModelTrait, QueryFilter};
 
@@ -38,4 +41,59 @@ pub async fn get_solves(
 
         UniResponse::ok_meta(items.into(), query_params.into()).into()
     }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TopUser {
+    no: usize,
+    nickname: String,
+    solved_count: u64,
+    solved_last_at: NaiveDateTime,
+}
+
+#[get("/top15users")]
+pub async fn get_top_15_users(_user: UserJwtGuard, db: WebDb) -> UniResult<Vec<TopUser>> {
+    let solves = challenge_solves::Entity::find()
+        .filter(challenge_solves::Column::EventId.is_null())
+        .all(db.get_ref())
+        .await?;
+
+    // 2. 在内存里统计
+    let mut stats: HashMap<Uuid, (u64, NaiveDateTime)> = HashMap::new();
+    for s in solves {
+        stats
+            .entry(s.user_id)
+            .and_modify(|(cnt, last)| {
+                *cnt += 1;
+                if s.created_at > *last {
+                    *last = s.created_at;
+                }
+            })
+            .or_insert((1, s.created_at));
+    }
+
+    // 3. 查昵称
+    let mut result = Vec::new();
+    for (uid, (count, last)) in stats {
+        if let Some(user) = users::Entity::find_by_id(uid).one(db.get_ref()).await? {
+            result.push((user.nickname, count, last));
+        }
+    }
+
+    // 4. 排序 + 取前 15
+    result.sort_by(|a, b| b.1.cmp(&a.1));
+    result.truncate(15);
+
+    // 5. 加上排名号 no
+    let result: Vec<TopUser> = result
+        .into_iter()
+        .enumerate()
+        .map(|(idx, (nickname, count, last))| TopUser {
+            no: idx + 1, // 👈 排名
+            nickname,
+            solved_count: count,
+            solved_last_at: last,
+        })
+        .collect();
+    UniResponse::ok(result.into()).into()
 }

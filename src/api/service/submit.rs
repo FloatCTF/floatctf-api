@@ -1,3 +1,5 @@
+use std::{env, fs};
+
 use actix_multipart::form::{MultipartForm, tempfile::TempFile, text::Text};
 
 use actix_web::HttpRequest;
@@ -9,8 +11,11 @@ use crate::{
     auth::UserJwtGuard,
     db::WebDocker,
     entity::{
-        challenge_solves, challenges, event_challenge_solves, event_users, instances,
-        prelude::{Challenges, EventChallengeSolves, EventChallenges, EventUsers, Instances},
+        challenge_solves, challenges, event_challenge_solves, event_users, event_writeup, events,
+        instances,
+        prelude::{
+            Challenges, EventChallengeSolves, EventChallenges, EventUsers, Events, Instances,
+        },
         sea_orm_active_enums::InstanceStatus,
         users,
     },
@@ -164,6 +169,12 @@ pub async fn jeopardy_event_single_submit_handler(
                 .one(db.get_ref())
                 .await?
                 .ok_or(UniError::NotFound("no event_user".into()))?;
+
+            if event_user.banned {
+                // banned!
+                return UniError::CustomError("you are banned".into()).into();
+            }
+
             let new_points = event_user.points + current_points;
 
             let mut event_user = event_user.into_active_model();
@@ -197,9 +208,9 @@ pub async fn jeopardy_event_team_submit_handler(
     unimplemented!()
 }
 #[derive(Debug, MultipartForm)]
-struct WriteupForm {
+pub struct WriteupForm {
     #[multipart(limit = "1024MB")]
-    writeup_docx: Option<TempFile>,
+    writeup_docx: TempFile,
     event_id: Text<Uuid>,
     team_id: Option<Text<Uuid>>,
 }
@@ -211,6 +222,45 @@ pub async fn submit_writeup(
     db: WebDb,
     MultipartForm(form): MultipartForm<WriteupForm>,
 ) -> UniResult<()> {
-    // TODO: Implement submit_writeup
-    unimplemented!()
+    let upload_dir = env::var("UPLOAD_DIR").unwrap();
+    let user = user.into_inner();
+
+    let event_id = form.event_id.into_inner();
+
+    // 写入文件
+    let writeup_file = form.writeup_docx;
+    let writeup_file_name = format!("{}_{}.docx", user.nickname, event_id);
+
+    let writeup_file_path = format!("{}/{}", upload_dir, writeup_file_name);
+    let writeup_file_path = std::path::Path::new(&writeup_file_path);
+
+    // copy 会覆盖旧文件
+    std::fs::copy(writeup_file.file.path(), &writeup_file_path)
+        .map_err(|e| UniError::InternalError(format!("Failed to copy writeup file: {}", e)))?;
+
+    // 插入或更新数据库
+    use sea_orm::sea_query::OnConflict;
+
+    event_writeup::Entity::insert(event_writeup::ActiveModel {
+        event_id: Set(event_id),
+        user_id: Set(user.id),
+        team_id: Set(form.team_id.map(|x| x.into_inner())),
+        file_url: Set(writeup_file_path.to_str().unwrap().to_string()),
+        ..Default::default()
+    })
+    .on_conflict(
+        OnConflict::columns([
+            event_writeup::Column::EventId,
+            event_writeup::Column::UserId,
+        ])
+        .update_columns([
+            event_writeup::Column::FileUrl,
+            event_writeup::Column::TeamId,
+        ])
+        .to_owned(),
+    )
+    .exec(db.get_ref())
+    .await?;
+
+    UniResponse::ok_none().into()
 }
