@@ -435,19 +435,35 @@ pub struct ChallengeCheckResult {
     pub attachment: bool,
 }
 
-#[get("/check")]
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ChallengeCheckRequest {
+    pub challenge_id_list: Option<Vec<Uuid>>,
+}
+
+#[post("/check")]
 pub async fn check_challenges(
     _user: SuperAdminJwtGuard,
     db: WebDb,
     docker: WebDocker,
+    ccr: Json<ChallengeCheckRequest>,
 ) -> UniResult<Vec<ChallengeCheckResult>> {
+    let ccr = ccr.into_inner();
     let mut challenge_check_results = Vec::new();
     // check docker image
     // check challenge attachment
     let challenge_dir =
         std::env::var("CHALLENGES_DIR").expect("CHALLENGES_DIR env var must be set");
 
-    let challenges = Challenges::find().all(db.get_ref()).await?;
+    let challenges = {
+        if ccr.challenge_id_list.is_some() {
+            Challenges::find()
+                .filter(challenges::Column::Id.is_in(ccr.challenge_id_list.unwrap()))
+                .all(db.get_ref())
+                .await?
+        } else {
+            Challenges::find().all(db.get_ref()).await?
+        }
+    };
 
     for challenge in challenges {
         let attachment_ok = challenge.attachment.as_ref().map_or(true, |attachment| {

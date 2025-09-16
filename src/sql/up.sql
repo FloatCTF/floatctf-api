@@ -146,6 +146,14 @@ CREATE TABLE IF NOT EXISTS "challenge_writeup" (
     "created_at" TIMESTAMP NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS "event_announcements" (
+    "id" UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
+    "event_id" UUID NOT NULL REFERENCES "events" ("id") ON DELETE CASCADE,
+    "title" TEXT NOT NULL,
+    "content" TEXT NOT NULL,
+    "created_at" TIMESTAMP NOT NULL DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS "event_writeup" (
     "event_id" UUID NOT NULL REFERENCES "events" ("id") ON DELETE CASCADE,
     "user_id" UUID NOT NULL REFERENCES "users" ("id") ON DELETE CASCADE,

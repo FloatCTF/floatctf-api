@@ -1,4 +1,5 @@
 use futures_util::future::join_all;
+use sea_orm::{ColumnTrait, QueryFilter};
 
 use super::super::preclude::*;
 use crate::{
@@ -13,7 +14,7 @@ use crate::{
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AddUserRequest {
     pub user_id: Option<Uuid>,
-    pub user_ids: Option<Vec<Uuid>>,
+    pub user_id_list: Option<Vec<Uuid>>,
 }
 
 #[post("")]
@@ -30,9 +31,9 @@ pub async fn add_user(
         .await?
         .ok_or(UniError::NotFound(format!(" {} not exist", id)))?;
 
-    if aur.user_ids.is_some() {
-        let user_ids = aur.user_ids.unwrap();
-        for user_id in user_ids {
+    if aur.user_id_list.is_some() {
+        let user_id_list = aur.user_id_list.unwrap();
+        for user_id in user_id_list {
             let user = Users::find_by_id(user_id)
                 .one(db.get_ref())
                 .await?
@@ -67,7 +68,7 @@ pub async fn add_user(
         return UniResponse::ok_none().into();
     }
 
-    UniError::CustomError("user_id or user_ids is required".to_string()).into()
+    UniError::CustomError("user_id or user_id_list is required".to_string()).into()
 }
 
 #[delete("/{user_id}")]
@@ -101,63 +102,107 @@ pub async fn remove_user(
     UniResponse::ok(r.rows_affected.into()).into()
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct EventUserResult {
+    pub user: users::Model,
+    pub event_user: event_users::Model,
+}
+
 #[get("")]
 pub async fn get_users(
     _user: SuperAdminJwtGuard,
     db: WebDb,
     id: Path<Uuid>,
-    query_params: Query<QueryParams>,
-) -> UniResult<Vec<users::Model>> {
-    let mut query_params = query_params.0;
-
+) -> UniResult<Vec<EventUserResult>> {
     let event = Events::find_by_id(*id)
         .one(db.get_ref())
         .await?
         .ok_or(UniError::NotFound(format!(" {} not exist", id)))?;
 
-    let stmt = event.find_related(EventUsers);
+    let event_users = EventUsers::find()
+        .filter(event_users::Column::EventId.eq(event.id))
+        .all(db.get_ref())
+        .await?;
 
-    if let (Some(limit), Some(page)) = (query_params.limit, query_params.page) {
-        let paginator = stmt.paginate(db.get_ref(), limit);
-        let items: Vec<event_users::Model> = paginator.fetch_page(page.saturating_sub(1)).await?;
+    let mut users = Vec::new();
+    for event_user in event_users {
+        let user = Users::find_by_id(event_user.user_id)
+            .one(db.get_ref())
+            .await?
+            .ok_or(UniError::NotFound(format!(
+                " {} not exist",
+                event_user.user_id
+            )))?;
 
-        // 构造所有 Future
-        let futures_vec = items
-            .iter()
-            .map(|eu| Users::find_by_id(eu.user_id).one(db.get_ref()));
-
-        // 等待所有完成，结果是 Vec<Option<users::Model>>
-        let results = join_all(futures_vec).await;
-
-        // 过滤 None，收集 Model
-        let items: Vec<users::Model> = results
-            .into_iter()
-            .filter_map(|x| x.ok().flatten())
-            .collect();
-
-        query_params.total = Some(paginator.num_items().await? as usize);
-
-        UniResponse::ok_meta(items.into(), query_params.into()).into()
-    } else {
-        let items: Vec<event_users::Model> = stmt.all(db.get_ref()).await?;
-        // 构造所有 Future
-        let futures_vec = items
-            .iter()
-            .map(|eu| Users::find_by_id(eu.user_id).one(db.get_ref()));
-
-        // 等待所有完成，结果是 Vec<Option<users::Model>>
-        let results = join_all(futures_vec).await;
-
-        // 过滤 None，收集 Model
-        let items: Vec<users::Model> = results
-            .into_iter()
-            .filter_map(|x| x.ok().flatten())
-            .collect();
-
-        query_params.total = Some(items.len());
-
-        UniResponse::ok_meta(items.into(), query_params.into()).into()
+        users.push(EventUserResult { user, event_user });
     }
 
-    // UniResponse::ok(users.into()).into()
+    UniResponse::ok(users.into()).into()
+}
+
+#[post("/{user_id}/banned")]
+
+pub async fn banned_user(
+    _user: SuperAdminJwtGuard,
+    db: WebDb,
+    path: Path<(Uuid, Uuid)>,
+) -> UniResult<()> {
+    let (id, user_id) = path.into_inner();
+
+    let event = Events::find_by_id(id)
+        .one(db.get_ref())
+        .await?
+        .ok_or(UniError::NotFound(format!(" {} not exist", id)))?;
+
+    let user = Users::find_by_id(user_id)
+        .one(db.get_ref())
+        .await?
+        .ok_or(UniError::NotFound(format!(" {} not exist", user_id)))?;
+
+    let event_user = EventUsers::find_by_id((event.id, user.id))
+        .one(db.get_ref())
+        .await?
+        .ok_or(UniError::NotFound(format!(
+            " {} not exist in {}",
+            user_id, id
+        )))?;
+
+    let mut event_user: event_users::ActiveModel = event_user.into();
+    event_user.banned = Set(true);
+    event_user.update(db.get_ref()).await?;
+
+    UniResponse::ok_none().into()
+}
+
+#[post("/{user_id}/unbanned")]
+pub async fn unbanned_user(
+    _user: SuperAdminJwtGuard,
+    db: WebDb,
+    path: Path<(Uuid, Uuid)>,
+) -> UniResult<()> {
+    let (id, user_id) = path.into_inner();
+
+    let event = Events::find_by_id(id)
+        .one(db.get_ref())
+        .await?
+        .ok_or(UniError::NotFound(format!(" {} not exist", id)))?;
+
+    let user = Users::find_by_id(user_id)
+        .one(db.get_ref())
+        .await?
+        .ok_or(UniError::NotFound(format!(" {} not exist", user_id)))?;
+
+    let event_user = EventUsers::find_by_id((event.id, user.id))
+        .one(db.get_ref())
+        .await?
+        .ok_or(UniError::NotFound(format!(
+            " {} not exist in {}",
+            user_id, id
+        )))?;
+
+    let mut event_user: event_users::ActiveModel = event_user.into();
+    event_user.banned = Set(false);
+    event_user.update(db.get_ref()).await?;
+
+    UniResponse::ok_none().into()
 }

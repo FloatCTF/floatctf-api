@@ -3,6 +3,7 @@
 pub use super::challenge_solves::Entity as ChallengeSolves;
 pub use super::challenge_writeup::Entity as ChallengeWriteup;
 pub use super::challenges::Entity as Challenges;
+pub use super::event_announcements::Entity as EventAnnouncements;
 pub use super::event_challenge_solves::Entity as EventChallengeSolves;
 pub use super::event_challenges::Entity as EventChallenges;
 pub use super::event_instances::Entity as EventInstances;

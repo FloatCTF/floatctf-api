@@ -1,4 +1,4 @@
-use sea_orm::{ColumnTrait, QueryFilter};
+use sea_orm::{ColumnTrait, QueryFilter, sea_query::OnConflict};
 
 use super::super::preclude::*;
 use crate::{
@@ -27,41 +27,46 @@ pub async fn add_challenge(
     let event = Events::find_by_id(*id)
         .one(db.get_ref())
         .await?
-        .ok_or(UniError::NotFound(format!(" {} not exist", id)))?;
+        .ok_or(UniError::NotFound(format!("event {} not exist", id)))?;
 
     let mut event_challenges_list = Vec::new();
 
-    if let Some(challenge_id) = acr.challenge_id {
+    // 把单个 id 和多个 id 合并成一个 Vec
+    let challenge_ids: Vec<Uuid> = acr
+        .challenge_id
+        .into_iter()
+        .chain(acr.challenge_id_list.unwrap_or_default())
+        .collect();
+
+    for challenge_id in challenge_ids {
+        // 先检查 challenge 是否存在
         let challenge = Challenges::find_by_id(challenge_id)
             .one(db.get_ref())
             .await?
-            .ok_or(UniError::NotFound(format!(" {} not exist", challenge_id)))?;
+            .ok_or(UniError::NotFound(format!(
+                "challenge {} not exist",
+                challenge_id
+            )))?;
 
-        let new_event_challenge = event_challenges::ActiveModel {
-            event_id: Set(event.id),
-            challenge_id: Set(challenge.id),
-            ..Default::default()
-        };
-
-        let event_challenge = new_event_challenge.insert(db.get_ref()).await?;
-        event_challenges_list.push(event_challenge);
-    }
-
-    if let Some(challenge_id_list) = acr.challenge_id_list {
-        for challenge_id in challenge_id_list {
-            let challenge = Challenges::find_by_id(challenge_id)
-                .one(db.get_ref())
-                .await?
-                .ok_or(UniError::NotFound(format!(" {} not exist", challenge_id)))?;
-
+        // 查询是否已存在 event_challenge
+        if let Some(existing) = event_challenges::Entity::find()
+            .filter(event_challenges::Column::EventId.eq(event.id))
+            .filter(event_challenges::Column::ChallengeId.eq(challenge.id))
+            .one(db.get_ref())
+            .await?
+        {
+            // 已存在，直接放进结果
+            event_challenges_list.push(existing);
+        } else {
+            // 不存在，执行插入
             let new_event_challenge = event_challenges::ActiveModel {
                 event_id: Set(event.id),
                 challenge_id: Set(challenge.id),
                 ..Default::default()
             };
 
-            let event_challenge = new_event_challenge.insert(db.get_ref()).await?;
-            event_challenges_list.push(event_challenge);
+            let inserted = new_event_challenge.insert(db.get_ref()).await?;
+            event_challenges_list.push(inserted);
         }
     }
 

@@ -39,3 +39,5 @@ tracing-subscriber = { version = "0.3", features = [
 ] }
 tracing-appender = "0.2" # 支持日志写入文件
 tracing-actix-web = "0.7.19" # Actix Web 的 TracingLogger middleware
+pnet = "0.35.0"
+sysinfo = "0.37.0"

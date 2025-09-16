@@ -1,14 +1,19 @@
 mod challenges;
+mod event_announcements;
 mod event_challenges;
 mod event_teams;
 mod event_users;
+mod event_writeups;
 mod events;
 mod instances;
 mod super_admin;
+mod system;
 mod users;
 use actix_web::web::{ServiceConfig, scope};
 
 pub fn config(cfg: &mut ServiceConfig) {
+    cfg.service(system::get_sys_info);
+
     cfg.service(
         scope("/users")
             .service(users::create_user)
@@ -60,6 +65,8 @@ pub fn config(cfg: &mut ServiceConfig) {
                 scope("/{event_id}/users")
                     .service(event_users::add_user)
                     .service(event_users::remove_user)
+                    .service(event_users::banned_user)
+                    .service(event_users::unbanned_user)
                     .service(event_users::get_users),
             )
             .service(
@@ -78,6 +85,15 @@ pub fn config(cfg: &mut ServiceConfig) {
                     .service(event_challenges::get_challenges)
                     .service(event_challenges::hidden_challenges)
                     .service(event_challenges::open_challenges),
-            ),
+            )
+            .service(
+                scope("/{event_id}/announcements")
+                    .service(event_announcements::add_event_announcement)
+                    .service(event_announcements::update_event_announcement)
+                    .service(event_announcements::remove_event_announcement)
+                    .service(event_announcements::get_event_announcement)
+                    .service(event_announcements::list_event_announcements),
+            )
+            .service(scope("/{event_id}/writeups").service(event_writeups::get_all_event_writeups)),
     );
 }

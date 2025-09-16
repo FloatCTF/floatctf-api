@@ -223,6 +223,10 @@ pub async fn submit_writeup(
     MultipartForm(form): MultipartForm<WriteupForm>,
 ) -> UniResult<()> {
     let upload_dir = env::var("UPLOAD_DIR").unwrap();
+    // if not exists, create it
+    if !fs::metadata(&upload_dir).is_ok() {
+        fs::create_dir_all(&upload_dir).unwrap();
+    }
     let user = user.into_inner();
 
     let event_id = form.event_id.into_inner();

@@ -14,7 +14,11 @@ use sea_orm::entity::prelude::Uuid;
 pub fn config(cfg: &mut ServiceConfig) {
     cfg.service(super_admin::super_admin_login);
 
-    cfg.service(scope("/users").service(users::user_login));
+    cfg.service(
+        scope("/users")
+            .service(users::user_login)
+            .service(users::create_user),
+    );
 
     cfg.service(
         scope("/submit")
@@ -49,6 +53,7 @@ pub fn config(cfg: &mut ServiceConfig) {
             .service(events::get_event_instances)
             .service(events::get_event_challenge_instance)
             .service(events::get_scoreboard)
+            .service(events::get_announcements)
             .service(events::get_trend)
             .service(events::join_event)
             .service(events::leave_event),

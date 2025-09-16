@@ -12,6 +12,7 @@
         "serde",
         "sqlx",
         "strs",
-        "thiserror"
+        "thiserror",
+        "writeups"
     ]
 }

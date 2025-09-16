@@ -7,6 +7,7 @@ use std::{
 };
 
 use super::super::preclude::*;
+use crate::entity::event_announcements;
 use crate::{
     api::service::calculate_next_dynamic_score,
     auth::UserJwtGuard,
@@ -14,8 +15,8 @@ use crate::{
         challenges, event_challenge_solves, event_challenges, event_team_members, event_teams,
         event_users, events, instances,
         prelude::{
-            Challenges, EventChallengeSolves, EventChallenges, EventTeamMembers, EventTeams,
-            EventUsers, Events, Instances, Users,
+            Challenges, EventAnnouncements, EventChallengeSolves, EventChallenges,
+            EventTeamMembers, EventTeams, EventUsers, Events, Instances, Users,
         },
         sea_orm_active_enums::{EventTeamMemberRole, EventType, InstanceStatus},
         users,
@@ -393,18 +394,30 @@ pub async fn get_scoreboard(
             let user_map: HashMap<Uuid, users::Model> =
                 users.into_iter().map(|u| (u.id, u)).collect();
 
-            // 5. 获取所有 solves
+            // 5. 获取所有 solves（按 challenge_id + created_at 排序）
             let solves = EventChallengeSolves::find()
                 .filter(event_challenge_solves::Column::EventId.eq(*event_id))
+                .order_by_asc(event_challenge_solves::Column::ChallengeId)
+                .order_by_asc(event_challenge_solves::Column::CreatedAt)
                 .all(db.get_ref())
                 .await?;
 
+            // 这些结构：
+            // user_solved 用来判断某用户是否解出某题
+            // total_solved_per_chal 记录每题总解出人数
+            // solve_order 为 (user_id, challenge_id) 记录该用户解出该题的“名次”（从 1 开始）
             let mut user_solved: HashSet<(Uuid, Uuid)> = HashSet::new();
-            let mut solved_count: HashMap<Uuid, u64> = HashMap::new();
+            let mut total_solved_per_chal: HashMap<Uuid, u64> = HashMap::new();
+            let mut solve_order: HashMap<(Uuid, Uuid), u64> = HashMap::new();
 
-            for solve in solves {
-                user_solved.insert((solve.user_id, solve.challenge_id));
-                *solved_count.entry(solve.challenge_id).or_insert(0) += 1;
+            for s in solves {
+                user_solved.insert((s.user_id, s.challenge_id));
+                let entry = total_solved_per_chal.entry(s.challenge_id).or_insert(0);
+                *entry += 1;
+                // 仅在首次遇到该用户对这道题的解时记录名次（防重）
+                solve_order
+                    .entry((s.user_id, s.challenge_id))
+                    .or_insert(*entry);
             }
 
             // 6. 拼装 scoreboard
@@ -418,7 +431,17 @@ pub async fn get_scoreboard(
 
                 for ec in event_challenges.iter() {
                     let solved = user_solved.contains(&(event_user.user_id, ec.challenge_id));
-                    let count = solved_count.get(&ec.challenge_id).cloned().unwrap_or(0);
+                    // 每题总解出人数（如果你也想展示的话）
+                    let _total_for_chal = total_solved_per_chal
+                        .get(&ec.challenge_id)
+                        .cloned()
+                        .unwrap_or(0);
+                    // 该用户对这题的解题名次（第几个解出）
+                    let order_for_user = solve_order
+                        .get(&(event_user.user_id, ec.challenge_id))
+                        .cloned()
+                        .unwrap_or(0);
+
                     let challenge = challenge_map
                         .get(&ec.challenge_id)
                         .ok_or(UniError::NotFound("challenge not found".to_string()))?;
@@ -426,7 +449,7 @@ pub async fn get_scoreboard(
                     challenges.push(ChallengeScoreboard {
                         name: challenge.name.clone(),
                         solved,
-                        solved_no: count,
+                        solved_no: order_for_user, // ← 现在是“第几个解出”
                     });
                 }
 
@@ -551,4 +574,19 @@ pub async fn get_trend(
         .collect();
 
     UniResponse::ok(trend_items.into()).into()
+}
+
+#[get("/{event_id}/announcements")]
+pub async fn get_announcements(
+    _user: UserJwtGuard,
+    db: WebDb,
+    event_id: Path<Uuid>,
+) -> UniResult<Vec<event_announcements::Model>> {
+    let announcements = EventAnnouncements::find()
+        .filter(event_announcements::Column::EventId.eq(*event_id))
+        .order_by_desc(event_announcements::Column::CreatedAt)
+        .all(db.get_ref())
+        .await?;
+
+    UniResponse::ok(announcements.into()).into()
 }

@@ -5,6 +5,7 @@ pub mod prelude;
 pub mod challenge_solves;
 pub mod challenge_writeup;
 pub mod challenges;
+pub mod event_announcements;
 pub mod event_challenge_solves;
 pub mod event_challenges;
 pub mod event_instances;
