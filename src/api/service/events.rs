@@ -7,7 +7,8 @@ use std::{
 };
 
 use super::super::preclude::*;
-use crate::entity::event_announcements;
+use crate::entity::prelude::EventWriteup;
+use crate::entity::{event_announcements, event_writeup};
 use crate::{
     api::service::calculate_next_dynamic_score,
     auth::UserJwtGuard,
@@ -73,6 +74,7 @@ pub struct EventChallengeResult {
     pub current_points: f64,
     pub solved_count: u64,
     pub solved: bool,
+    pub solved_no: u64,
 }
 
 #[get("/{event_id}/challenges")]
@@ -84,6 +86,7 @@ pub async fn get_event_challenges(
     let user = user.into_inner();
     let _user = user.clone();
 
+    // team 化
     let event = Events::find_by_id(*id)
         .filter(events::Column::Hidden.eq(false))
         .one(db.get_ref())
@@ -120,10 +123,25 @@ pub async fn get_event_challenges(
                 .count(db.get_ref())
                 .await?;
 
-            let solved = EventChallengeSolves::find_by_id((*id, c.id, user.id))
+            // 查用户是否解出 & 解题记录
+            let user_solve = EventChallengeSolves::find_by_id((*id, c.id, user.id))
                 .one(db.get_ref())
-                .await?
-                .is_some();
+                .await?;
+
+            let mut solved_no = 0;
+            let solved = user_solve.is_some();
+
+            if let Some(us) = user_solve {
+                // 统计比用户早的提交数量
+                let before_count = EventChallengeSolves::find()
+                    .filter(event_challenge_solves::Column::EventId.eq(*id))
+                    .filter(event_challenge_solves::Column::ChallengeId.eq(c.id))
+                    .filter(event_challenge_solves::Column::CreatedAt.lt(us.created_at))
+                    .count(db.get_ref())
+                    .await?;
+
+                solved_no = before_count + 1;
+            }
 
             let current_points = calculate_next_dynamic_score(event_challenge.points, solved_count);
             result.push(EventChallengeResult {
@@ -131,6 +149,7 @@ pub async fn get_event_challenges(
                 current_points,
                 solved_count,
                 solved,
+                solved_no,
             });
         }
     }
@@ -138,12 +157,18 @@ pub async fn get_event_challenges(
     UniResponse::ok(result.into()).into()
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct EventInstance {
+    pub instance: instances::Model,
+    pub challenge_name: String,
+    pub user_nickname: String,
+}
 #[get("/{event_id}/instances")]
 pub async fn get_event_instances(
     user: UserJwtGuard,
     db: WebDb,
     id: Path<Uuid>,
-) -> UniResult<Vec<instances::Model>> {
+) -> UniResult<Vec<EventInstance>> {
     let user = user.into_inner();
 
     let event = Events::find_by_id(*id)
@@ -161,12 +186,26 @@ pub async fn get_event_instances(
 
     match event.r#type {
         EventType::JeopardySingle => {
-            let instances = Instances::find()
+            // 👇 查 instance 并关联 challenge 和 user
+            let data = Instances::find()
                 .filter(instances::Column::Status.eq(InstanceStatus::Running))
                 .filter(instances::Column::UserId.eq(user.id))
                 .filter(instances::Column::Ref.eq("JeopardySingle"))
+                .find_also_related(Challenges) // instance -> challenge
+                .find_also_related(Users) // instance -> user
                 .all(db.get_ref())
                 .await?;
+
+            // 👇 把结果组装成 EventInstance
+            let instances: Vec<EventInstance> = data
+                .into_iter()
+                .map(|(instance, challenge_opt, user_opt)| EventInstance {
+                    instance,
+                    challenge_name: challenge_opt.map(|c| c.name).unwrap_or_default(),
+                    user_nickname: user_opt.map(|u| u.nickname).unwrap_or_default(),
+                })
+                .collect();
+
             UniResponse::ok(instances.into()).into()
         }
         _ => Err(UniError::CustomError(
@@ -342,14 +381,8 @@ pub struct ScoreboardItem {
     pub solved_count: u64,
     pub challenges: Vec<ChallengeScoreboard>,
 }
-
-#[get("/{event_id}/scoreboard")]
-pub async fn get_scoreboard(
-    _user: UserJwtGuard,
-    db: WebDb,
-    event_id: Path<Uuid>,
-) -> UniResult<Vec<ScoreboardItem>> {
-    let event = Events::find_by_id(*event_id)
+pub async fn __get_scoreboard(db: WebDb, event_id: Uuid) -> anyhow::Result<Vec<ScoreboardItem>> {
+    let event = Events::find_by_id(event_id)
         .filter(events::Column::Hidden.eq(false))
         .one(db.get_ref())
         .await?
@@ -359,7 +392,7 @@ pub async fn get_scoreboard(
         EventType::JeopardySingle => {
             // 1. 获取 event_challenges
             let event_challenges = EventChallenges::find()
-                .filter(event_challenges::Column::EventId.eq(*event_id))
+                .filter(event_challenges::Column::EventId.eq(event_id))
                 .filter(event_challenges::Column::Hidden.eq(false))
                 .all(db.get_ref())
                 .await?;
@@ -379,7 +412,7 @@ pub async fn get_scoreboard(
             // 3. 获取所有 event_users
             // banned
             let event_users = EventUsers::find()
-                .filter(event_users::Column::EventId.eq(*event_id))
+                .filter(event_users::Column::EventId.eq(event_id))
                 .filter(event_users::Column::Banned.eq(false))
                 .order_by_desc(event_users::Column::Points)
                 .all(db.get_ref())
@@ -396,7 +429,7 @@ pub async fn get_scoreboard(
 
             // 5. 获取所有 solves（按 challenge_id + created_at 排序）
             let solves = EventChallengeSolves::find()
-                .filter(event_challenge_solves::Column::EventId.eq(*event_id))
+                .filter(event_challenge_solves::Column::EventId.eq(event_id))
                 .order_by_asc(event_challenge_solves::Column::ChallengeId)
                 .order_by_asc(event_challenge_solves::Column::CreatedAt)
                 .all(db.get_ref())
@@ -464,12 +497,23 @@ pub async fn get_scoreboard(
                 });
             }
 
-            UniResponse::ok(scoreboard.into()).into()
+            Ok(scoreboard)
         }
-        _ => Err(UniError::CustomError(
-            "event type not supported".to_string(),
-        )),
+        _ => Err(UniError::CustomError("event type not supported".to_string()).into()),
     }
+}
+
+#[get("/{event_id}/scoreboard")]
+pub async fn get_scoreboard(
+    _user: UserJwtGuard,
+    db: WebDb,
+    event_id: Path<Uuid>,
+) -> UniResult<Vec<ScoreboardItem>> {
+    let scoreboard = __get_scoreboard(db, *event_id)
+        .await
+        .map_err(|e| UniError::CustomError(format!("{}", e)))?;
+
+    UniResponse::ok(scoreboard.into()).into()
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -483,15 +527,9 @@ pub struct TrendItem {
     pub name: String,
     pub points: Vec<TrendPoint>,
 }
-
-#[get("/{event_id}/trend")]
-pub async fn get_trend(
-    _user: UserJwtGuard,
-    db: WebDb,
-    event_id: Path<Uuid>,
-) -> UniResult<Vec<TrendItem>> {
+pub async fn __get_trend(db: WebDb, event_id: Uuid) -> anyhow::Result<Vec<TrendItem>> {
     let solves = event_challenge_solves::Entity::find()
-        .filter(event_challenge_solves::Column::EventId.eq(*event_id))
+        .filter(event_challenge_solves::Column::EventId.eq(event_id))
         .order_by_asc(event_challenge_solves::Column::CreatedAt)
         .all(db.get_ref())
         .await?;
@@ -573,6 +611,19 @@ pub async fn get_trend(
         })
         .collect();
 
+    Ok(trend_items)
+}
+
+#[get("/{event_id}/trend")]
+pub async fn get_trend(
+    _user: UserJwtGuard,
+    db: WebDb,
+    event_id: Path<Uuid>,
+) -> UniResult<Vec<TrendItem>> {
+    let trend_items = __get_trend(db, *event_id)
+        .await
+        .map_err(|e| UniError::CustomError(format!("{}", e)))?;
+
     UniResponse::ok(trend_items.into()).into()
 }
 
@@ -589,4 +640,21 @@ pub async fn get_announcements(
         .await?;
 
     UniResponse::ok(announcements.into()).into()
+}
+
+#[get("/{event_id}/submit_wp_status")]
+
+pub async fn get_submit_wp_status(
+    _user: UserJwtGuard,
+    db: WebDb,
+    event_id: Path<Uuid>,
+) -> UniResult<NaiveDateTime> {
+    let wp = EventWriteup::find()
+        .filter(event_writeup::Column::EventId.eq(*event_id))
+        .order_by_desc(event_writeup::Column::CreatedAt)
+        .one(db.get_ref())
+        .await?
+        .ok_or(UniError::NotFound("no wp".into()))?;
+
+    UniResponse::ok(wp.created_at.into()).into()
 }

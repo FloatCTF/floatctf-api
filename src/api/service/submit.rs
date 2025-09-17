@@ -47,6 +47,19 @@ pub async fn submit_flag(
     // event_single
     // event_team
 
+    // if event
+    if sfr.event_id.is_some() {
+        let event = Events::find_by_id(sfr.event_id.unwrap())
+            .one(db.get_ref())
+            .await?
+            .ok_or(UniError::NotFound("no event".into()))?;
+
+        let now = Utc::now().naive_utc();
+        if now >= event.end_time {
+            return Err(UniError::CustomError("Event has already ended".to_string()));
+        }
+    }
+
     if sfr.event_id.is_none() && sfr.team_id.is_none() {
         jeopardy_single_practice_handler(db, docker, sfr, user).await
     } else if sfr.event_id.is_some() && sfr.team_id.is_none() {

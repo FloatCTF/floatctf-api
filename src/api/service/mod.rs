@@ -5,11 +5,11 @@ mod instances;
 mod submit;
 mod super_admin;
 mod users;
-use std::env;
-
 use actix_web::web::{ServiceConfig, scope};
+pub use events::{__get_scoreboard, __get_trend, ScoreboardItem, TrendItem};
 use sea_orm::EntityTrait;
 use sea_orm::entity::prelude::Uuid;
+use std::env;
 
 pub fn config(cfg: &mut ServiceConfig) {
     cfg.service(super_admin::super_admin_login);
@@ -56,6 +56,7 @@ pub fn config(cfg: &mut ServiceConfig) {
             .service(events::get_announcements)
             .service(events::get_trend)
             .service(events::join_event)
+            .service(events::get_submit_wp_status)
             .service(events::leave_event),
     );
 }

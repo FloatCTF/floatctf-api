@@ -302,7 +302,11 @@ async fn launch_instance_common(
                 .create_and_start(docker, &identifier, &flag)
                 .await
                 .with_context(|| format!("failed to start Web instance for {}", challenge_id))?;
-            format!("{}{}:{}", http_prefix, node_ip, port)
+
+            let url = format!("{}{}:{}", http_prefix, node_ip, port);
+            format!(
+                "<a href=\"{url}\" target=\"_blank\" rel=\"noopener noreferrer\" download >{url}</a>",
+            )
         }
         "Pwn" => {
             let port = cm
