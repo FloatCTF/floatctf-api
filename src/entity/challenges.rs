@@ -21,6 +21,8 @@ pub struct Model {
     pub toml_str: String,
     pub created_at: DateTime,
     pub updated_at: DateTime,
+    #[sea_orm(column_type = "Text", unique)]
+    pub safe_name: String,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

@@ -22,7 +22,8 @@ CREATE TABLE IF NOT EXISTS "super_admin" (
 CREATE TABLE IF NOT EXISTS "challenges" (
     "id" UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
     "name" TEXT NOT NULL UNIQUE,
-    -- ALTER TABLE challenges ADD COLUMN raw_name TEXT; 允许'
+    -- ALTER TABLE challenges ADD COLUMN safe_name TEXT; 允许'
+    "safe_name" TEXT NOT NULL UNIQUE,
     "category" TEXT NOT NULL DEFAULT 'other',
     "description" TEXT NOT NULL DEFAULT 'no description',
     "attachment" TEXT NULL,
@@ -250,3 +251,23 @@ CREATE TRIGGER "trg_event_teams_updated_at"
 BEFORE UPDATE ON "event_teams"
 FOR EACH ROW
 EXECUTE FUNCTION update_updated_at_column();
+
+CREATE OR REPLACE FUNCTION generate_safe_name(original TEXT)
+RETURNS TEXT AS $$
+BEGIN
+  RETURN regexp_replace(lower(original), '[^a-z0-9]+', '_', 'g');
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION set_safe_name()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.safe_name := generate_safe_name(NEW.name);
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_set_safe_name
+BEFORE INSERT OR UPDATE OF name ON challenges
+FOR EACH ROW
+EXECUTE FUNCTION set_safe_name();

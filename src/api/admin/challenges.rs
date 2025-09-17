@@ -306,6 +306,7 @@ pub async fn import_challenge_zip(
             dir_name
         }
     };
+    let name = generate_safe_name(&name);
 
     let output_path = std::env::var("CHALLENGES_DIR").expect("YOU must set CHALLENGES_DIR");
     let output_path = std::path::Path::new(&output_path).join(&name);
@@ -467,7 +468,7 @@ pub async fn check_challenges(
 
     for challenge in challenges {
         let attachment_ok = challenge.attachment.as_ref().map_or(true, |attachment| {
-            let challenge_dir = std::path::Path::new(&challenge_dir).join(&challenge.name);
+            let challenge_dir = std::path::Path::new(&challenge_dir).join(&challenge.safe_name);
             challenge_dir.join(attachment).exists()
         });
 
@@ -489,10 +490,10 @@ pub async fn check_challenges(
 
     UniResponse::ok(challenge_check_results.into()).into()
 }
-
-fn sanitize_name(name: &str) -> String {
-    // 把所有非字母数字的字符换成下划线
-    name.chars()
+pub fn generate_safe_name(original: &str) -> String {
+    original
+        .to_lowercase()
+        .chars()
         .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
         .collect()
 }

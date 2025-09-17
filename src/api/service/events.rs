@@ -153,6 +153,7 @@ pub async fn get_event_challenges(
             });
         }
     }
+    result.sort_by(|a, b| b.challenge.category.cmp(&a.challenge.category));
 
     UniResponse::ok(result.into()).into()
 }
