@@ -59,9 +59,19 @@ pub async fn add_challenge(
             event_challenges_list.push(existing);
         } else {
             // 不存在，执行插入
+            let points = {
+                match challenge.toml_str.parse::<toml::Value>() {
+                    Ok(value) => value
+                        .get("points")
+                        .and_then(|v| v.as_float())
+                        .unwrap_or(100 as f64),
+                    Err(_err) => 100 as f64,
+                }
+            };
             let new_event_challenge = event_challenges::ActiveModel {
                 event_id: Set(event.id),
                 challenge_id: Set(challenge.id),
+                points: Set(points),
                 ..Default::default()
             };
 
