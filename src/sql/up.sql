@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS "super_admin" (
 CREATE TABLE IF NOT EXISTS "challenges" (
     "id" UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
     "name" TEXT NOT NULL UNIQUE,
+    -- ALTER TABLE challenges ADD COLUMN raw_name TEXT; 允许'
     "category" TEXT NOT NULL DEFAULT 'other',
     "description" TEXT NOT NULL DEFAULT 'no description',
     "attachment" TEXT NULL,
@@ -77,21 +78,13 @@ CREATE TABLE IF NOT EXISTS "event_challenge_solves" (
     "challenge_id" UUID NOT NULL REFERENCES "challenges" ("id") ON DELETE CASCADE,
     "user_id" UUID NOT NULL REFERENCES "users" ("id") ON DELETE CASCADE,
     "obtained_points" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "bonus_points" DOUBLE PRECISION NOT NULL DEFAULT 0,
     "created_at" TIMESTAMP NOT NULL DEFAULT now(),
     PRIMARY KEY (
         "event_id",
         "challenge_id",
         "user_id"
     )
-);
-
-CREATE TABLE IF NOT EXISTS "event_instances" (
-    "event_id" UUID NOT NULL REFERENCES "events" ("id") ON DELETE CASCADE,
-    "instance_id" UUID NOT NULL REFERENCES "instances" ("id") ON DELETE CASCADE,
-    "challenge_id" UUID NOT NULL REFERENCES "challenges" ("id") ON DELETE CASCADE,
-    "user_id" UUID NOT NULL REFERENCES "users" ("id") ON DELETE CASCADE,
-    "team_id" UUID NULL REFERENCES "event_teams" ("id") ON DELETE CASCADE,
-    PRIMARY KEY ("event_id", "instance_id")
 );
 
 CREATE TABLE IF NOT EXISTS "event_users" (
@@ -113,6 +106,15 @@ CREATE TABLE IF NOT EXISTS "event_teams" (
     "updated_at" TIMESTAMP NOT NULL DEFAULT now(),
     "banned" BOOLEAN NOT NULL DEFAULT false,
     UNIQUE ("event_id", "name")
+);
+
+CREATE TABLE IF NOT EXISTS "event_instances" (
+    "event_id" UUID NOT NULL REFERENCES "events" ("id") ON DELETE CASCADE,
+    "instance_id" UUID NOT NULL REFERENCES "instances" ("id") ON DELETE CASCADE,
+    "challenge_id" UUID NOT NULL REFERENCES "challenges" ("id") ON DELETE CASCADE,
+    "user_id" UUID NOT NULL REFERENCES "users" ("id") ON DELETE CASCADE,
+    "team_id" UUID NULL REFERENCES "event_teams" ("id") ON DELETE CASCADE,
+    PRIMARY KEY ("event_id", "instance_id")
 );
 
 CREATE TYPE "event_team_member_role" AS ENUM ('captain', 'member');

@@ -4,7 +4,7 @@ use crate::{
     db::WebDocker,
     entity::{
         challenges, event_instances, instances,
-        prelude::{Challenges, EventInstances, Instances},
+        prelude::{Challenges, EventInstances, Instances, Users},
         sea_orm_active_enums::InstanceStatus,
         users,
     },
@@ -322,6 +322,7 @@ async fn launch_instance_common(
         .parse()
         .context("invalid INSTANCE_DESTROY_DELAY (must be i64)")?;
 
+    let destroy_at = Utc::now().naive_utc() + chrono::Duration::minutes(delay);
     let new_instance = instances::ActiveModel {
         status: Set(InstanceStatus::Running),
         flag: Set(flag),
@@ -329,15 +330,35 @@ async fn launch_instance_common(
         challenge_id: Set(challenge.id),
         user_id: Set(user_id),
         r#ref: Set(r#ref),
-        destroy_at: Set(Utc::now().naive_utc() + chrono::Duration::minutes(delay)),
+        destroy_at: Set(destroy_at.clone()),
         identifier: Set(identifier),
         ..Default::default()
     };
 
-    // 添加自动销毁
-
     let mut res = new_instance.insert(db.get_ref()).await?;
     res.flag.clear();
+
+    // 添加自动销毁
+    let d_db = db.clone();
+    let d_docker = docker.clone();
+    let d_id = res.id;
+    let d_user = Users::find_by_id(user_id).one(db.get_ref()).await?.unwrap();
+
+    actix_web::rt::spawn(async move {
+        let now = Utc::now().naive_utc();
+        let delay = (destroy_at - now).to_std();
+        match delay {
+            Ok(d) => {
+                actix_web::rt::time::sleep(d).await;
+                if let Err(e) = __destroy_instance(d_db, d_docker, d_id, d_user).await {
+                    tracing::error!("[@destroy_auto]{}", e)
+                }
+            }
+            Err(e) => {
+                tracing::error!("[@destroy_auto]{}", e)
+            }
+        }
+    });
 
     Ok(res)
 }
