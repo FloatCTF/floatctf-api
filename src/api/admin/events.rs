@@ -199,7 +199,7 @@ pub struct DataPresent {
     pub team_count: u64,
     pub solved_recent_15: Vec<DataEventChallengeSolve>, // 谁 什么题 什么时间 多少分
     pub event_challenges: Vec<DataEventChallenge>,
-    pub scoreboard: Vec<ScoreboardItem>,
+    pub scoreboard_top10: Vec<ScoreboardItem>,
     pub trend: Vec<TrendItem>,
 }
 // 每道题 小方形卡片 名称 分类， 分数， 解题人数，解题百分比
@@ -286,9 +286,12 @@ pub async fn get_data(
     let scoreboard = __get_scoreboard(db.clone(), *event_id)
         .await
         .map_err(|e| UniError::CustomError(format!("{}", e)))?;
+
     let trend_items = __get_trend(db, *event_id)
         .await
         .map_err(|e| UniError::CustomError(format!("{}", e)))?;
+
+    let scoreboard_top10 = scoreboard.into_iter().take(10).collect::<Vec<_>>();
 
     let data_present = DataPresent {
         event: event,
@@ -296,7 +299,7 @@ pub async fn get_data(
         team_count,
         solved_recent_15,
         event_challenges: data_event_challenges,
-        scoreboard,
+        scoreboard_top10,
         trend: trend_items,
     };
 

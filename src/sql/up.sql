@@ -51,8 +51,6 @@ CREATE TABLE IF NOT EXISTS "instances" (
 
 CREATE TYPE "event_type" AS ENUM ('jeopardy_single', 'jeopardy_team', 'awd_team');
 
-CREATE TYPE "event_status" AS ENUM ('pending', 'running', 'completed', 'failed');
-
 CREATE TABLE IF NOT EXISTS "events" (
     "id" UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
     "type" "event_type" NOT NULL DEFAULT 'jeopardy_single',
@@ -165,6 +163,8 @@ CREATE TABLE IF NOT EXISTS "event_writeup" (
     "created_at" TIMESTAMP NOT NULL DEFAULT now(),
     CONSTRAINT event_writeup_pkey PRIMARY KEY ("event_id", "user_id")
 );
+
+-- user_logs,training_logs, event_logs, system_logs, admin_logs
 -- users 表索引
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_users_username" ON "users" ("username");
 

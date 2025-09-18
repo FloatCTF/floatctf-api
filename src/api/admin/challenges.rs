@@ -177,6 +177,14 @@ pub async fn delete_challenge(
         .await?
         .ok_or(UniError::NotFound(format!(" {} not exist", id)))?;
 
+    let del_challenge_path =
+        std::env::var("CHALLENGES_DIR").expect("CHALLENGES_DIR env var must be set");
+    let del_challenge_path = std::path::Path::new(&del_challenge_path).join(&challenge.safe_name);
+    if del_challenge_path.exists() {
+        std::fs::remove_dir_all(&del_challenge_path)
+            .map_err(|e| UniError::CustomError(format!("delete challenge dir error: {}", e)))?;
+    }
+
     let r = challenge.delete(db.get_ref()).await?;
 
     UniResponse::ok(r.rows_affected.into()).into()
