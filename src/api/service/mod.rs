@@ -65,11 +65,19 @@ pub fn calculate_next_dynamic_score(base_points: f64, solves: u64) -> f64 {
     if solves <= 0 {
         return base_points;
     }
+
     let decay: f64 = env::var("EVENT_SCORE_DECAY")
         .expect("EVENT_SCORE_DECAY must be set in .env file")
         .parse()
         .expect("需要一个数字来设置衰减");
-    let min_points = base_points / 6.0;
+
+    let event_score_min_percent: f64 = env::var("EVENT_SCORE_MIN_PERCENT")
+        .unwrap_or_else(|_| "0.45".to_string()) // 默认45%
+        .parse()
+        .expect("需要数字比例作为最低分比率");
+
+    let min_points = base_points * event_score_min_percent;
+
     let current_points =
         min_points + (base_points - min_points) * ((decay / (decay + (solves) as f64)).sqrt());
     current_points.max(min_points)

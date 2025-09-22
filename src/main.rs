@@ -19,7 +19,8 @@ async fn main() -> std::io::Result<()> {
     dotenv().ok();
 
     // 日志层
-    let file_appender = rolling::daily("logs", "log");
+    let log_dir = env::var("LOG_DIR").unwrap_or("./logs".to_string());
+    let file_appender = rolling::daily(log_dir, "log");
     let (file_writer, _guard) = tracing_appender::non_blocking(file_appender);
 
     tracing_subscriber::fmt()

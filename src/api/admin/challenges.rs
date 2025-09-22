@@ -1,3 +1,5 @@
+use std::io::Read;
+
 use base64::Engine;
 
 use super::super::preclude::*;
@@ -220,22 +222,15 @@ pub async fn web_import_challenge(
     }
 
     if let Some(challenge_zip) = form.challenge_zip {
-        let toml_str = import_challenge_zip(
-            challenge_zip
-                .file_name
-                .ok_or(UniError::CustomError(format!(
-                    "challenge zip file name is empty"
-                )))?,
-            challenge_zip.file,
-        )
-        .await
-        .map_err(|e| UniError::CustomError(format!("import challenge zip error: {}", e)))?;
+        let toml_str = import_challenge_zip(challenge_zip.file)
+            .await
+            .map_err(|e| UniError::CustomError(format!("import challenge zip error: {}", e)))?;
 
         will_insert_toml_strs.push(toml_str);
     }
 
     if let Some(challenge_list_zip) = form.challenge_list_zip {
-        let toml_strs = import_challenge_list_zip(challenge_list_zip)
+        let toml_strs = import_challenge_list_zip(challenge_list_zip.file)
             .await
             .map_err(|e| {
                 UniError::CustomError(format!("import challenge list zip error: {}", e))
@@ -297,142 +292,47 @@ pub async fn import_challenge(
 }
 
 pub async fn import_challenge_zip(
-    dir_name: String,
-    challenge_zip: NamedTempFile,
+    challenge_zip: tempfile::NamedTempFile,
 ) -> anyhow::Result<String> {
+    let output_root = std::env::var("CHALLENGES_DIR").expect("YOU must set CHALLENGES_DIR");
     let mut archive = zip::ZipArchive::new(challenge_zip)?;
 
-    let name = {
-        if dir_name.contains(".zip") {
-            dir_name
-                .strip_suffix(".zip")
-                .ok_or(UniError::CustomError(
-                    "challenge zip file name is not end with .zip".to_string(),
-                ))?
-                .to_owned()
-        } else {
-            dir_name
-        }
+    let meta_toml = {
+        let mut meta_toml_file = archive.by_name("meta.toml")?;
+        let mut meta_toml_content = String::new();
+        meta_toml_file.read_to_string(&mut meta_toml_content)?;
+        meta_toml_content
     };
-    let name = generate_safe_name(&name);
 
-    let output_path = std::env::var("CHALLENGES_DIR").expect("YOU must set CHALLENGES_DIR");
-    let output_path = std::path::Path::new(&output_path).join(&name);
+    let cm = ChallengeMeta::from_toml_str(&meta_toml)?;
+    let safe_name = generate_safe_name(&cm.name);
+    let output_dir = std::path::Path::new(&output_root).join(safe_name);
 
-    // >>> 新增：如果目录已存在，先删再解压（确保覆盖）
-    if output_path.exists() {
-        std::fs::remove_dir_all(&output_path)?;
+    if output_dir.exists() {
+        // 覆盖题目
+        std::fs::remove_dir_all(&output_dir)?;
     }
 
-    // 解压zip文件（原逻辑保持不变）
-    for i in 0..archive.len() {
-        let mut file = archive.by_index(i)?;
+    std::fs::create_dir_all(&output_dir)?;
 
-        let file_path = std::path::Path::new(file.name());
-        let out_path = output_path.join(file_path);
+    archive.extract(&output_dir)?;
 
-        if file.name().ends_with('/') || file.name().ends_with('\\') {
-            std::fs::create_dir_all(&out_path)?;
-            continue;
-        }
-
-        if let Some(parent) = out_path.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-
-        let mut outfile = std::fs::File::create(&out_path)?;
-        std::io::copy(&mut file, &mut outfile)?;
-    }
-
-    let toml_str = std::fs::read_to_string(output_path.join("meta.toml"))?;
-    Ok(toml_str)
+    Ok(meta_toml)
 }
 
 pub async fn import_challenge_list_zip(
-    challenge_list_zip: TempFile,
+    challenge_list_zip: tempfile::NamedTempFile,
 ) -> anyhow::Result<Vec<String>> {
-    let tmp_dir = tempfile::tempdir()?;
-    let mut archive = zip::ZipArchive::new(challenge_list_zip.file)?;
+    let mut archive = zip::ZipArchive::new(challenge_list_zip)?;
+    let file_names: Vec<String> = archive.file_names().map(|s| s.to_string()).collect();
     let mut will_insert_toml_strs = Vec::new();
-
-    // 1. 解压外层 ZIP 文件到临时目录
-    for i in 0..archive.len() {
-        let mut file = archive.by_index(i)?;
-        let out_path = tmp_dir.path().join(file.name());
-
-        if file.name().ends_with('/') || file.name().ends_with('\\') {
-            std::fs::create_dir_all(&out_path)?;
-            continue;
-        }
-        if let Some(parent) = out_path.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        let mut outfile = std::fs::File::create(&out_path)?;
-        std::io::copy(&mut file, &mut outfile)?;
+    for zip_name in file_names {
+        let mut file = archive.by_name(&zip_name)?;
+        let mut temp_file = NamedTempFile::new()?;
+        std::io::copy(&mut file, &mut temp_file)?;
+        let meta_toml = import_challenge_zip(temp_file).await?;
+        will_insert_toml_strs.push(meta_toml);
     }
-
-    // 3. 读取 CHALLENGES_DIR 环境变量路径
-    let challenge_dir =
-        std::env::var("CHALLENGES_DIR").expect("CHALLENGES_DIR env var must be set");
-    let challenge_dir_path = std::path::Path::new(&challenge_dir);
-
-    // 4. 遍历临时目录内所有文件，假设都是内层 ZIP 文件，解压它们
-    for entry in std::fs::read_dir(tmp_dir.path())? {
-        let entry = entry?;
-        let path = entry.path();
-
-        if path.is_file() {
-            // 内层 ZIP 文件名
-            let file_name = path
-                .file_name()
-                .and_then(|s| s.to_str())
-                .ok_or_else(|| anyhow::anyhow!("invalid file name"))?;
-
-            // 去掉 .zip 后缀作为解压目录名
-            let dir_name = file_name
-                .strip_suffix(".zip")
-                .ok_or_else(|| anyhow::anyhow!("inner zip file does not end with .zip"))?;
-
-            // 解压目标路径
-            let out_path = challenge_dir_path.join(dir_name);
-
-            // >>> 新增：如果同名目录已存在，先删除，确保覆盖解压
-            if out_path.exists() {
-                std::fs::remove_dir_all(&out_path)?;
-            }
-
-            // 创建目录
-            std::fs::create_dir_all(&out_path)?;
-
-            // 解压内层 ZIP
-            let inner_file = std::fs::File::open(&path)?;
-            let mut inner_archive = zip::ZipArchive::new(inner_file)?;
-
-            for i in 0..inner_archive.len() {
-                let mut file = inner_archive.by_index(i)?;
-                let inner_file_path = std::path::Path::new(file.name());
-                let inner_out_path = out_path.join(inner_file_path);
-
-                if file.name().ends_with('/') || file.name().ends_with('\\') {
-                    std::fs::create_dir_all(&inner_out_path)?;
-                    continue;
-                }
-                if let Some(parent) = inner_out_path.parent() {
-                    std::fs::create_dir_all(parent)?;
-                }
-
-                let mut outfile = std::fs::File::create(&inner_out_path)?;
-                std::io::copy(&mut file, &mut outfile)?;
-            }
-
-            // 读取 meta.toml
-            let meta_path = out_path.join("meta.toml");
-            let meta_str = std::fs::read_to_string(&meta_path)
-                .map_err(|e| anyhow::anyhow!("read meta.toml failed: {}", e))?;
-            will_insert_toml_strs.push(meta_str);
-        }
-    }
-
     Ok(will_insert_toml_strs)
 }
 

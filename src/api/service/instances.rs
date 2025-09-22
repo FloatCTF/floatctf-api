@@ -3,8 +3,10 @@ use crate::{
     auth::UserJwtGuard,
     db::WebDocker,
     entity::{
-        challenges, event_instances, instances,
-        prelude::{Challenges, EventInstances, Instances, Users},
+        challenges, event_instances,
+        events::Entity,
+        instances,
+        prelude::{Challenges, EventInstances, Events, Instances, Users},
         sea_orm_active_enums::InstanceStatus,
         users,
     },
@@ -219,6 +221,16 @@ pub async fn jeopardy_event_single_launch(
 ) -> UniResult<instances::Model> {
     let event_id = lir.event_id.unwrap();
     let challenge_id = lir.challenge_id;
+
+    let event = Events::find_by_id(event_id)
+        .one(db.get_ref())
+        .await?
+        .ok_or(UniError::NotFound("no event".into()))?;
+
+    let now = Utc::now().naive_utc();
+    if now >= event.end_time {
+        return Err(UniError::CustomError("Event has already ended".to_string()));
+    }
 
     // 检查是否已有运行实例
     if let Some((_, Some(instance))) = EventInstances::find()
