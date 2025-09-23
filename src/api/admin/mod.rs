@@ -28,6 +28,7 @@ pub fn config(cfg: &mut ServiceConfig) {
         scope("/challenges")
             .service(challenges::check_challenges)
             .service(challenges::web_import_challenge)
+            .service(challenges::build_challenge)
             // 优先级高于 /challenges/{challenge_id}
             .service(challenges::create_challenge)
             .service(challenges::delete_challenge)

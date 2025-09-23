@@ -338,6 +338,7 @@ pub async fn import_challenge_list_zip(
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ChallengeCheckResult {
+    pub id: Uuid,
     pub challenge_name: String,
     pub is_ok: bool,
     pub docker_image: bool,
@@ -389,6 +390,7 @@ pub async fn check_challenges(
         };
 
         challenge_check_results.push(ChallengeCheckResult {
+            id: challenge.id,
             challenge_name: challenge.name,
             is_ok: attachment_ok && docker_image_ok,
             docker_image: docker_image_ok,
@@ -404,4 +406,64 @@ pub fn generate_safe_name(original: &str) -> String {
         .chars()
         .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
         .collect()
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct BuildChallengeRequest {
+    pub challenge_id: Option<Uuid>,
+    pub challenge_id_list: Option<Vec<Uuid>>,
+}
+#[derive(Debug, Serialize, Deserialize)]
+pub struct BuildChallengeResult {
+    pub challenge_name: String,
+    pub is_ok: bool,
+    pub message: String,
+}
+
+#[post("/build")]
+pub async fn build_challenge(
+    _user: SuperAdminJwtGuard,
+    db: WebDb,
+    docker: WebDocker,
+    bcr: Json<BuildChallengeRequest>,
+) -> UniResult<Vec<BuildChallengeResult>> {
+    let bcr = bcr.into_inner();
+    let mut res = Vec::new();
+    let mut challenge_id_list = Vec::new();
+    bcr.challenge_id.map(|c| {
+        challenge_id_list.push(c);
+    });
+    bcr.challenge_id_list.map(|c| {
+        challenge_id_list.extend(c);
+    });
+
+    for challenge_id in challenge_id_list {
+        let challenge = Challenges::find_by_id(challenge_id)
+            .one(db.get_ref())
+            .await?
+            .ok_or(UniError::NotFound(format!(" {} not exist", challenge_id)))?;
+
+        let cm = ChallengeMeta::from_toml_str(&challenge.toml_str)
+            .map_err(|e| UniError::CustomError(format!("parse challenge meta error: {}", e)))?;
+
+        if cm.docker.is_none() {
+            continue;
+        }
+
+        let challenges_dir =
+            std::env::var("CHALLENGES_DIR").expect("CHALLENGES_DIR env var must be set");
+        let context_path = std::path::Path::new(&challenges_dir)
+            .join(&challenge.safe_name)
+            .join("src");
+
+        let build_result = cm.build_image(&docker, &context_path).await;
+
+        res.push(BuildChallengeResult {
+            challenge_name: challenge.name,
+            is_ok: build_result.is_ok(),
+            message: build_result.map_or_else(|e| e.to_string(), |_| "ok".to_string()),
+        });
+    }
+
+    UniResponse::ok(res.into()).into()
 }
