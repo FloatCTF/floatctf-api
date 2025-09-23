@@ -308,6 +308,7 @@ async fn launch_instance_common(
     let node_ip = std::env::var("NODE_IP").unwrap();
     let http_prefix = std::env::var("HTTP_PREFIX").unwrap();
 
+    //  是根据 有无docker 来判断 而不仅仅是类型, 比如AI题目我可能暂时放到 Misc里
     let content = match cm.category.as_str() {
         "Web" => {
             let port = cm
@@ -327,10 +328,21 @@ async fn launch_instance_common(
                 .with_context(|| format!("failed to start Pwn instance for {}", challenge_id))?;
             format!("nc {} {}", node_ip, port)
         }
-        "Misc" => "".to_string(),
-        "Crypto" => "".to_string(),
-        "Reverse" => "".to_string(),
-        _ => cm.description,
+        // "Misc" => "".to_string(),
+        // "Crypto" => "".to_string(),
+        // "Reverse" => "".to_string(),
+        _ => {
+            if cm.docker.is_some() {
+                let port = cm
+                    .create_and_start(docker, &identifier, &flag)
+                    .await
+                    .with_context(|| format!("failed to start instance for {}", challenge_id))?;
+
+                format!("try nc or http<br />{} {}", node_ip, port)
+            } else {
+                cm.description
+            }
+        }
     };
 
     let delay: i64 = std::env::var("INSTANCE_DESTROY_DELAY")

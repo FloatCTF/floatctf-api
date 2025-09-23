@@ -39,7 +39,6 @@ pub async fn submit_flag(
     docker: WebDocker,
     sfr: Json<SubmitFlagRequest>,
 ) -> UniResult<()> {
-    // TODO: Implement submit_flag
     let user = user.into_inner();
     let sfr = sfr.into_inner();
 

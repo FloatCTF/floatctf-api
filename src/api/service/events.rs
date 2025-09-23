@@ -324,6 +324,10 @@ pub async fn join_event(
         .await?
         .ok_or(UniError::NotFound("event not found".to_string()))?;
 
+    if event.allow_join == false {
+        return Err(UniError::CustomError("event not allow join".to_string()));
+    }
+
     let now = Utc::now().naive_utc(); // 当前 UTC 时间
     if now >= event.start_time {
         return Err(UniError::CustomError(
@@ -351,6 +355,9 @@ pub async fn leave_event(user: UserJwtGuard, db: WebDb, id: Path<Uuid>) -> UniRe
         .one(db.get_ref())
         .await?
         .ok_or(UniError::NotFound("event not found".to_string()))?;
+    if event.allow_join == false {
+        return Err(UniError::CustomError("event not allow leave".to_string()));
+    }
 
     let now = Utc::now().naive_utc(); // 当前 UTC 时间
     if now >= event.start_time {

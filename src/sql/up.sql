@@ -19,6 +19,24 @@ CREATE TABLE IF NOT EXISTS "super_admin" (
     "updated_at" TIMESTAMP NOT NULL DEFAULT now()
 );
 
+INSERT INTO
+    "super_admin" (
+        "id",
+        "username",
+        "password_hash",
+        "email",
+        "created_at",
+        "updated_at"
+    )
+VALUES (
+        '49eab241-d376-41a1-94f1-324f4d06c58e',
+        'admin',
+        '$argon2id$v=19$m=19456,t=2,p=1$KCtP8sQv+e0yUNFBWupjgA$8X7neQRWBVd1r1dfjZu2+AxlMotP/YVFglpUYtFvKxY',
+        'admin@admin.com',
+        '2025-08-28 01:57:46.053702',
+        '2025-08-28 01:57:46.053702'
+    );
+
 CREATE TABLE IF NOT EXISTS "challenges" (
     "id" UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
     "name" TEXT NOT NULL UNIQUE,
@@ -59,6 +77,7 @@ CREATE TABLE IF NOT EXISTS "events" (
     "hidden" BOOLEAN NOT NULL DEFAULT TRUE,
     "start_time" TIMESTAMP NOT NULL,
     "rules" TEXT NOT NULL DEFAULT 'do not cheat',
+    "allow_join" BOOLEAN NOT NULL DEFAULT FALSE,
     "end_time" TIMESTAMP NOT NULL,
     "created_at" TIMESTAMP NOT NULL DEFAULT now(),
     "updated_at" TIMESTAMP NOT NULL DEFAULT now()

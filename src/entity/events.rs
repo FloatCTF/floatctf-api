@@ -21,6 +21,7 @@ pub struct Model {
     pub updated_at: DateTime,
     #[sea_orm(column_type = "Text")]
     pub rules: String,
+    pub allow_join: bool,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
