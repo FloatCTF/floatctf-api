@@ -27,6 +27,7 @@ use crate::{
 #[derive(Debug, Serialize, Deserialize)]
 pub struct EventInfo {
     event: events::Model,
+    team: Option<event_teams::Model>,
     joined: bool,
 }
 
@@ -40,13 +41,26 @@ pub async fn get_events(user: UserJwtGuard, db: WebDb) -> UniResult<Vec<EventInf
         .all(db.get_ref())
         .await?;
 
-    let result = events_with_users
-        .into_iter()
-        .map(|(event, users)| {
-            let joined = users.iter().any(|u| u.user_id == user.id);
-            EventInfo { event, joined }
-        })
-        .collect::<Vec<_>>();
+    let mut result = Vec::new();
+
+    for (event, users) in events_with_users {
+        let joined = users.iter().any(|u| u.user_id == user.id);
+
+        let event_member = EventTeamMembers::find()
+            .filter(event_team_members::Column::EventId.eq(event.id))
+            .filter(event_team_members::Column::UserId.eq(user.id))
+            .find_also_related(EventTeams)
+            .one(db.get_ref())
+            .await?;
+
+        let team = event_member.map(|(_, team)| team).flatten();
+
+        result.push(EventInfo {
+            event,
+            joined,
+            team,
+        });
+    }
 
     UniResponse::ok(result.into()).into()
 }
@@ -64,8 +78,23 @@ pub async fn get_event(user: UserJwtGuard, db: WebDb, id: Path<Uuid>) -> UniResu
         .one(db.get_ref())
         .await?
         .is_some();
+    let event_member = EventTeamMembers::find()
+        .filter(event_team_members::Column::EventId.eq(*id))
+        .filter(event_team_members::Column::UserId.eq(user.id))
+        .find_also_related(EventTeams)
+        .one(db.get_ref())
+        .await?;
+    let team = event_member.map(|(_, team)| team).flatten();
 
-    UniResponse::ok(EventInfo { event, joined }.into()).into()
+    UniResponse::ok(
+        EventInfo {
+            event,
+            joined,
+            team,
+        }
+        .into(),
+    )
+    .into()
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -311,6 +340,42 @@ pub async fn create_team(
     UniResponse::ok(team.into()).into()
 }
 
+#[delete("/{event_id}/team/{team_id}")]
+pub async fn quit_team(user: UserJwtGuard, db: WebDb, id: Path<(Uuid, Uuid)>) -> UniResult<()> {
+    let user = user.into_inner();
+    let (event_id, team_id) = id.into_inner();
+    let team_member = EventTeamMembers::find_by_id((event_id, team_id, user.id))
+        .one(db.get_ref())
+        .await?
+        .ok_or(UniError::NotFound("You are not of the team".to_string()))?;
+
+    if team_member.role == EventTeamMemberRole::Captain {
+        let team = EventTeams::find_by_id(team_id)
+            .one(db.get_ref())
+            .await?
+            .ok_or(UniError::NotFound("team not found".to_string()))?;
+        team.delete(db.get_ref()).await?;
+    } else {
+        team_member.delete(db.get_ref()).await?;
+    }
+
+    let event_user = EventUsers::find_by_id((event_id, user.id))
+        .one(db.get_ref())
+        .await?
+        .ok_or(UniError::NotFound("You are not of the event".to_string()))?;
+    event_user.delete(db.get_ref()).await?;
+
+    UniResponse::ok_none().into()
+}
+
+#[post("/{event_id}/team/invite")]
+pub async fn invite_team() -> UniResult<()> {
+    unimplemented!()
+}
+#[post("/{event_id}/team/join")]
+pub async fn join_team() -> UniResult<()> {
+    unimplemented!()
+}
 #[post("/{event_id}/join")]
 pub async fn join_event(
     user: UserJwtGuard,

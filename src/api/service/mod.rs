@@ -66,9 +66,11 @@ pub fn config(cfg: &mut ServiceConfig) {
             .service(events::get_scoreboard)
             .service(events::get_announcements)
             .service(events::get_trend)
-            .service(events::join_event)
             .service(events::get_submit_wp_status)
-            .service(events::leave_event),
+            .service(events::join_event)
+            .service(events::leave_event)
+            .service(events::create_team)
+            .service(events::quit_team),
     );
 }
 
