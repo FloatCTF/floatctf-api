@@ -391,7 +391,6 @@ pub struct ScoreboardItem {
 }
 pub async fn __get_scoreboard(db: WebDb, event_id: Uuid) -> anyhow::Result<Vec<ScoreboardItem>> {
     let event = Events::find_by_id(event_id)
-        .filter(events::Column::Hidden.eq(false))
         .one(db.get_ref())
         .await?
         .ok_or(UniError::NotFound("event not found".to_string()))?;
