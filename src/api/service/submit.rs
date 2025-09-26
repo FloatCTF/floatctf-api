@@ -296,7 +296,7 @@ pub async fn jeopardy_event_team_submit_handler(
 #[derive(Debug, MultipartForm)]
 pub struct WriteupForm {
     #[multipart(limit = "1024MB")]
-    writeup_docx: TempFile,
+    writeup_pdf: TempFile,
     event_id: Text<Uuid>,
     team_id: Option<Text<Uuid>>,
 }
@@ -318,7 +318,7 @@ pub async fn submit_writeup(
     let event_id = form.event_id.into_inner();
 
     // 写入文件
-    let writeup_file = form.writeup_docx;
+    let writeup_file = form.writeup_pdf;
     let team_id = form.team_id.map(|x| x.into_inner());
     let writeup_file_name = {
         if let Some(team_id) = team_id.clone() {
@@ -326,9 +326,9 @@ pub async fn submit_writeup(
                 .one(db.get_ref())
                 .await?
                 .ok_or(UniError::NotFound("no team".into()))?;
-            format!("{}_{}_{}.docx", event_id, team.name, user.nickname)
+            format!("{}_{}_{}.pdf", event_id, team.name, user.nickname)
         } else {
-            format!("{}_{}.docx", event_id, user.nickname)
+            format!("{}_{}.pdf", event_id, user.nickname)
         }
     };
 

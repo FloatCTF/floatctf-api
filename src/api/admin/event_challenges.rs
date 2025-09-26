@@ -61,6 +61,8 @@ pub async fn add_challenge(
             // 不存在，执行插入
             let points = {
                 match challenge.toml_str.parse::<toml::Value>() {
+                    // 只有 添加到 event_challenges 才会有 points
+                    // 所以这里的 points 是从 challenge.toml_str 中解析出来的
                     Ok(value) => value
                         .get("points")
                         .and_then(|v| v.as_float())
