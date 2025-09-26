@@ -3,18 +3,20 @@ use crate::{
     auth::UserJwtGuard,
     db::WebDocker,
     entity::{
-        challenges, event_instances,
+        challenges, event_instances, event_team_members, event_teams,
         events::Entity,
         instances,
-        prelude::{Challenges, EventInstances, Events, Instances, Users},
-        sea_orm_active_enums::InstanceStatus,
+        prelude::{
+            Challenges, EventInstances, EventTeamMembers, EventTeams, Events, Instances, Users,
+        },
+        sea_orm_active_enums::{EventType, InstanceStatus},
         users,
     },
 };
 use actix_web::{HttpMessage, HttpRequest, delete};
 use anyhow::{Context, Result, anyhow};
 use fcmc::ChallengeMeta;
-use sea_orm::{ColumnTrait, JoinType, ModelTrait, QueryFilter};
+use sea_orm::{ColumnTrait, JoinType, ModelTrait, QueryFilter, RelationTrait};
 use sea_orm::{QuerySelect, entity::prelude::Uuid};
 
 #[get("")]
@@ -83,7 +85,6 @@ pub async fn get_instance(
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LaunchInstanceRequest {
     event_id: Option<Uuid>,
-    team_id: Option<Uuid>,
     challenge_id: Uuid,
     // for team
 }
@@ -96,39 +97,37 @@ pub async fn launch_instance(
     lir: Json<LaunchInstanceRequest>,
     request: HttpRequest,
 ) -> UniResult<instances::Model> {
+    let user = user.into_inner();
     let lir = lir.into_inner();
 
-    let user = user.into_inner();
+    // practice
 
-    // 题目是否可见
-    // 每个人能启动的最大实例数为1
-    let running_instances_count = Instances::find()
-        .filter(instances::Column::Status.eq(InstanceStatus::Running))
-        .filter(instances::Column::UserId.eq(user.id))
-        .count(db.get_ref())
-        .await?;
+    match lir.event_id {
+        Some(event_id) => {
+            let event = Events::find_by_id(event_id)
+                .one(db.get_ref())
+                .await?
+                .ok_or(UniError::NotFound("no event".into()))?;
 
-    let max_instances_per_user = std::env::var("INSTANCE_MAX_PER_USER")
-        .unwrap()
-        .parse::<u64>()
-        .unwrap();
+            //  guard for end
+            let now = Utc::now().naive_utc();
+            if now >= event.end_time {
+                return Err(UniError::CustomError("Event has already ended".to_string()));
+            }
 
-    if running_instances_count >= max_instances_per_user {
-        return UniError::CustomError(format!(
-            "you can only launch {} instances at the same time",
-            max_instances_per_user
-        ))
-        .into();
-    }
-
-    if lir.event_id.is_none() && lir.team_id.is_none() {
-        jeopardy_single_practice_launch(db, docker, user, lir).await
-    } else if lir.event_id.is_some() && lir.team_id.is_none() {
-        jeopardy_event_single_launch(db, docker, user, lir).await
-    } else if lir.event_id.is_some() && lir.team_id.is_some() {
-        jeopardy_event_team_launch(db, docker, user, lir).await
-    } else {
-        UniError::InternalError("unimplemented!".into()).into()
+            match event.r#type {
+                EventType::JeopardySingle => {
+                    return jeopardy_event_single_launch(db, docker, user, lir).await;
+                }
+                EventType::JeopardyTeam => {
+                    return jeopardy_event_team_launch(db, docker, user, lir).await;
+                }
+                _ => return UniError::InternalError("unimplemented!".into()).into(),
+            }
+        }
+        None => {
+            return jeopardy_single_practice_launch(db, docker, user, lir).await;
+        }
     }
 }
 
@@ -181,12 +180,30 @@ pub async fn __destroy_instance(
 
     UniResponse::ok(1.into()).into()
 }
+
 pub async fn jeopardy_single_practice_launch(
     db: WebDb,
     docker: WebDocker,
     user: users::Model,
     lir: LaunchInstanceRequest,
 ) -> UniResult<instances::Model> {
+    let running_instances_count = Instances::find()
+        .filter(instances::Column::Status.eq(InstanceStatus::Running))
+        .filter(instances::Column::UserId.eq(user.id))
+        .filter(instances::Column::Ref.eq("Training"))
+        .count(db.get_ref())
+        .await?;
+
+    let max_instances_per_user = 1 as u64;
+
+    if running_instances_count >= max_instances_per_user {
+        return UniError::CustomError(format!(
+            "you can only launch {} instances at the same time in practice mode",
+            max_instances_per_user
+        ))
+        .into();
+    }
+
     // 是否已经有运行中的实例
     if let Some(running_instance) = Instances::find()
         .filter(instances::Column::Status.eq(InstanceStatus::Running))
@@ -213,6 +230,7 @@ pub async fn jeopardy_single_practice_launch(
 
     UniResponse::ok(res_instance.into()).into()
 }
+
 pub async fn jeopardy_event_single_launch(
     db: WebDb,
     docker: WebDocker,
@@ -222,14 +240,26 @@ pub async fn jeopardy_event_single_launch(
     let event_id = lir.event_id.unwrap();
     let challenge_id = lir.challenge_id;
 
-    let event = Events::find_by_id(event_id)
-        .one(db.get_ref())
-        .await?
-        .ok_or(UniError::NotFound("no event".into()))?;
+    let running_instances_count = EventInstances::find()
+        .filter(event_instances::Column::EventId.eq(event_id))
+        .filter(event_instances::Column::UserId.eq(user.id))
+        .join(
+            JoinType::InnerJoin,
+            event_instances::Relation::Instances.def(),
+        )
+        .filter(instances::Column::Status.eq(InstanceStatus::Running))
+        .filter(instances::Column::Ref.eq("JeopardySingle"))
+        .count(db.get_ref())
+        .await?;
 
-    let now = Utc::now().naive_utc();
-    if now >= event.end_time {
-        return Err(UniError::CustomError("Event has already ended".to_string()));
+    let max_instances_per_user = 2 as u64;
+
+    if running_instances_count >= max_instances_per_user {
+        return UniError::CustomError(format!(
+            "you can only launch {} instances at the same time in JeopardySingle mode",
+            max_instances_per_user
+        ))
+        .into();
     }
 
     // 检查是否已有运行实例
@@ -279,7 +309,86 @@ pub async fn jeopardy_event_team_launch(
     user: users::Model,
     lir: LaunchInstanceRequest,
 ) -> UniResult<instances::Model> {
-    unimplemented!()
+    let event_id = lir.event_id.unwrap();
+    let challenge_id = lir.challenge_id;
+
+    let (team_id, team_member_count) = {
+        let team_member = EventTeamMembers::find()
+            .filter(event_team_members::Column::EventId.eq(event_id))
+            .filter(event_team_members::Column::UserId.eq(user.id))
+            .one(db.get_ref())
+            .await?
+            .ok_or(UniError::NotFound("you are not in any team".into()))?;
+
+        let team_member_count = EventTeamMembers::find()
+            .filter(event_team_members::Column::TeamId.eq(team_member.team_id))
+            .count(db.get_ref())
+            .await?;
+
+        (team_member.team_id, team_member_count)
+    };
+
+    // team_members * 2
+    let running_instances_count = EventInstances::find()
+        .filter(event_instances::Column::EventId.eq(event_id))
+        .filter(event_instances::Column::UserId.eq(user.id))
+        .filter(event_instances::Column::TeamId.eq(team_id))
+        .join(
+            JoinType::InnerJoin,
+            event_instances::Relation::Instances.def(),
+        )
+        .filter(instances::Column::Status.eq(InstanceStatus::Running))
+        .filter(instances::Column::Ref.eq("JeopardyTeam"))
+        .count(db.get_ref())
+        .await?;
+
+    let max_instances_per_user = team_member_count * 2;
+
+    if running_instances_count >= max_instances_per_user {
+        return UniError::CustomError(format!(
+            "you can only launch {} instances at the same time in JeopardyTeam mode",
+            max_instances_per_user
+        ))
+        .into();
+    }
+
+    let running_instance = EventInstances::find()
+        .filter(event_instances::Column::EventId.eq(event_id))
+        .filter(event_instances::Column::ChallengeId.eq(challenge_id))
+        .filter(event_instances::Column::TeamId.eq(team_id))
+        .find_also_related(Instances)
+        .filter(instances::Column::Status.eq(InstanceStatus::Running))
+        .one(db.get_ref())
+        .await?;
+
+    if let Some((_, Some(instance))) = running_instance {
+        return UniResponse::ok(instance.into()).into();
+    }
+
+    let identifier = format!("{}_{}", event_id, team_id);
+
+    let res_instance = launch_instance_common(
+        &db,
+        &docker,
+        challenge_id,
+        identifier,
+        user.id,
+        "JeopardyTeam".into(),
+    )
+    .await
+    .map_err(|e| UniError::InternalError(e.to_string()))?;
+
+    let new_event_instance = event_instances::ActiveModel {
+        event_id: Set(event_id),
+        challenge_id: Set(challenge_id),
+        user_id: Set(user.id),
+        instance_id: Set(res_instance.id),
+        team_id: Set(Some(team_id)),
+        ..Default::default()
+    };
+    new_event_instance.insert(db.get_ref()).await?;
+
+    UniResponse::ok(res_instance.into()).into()
 }
 
 async fn launch_instance_common(

@@ -6,6 +6,7 @@ use crate::{
     entity::{
         event_team_members, event_teams, event_users,
         prelude::{EventTeams, Events, Users},
+        sea_orm_active_enums::EventTeamMemberRole,
         users,
     },
 };
@@ -55,35 +56,71 @@ pub async fn remove_team(db: WebDb, path: Path<(Uuid, Uuid)>) -> UniResult<u64> 
 
     UniResponse::ok(r.rows_affected.into()).into()
 }
-
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TeamMemberResult {
+    pub username: String,
+    pub nickname: String,
+    pub role: EventTeamMemberRole,
+    pub points: f64,
+}
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TeamResult {
+    pub team: event_teams::Model,
+    pub captain: String,
+    pub members: Vec<TeamMemberResult>,
+}
 #[get("")]
 pub async fn get_teams(
     _user: SuperAdminJwtGuard,
     db: WebDb,
     id: Path<Uuid>,
-    query_params: Query<QueryParams>,
-) -> UniResult<Vec<event_teams::Model>> {
-    let mut query_params = query_params.0;
-
+) -> UniResult<Vec<TeamResult>> {
     let event = Events::find_by_id(*id)
         .one(db.get_ref())
         .await?
         .ok_or(UniError::NotFound(format!(" {} not exist", id)))?;
 
-    let stmt = event.find_related(EventTeams);
+    let teams = event.find_related(EventTeams).all(db.get_ref()).await?;
+    let mut result = Vec::new();
+    for team in teams {
+        let members = team
+            .find_related(event_team_members::Entity)
+            .find_also_related(Users)
+            .all(db.get_ref())
+            .await?;
+        let mut team_members = Vec::new();
+        let mut captain = String::new();
+        for (member, user) in members {
+            if let Some(user) = user {
+                if member.role == EventTeamMemberRole::Captain {
+                    captain = user.username.clone();
+                }
+                let event_user = event_users::Entity::find()
+                    .filter(event_users::Column::EventId.eq(event.id))
+                    .filter(event_users::Column::UserId.eq(user.id))
+                    .one(db.get_ref())
+                    .await?
+                    .ok_or(UniError::NotFound(format!(
+                        "EventUser {} not exist",
+                        user.id
+                    )))?;
 
-    if let (Some(limit), Some(page)) = (query_params.limit, query_params.page) {
-        let paginator = stmt.paginate(db.get_ref(), limit);
-        let items = paginator.fetch_page(page.saturating_sub(1)).await?;
-        query_params.total = Some(paginator.num_items().await? as usize);
-
-        UniResponse::ok_meta(items.into(), query_params.into()).into()
-    } else {
-        let items = stmt.all(db.get_ref()).await?;
-        query_params.total = Some(items.len());
-
-        UniResponse::ok_meta(items.into(), query_params.into()).into()
+                team_members.push(TeamMemberResult {
+                    username: user.username,
+                    nickname: user.nickname,
+                    role: member.role,
+                    points: event_user.points,
+                });
+            }
+        }
+        result.push(TeamResult {
+            team,
+            captain,
+            members: team_members,
+        });
     }
+
+    UniResponse::ok(result.into()).into()
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -205,4 +242,48 @@ pub async fn remove_user_from_team(
     let r = event_team_member.delete(db.get_ref()).await?;
 
     UniResponse::ok(r.rows_affected.into()).into()
+}
+
+#[post("/{team_id}/banned")]
+pub async fn ban_team(
+    _user: SuperAdminJwtGuard,
+    db: WebDb,
+    path: Path<(Uuid, Uuid)>,
+) -> UniResult<()> {
+    let (id, team_id) = path.into_inner();
+
+    let event_team = EventTeams::find_by_id(team_id)
+        .filter(event_teams::Column::EventId.eq(id))
+        .one(db.get_ref())
+        .await?
+        .ok_or(UniError::NotFound(format!(" {} not exist", team_id)))?;
+
+    let mut event_team: event_teams::ActiveModel = event_team.into();
+    event_team.banned = Set(true);
+
+    let _event_team = event_team.update(db.get_ref()).await?;
+
+    UniResponse::ok_none().into()
+}
+
+#[post("/{team_id}/unbanned")]
+pub async fn unbanned_team(
+    _user: SuperAdminJwtGuard,
+    db: WebDb,
+    path: Path<(Uuid, Uuid)>,
+) -> UniResult<()> {
+    let (id, team_id) = path.into_inner();
+
+    let event_team = EventTeams::find_by_id(team_id)
+        .filter(event_teams::Column::EventId.eq(id))
+        .one(db.get_ref())
+        .await?
+        .ok_or(UniError::NotFound(format!(" {} not exist", team_id)))?;
+
+    let mut event_team: event_teams::ActiveModel = event_team.into();
+    event_team.banned = Set(false);
+
+    let _event_team = event_team.update(db.get_ref()).await?;
+
+    UniResponse::ok_none().into()
 }

@@ -15,6 +15,7 @@ pub struct Model {
     pub created_at: DateTime,
     #[sea_orm(column_type = "Double")]
     pub bonus_points: f64,
+    pub team_id: Option<Uuid>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -27,6 +28,14 @@ pub enum Relation {
         on_delete = "Cascade"
     )]
     Challenges,
+    #[sea_orm(
+        belongs_to = "super::event_teams::Entity",
+        from = "Column::TeamId",
+        to = "super::event_teams::Column::Id",
+        on_update = "NoAction",
+        on_delete = "Cascade"
+    )]
+    EventTeams,
     #[sea_orm(
         belongs_to = "super::events::Entity",
         from = "Column::EventId",
@@ -48,6 +57,12 @@ pub enum Relation {
 impl Related<super::challenges::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::Challenges.def()
+    }
+}
+
+impl Related<super::event_teams::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::EventTeams.def()
     }
 }
 

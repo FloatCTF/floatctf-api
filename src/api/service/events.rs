@@ -7,8 +7,8 @@ use std::{
 };
 
 use super::super::preclude::*;
-use crate::entity::prelude::EventWriteup;
-use crate::entity::{event_announcements, event_writeup};
+use crate::entity::prelude::{EventInstances, EventWriteup};
+use crate::entity::{event_announcements, event_instances, event_writeup};
 use crate::{
     api::service::calculate_next_dynamic_score,
     auth::UserJwtGuard,
@@ -25,9 +25,19 @@ use crate::{
 };
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct EventTeamMemberResult {
+    pub member_name: String,
+    pub member: event_team_members::Model,
+}
+#[derive(Debug, Serialize, Deserialize)]
+pub struct EventTeamResult {
+    pub team: event_teams::Model,
+    pub members: Vec<EventTeamMemberResult>,
+}
+#[derive(Debug, Serialize, Deserialize)]
 pub struct EventInfo {
     event: events::Model,
-    team: Option<event_teams::Model>,
+    team_result: Option<EventTeamResult>,
     joined: bool,
 }
 
@@ -46,19 +56,10 @@ pub async fn get_events(user: UserJwtGuard, db: WebDb) -> UniResult<Vec<EventInf
     for (event, users) in events_with_users {
         let joined = users.iter().any(|u| u.user_id == user.id);
 
-        let event_member = EventTeamMembers::find()
-            .filter(event_team_members::Column::EventId.eq(event.id))
-            .filter(event_team_members::Column::UserId.eq(user.id))
-            .find_also_related(EventTeams)
-            .one(db.get_ref())
-            .await?;
-
-        let team = event_member.map(|(_, team)| team).flatten();
-
         result.push(EventInfo {
             event,
             joined,
-            team,
+            team_result: None,
         });
     }
 
@@ -78,23 +79,51 @@ pub async fn get_event(user: UserJwtGuard, db: WebDb, id: Path<Uuid>) -> UniResu
         .one(db.get_ref())
         .await?
         .is_some();
+
     let event_member = EventTeamMembers::find()
         .filter(event_team_members::Column::EventId.eq(*id))
         .filter(event_team_members::Column::UserId.eq(user.id))
         .find_also_related(EventTeams)
         .one(db.get_ref())
         .await?;
-    let team = event_member.map(|(_, team)| team).flatten();
 
-    UniResponse::ok(
-        EventInfo {
-            event,
-            joined,
-            team,
+    let team = event_member.map(|(_, team)| team).flatten();
+    match team {
+        Some(team) => {
+            let members = EventTeamMembers::find()
+                .filter(event_team_members::Column::EventId.eq(*id))
+                .filter(event_team_members::Column::TeamId.eq(team.id))
+                .find_also_related(Users)
+                .all(db.get_ref())
+                .await?;
+            let members = members
+                .into_iter()
+                .map(|(member, user)| EventTeamMemberResult {
+                    member_name: user.map(|u| u.nickname).unwrap_or_default(),
+                    member,
+                })
+                .collect();
+            let team = EventTeamResult { team, members };
+            return UniResponse::ok(
+                EventInfo {
+                    event,
+                    joined,
+                    team_result: Some(team),
+                }
+                .into(),
+            )
+            .into();
         }
+        None => UniResponse::ok(
+            EventInfo {
+                event,
+                joined,
+                team_result: None,
+            }
+            .into(),
+        )
         .into(),
-    )
-    .into()
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -152,25 +181,68 @@ pub async fn get_event_challenges(
                 .count(db.get_ref())
                 .await?;
 
+            let (solved, solved_no) = {
+                match event.r#type {
+                    EventType::JeopardySingle => {
+                        let user_solve = EventChallengeSolves::find_by_id((*id, c.id, user.id))
+                            .one(db.get_ref())
+                            .await?;
+
+                        let mut solved_no = 0;
+                        let solved = user_solve.is_some();
+
+                        if let Some(us) = user_solve {
+                            // 统计比用户早的提交数量
+                            let before_count = EventChallengeSolves::find()
+                                .filter(event_challenge_solves::Column::EventId.eq(*id))
+                                .filter(event_challenge_solves::Column::ChallengeId.eq(c.id))
+                                .filter(event_challenge_solves::Column::CreatedAt.lt(us.created_at))
+                                .count(db.get_ref())
+                                .await?;
+
+                            solved_no = before_count + 1;
+                        }
+                        (solved, solved_no)
+                    }
+                    EventType::JeopardyTeam => {
+                        let team_member = EventTeamMembers::find()
+                            .filter(event_team_members::Column::EventId.eq(*id))
+                            .filter(event_team_members::Column::UserId.eq(user.id))
+                            .one(db.get_ref())
+                            .await?
+                            .ok_or(UniError::NotFound("you are not in any team".into()))?;
+
+                        let team_solve = EventChallengeSolves::find()
+                            .filter(event_challenge_solves::Column::EventId.eq(*id))
+                            .filter(event_challenge_solves::Column::ChallengeId.eq(c.id))
+                            .filter(event_challenge_solves::Column::TeamId.eq(team_member.team_id))
+                            .one(db.get_ref())
+                            .await?;
+
+                        let mut solved_no = 0;
+                        let solved = team_solve.is_some();
+
+                        if let Some(ts) = team_solve {
+                            // 统计比用户早的提交数量
+                            let before_count = EventChallengeSolves::find()
+                                .filter(event_challenge_solves::Column::EventId.eq(*id))
+                                .filter(event_challenge_solves::Column::ChallengeId.eq(c.id))
+                                .filter(event_challenge_solves::Column::CreatedAt.lt(ts.created_at))
+                                .count(db.get_ref())
+                                .await?;
+
+                            solved_no = before_count + 1;
+                        }
+
+                        (solved, solved_no)
+                    }
+                    _ => {
+                        return UniError::CustomError("event type not supported".to_string())
+                            .into();
+                    }
+                }
+            };
             // 查用户是否解出 & 解题记录
-            let user_solve = EventChallengeSolves::find_by_id((*id, c.id, user.id))
-                .one(db.get_ref())
-                .await?;
-
-            let mut solved_no = 0;
-            let solved = user_solve.is_some();
-
-            if let Some(us) = user_solve {
-                // 统计比用户早的提交数量
-                let before_count = EventChallengeSolves::find()
-                    .filter(event_challenge_solves::Column::EventId.eq(*id))
-                    .filter(event_challenge_solves::Column::ChallengeId.eq(c.id))
-                    .filter(event_challenge_solves::Column::CreatedAt.lt(us.created_at))
-                    .count(db.get_ref())
-                    .await?;
-
-                solved_no = before_count + 1;
-            }
 
             let current_points = calculate_next_dynamic_score(event_challenge.points, solved_count);
             result.push(EventChallengeResult {
@@ -238,6 +310,35 @@ pub async fn get_event_instances(
 
             UniResponse::ok(instances.into()).into()
         }
+        EventType::JeopardyTeam => {
+            let team_member = EventTeamMembers::find()
+                .filter(event_team_members::Column::EventId.eq(*id))
+                .filter(event_team_members::Column::UserId.eq(user.id))
+                .one(db.get_ref())
+                .await?
+                .ok_or(UniError::NotFound("you are not in any team".into()))?;
+
+            let data = EventInstances::find()
+                .filter(event_instances::Column::EventId.eq(*id))
+                .filter(event_instances::Column::TeamId.eq(team_member.team_id))
+                .find_also_related(Instances)
+                .filter(instances::Column::Status.eq(InstanceStatus::Running))
+                .filter(instances::Column::Ref.eq("JeopardyTeam"))
+                .find_also_related(Challenges)
+                .all(db.get_ref())
+                .await?;
+
+            // 👇 把结果组装成 EventInstance
+            let instances: Vec<EventInstance> = data
+                .into_iter()
+                .map(|(_event_instance, instance, challenge)| EventInstance {
+                    instance: instance.unwrap(),
+                    challenge_name: challenge.map(|c| c.name).unwrap_or_default(),
+                    user_nickname: "".to_string(), // 团队赛没有用户昵称 TODO: 这里应该是团队名称
+                })
+                .collect();
+            UniResponse::ok(instances.into()).into()
+        }
         _ => Err(UniError::CustomError(
             "event type not supported".to_string(),
         )),
@@ -261,14 +362,37 @@ pub async fn get_event_challenge_instance(
 
     match event.r#type {
         EventType::JeopardySingle => {
-            let instance = Instances::find()
-                .filter(instances::Column::ChallengeId.eq(challenge_id))
+            let (_event_instance, instance) = EventInstances::find()
+                .filter(event_instances::Column::EventId.eq(event_id))
+                .filter(event_instances::Column::ChallengeId.eq(challenge_id))
+                .filter(event_instances::Column::UserId.eq(user.id))
+                .find_also_related(Instances)
                 .filter(instances::Column::Status.eq(InstanceStatus::Running))
-                .filter(instances::Column::UserId.eq(user.id))
                 .filter(instances::Column::Ref.eq("JeopardySingle"))
                 .one(db.get_ref())
-                .await?;
-            dbg!(&instance);
+                .await?
+                .ok_or(UniError::NotFound("no instance".into()))?;
+            UniResponse::ok(instance).into()
+        }
+        EventType::JeopardyTeam => {
+            let team_member = EventTeamMembers::find()
+                .filter(event_team_members::Column::EventId.eq(event_id))
+                .filter(event_team_members::Column::UserId.eq(user.id))
+                .one(db.get_ref())
+                .await?
+                .ok_or(UniError::NotFound("you are not in any team".into()))?;
+
+            let (_event_instance, instance) = EventInstances::find()
+                .filter(event_instances::Column::EventId.eq(event_id))
+                .filter(event_instances::Column::ChallengeId.eq(challenge_id))
+                .filter(event_instances::Column::TeamId.eq(team_member.team_id))
+                .find_also_related(Instances)
+                .filter(instances::Column::Status.eq(InstanceStatus::Running))
+                .filter(instances::Column::Ref.eq("JeopardyTeam"))
+                .one(db.get_ref())
+                .await?
+                .ok_or(UniError::NotFound("no instance".into()))?;
+
             UniResponse::ok(instance).into()
         }
         _ => Err(UniError::CustomError(
@@ -368,14 +492,61 @@ pub async fn quit_team(user: UserJwtGuard, db: WebDb, id: Path<(Uuid, Uuid)>) ->
     UniResponse::ok_none().into()
 }
 
-#[post("/{event_id}/team/invite")]
-pub async fn invite_team() -> UniResult<()> {
-    unimplemented!()
+#[post("/{event_id}/team/{team_id}/join")]
+pub async fn join_team(user: UserJwtGuard, db: WebDb, id: Path<(Uuid, Uuid)>) -> UniResult<()> {
+    let user = user.into_inner();
+    let (event_id, team_id) = id.into_inner();
+    let team_member = EventTeamMembers::find_by_id((event_id, team_id, user.id))
+        .one(db.get_ref())
+        .await?;
+
+    if team_member.is_some() {
+        return Err(UniError::CustomError("already joined team".to_string()));
+    }
+    let event_team = EventTeams::find_by_id(team_id)
+        .one(db.get_ref())
+        .await?
+        .ok_or(UniError::NotFound("team not found".to_string()))?;
+
+    let new_event_team_member = event_team_members::ActiveModel {
+        event_id: Set(event_id),
+        user_id: Set(user.id),
+        team_id: Set(event_team.id),
+        role: Set(EventTeamMemberRole::Member),
+        ..Default::default()
+    };
+    new_event_team_member.insert(db.get_ref()).await?;
+
+    let new_event_user = event_users::ActiveModel {
+        event_id: Set(event_id),
+        user_id: Set(user.id),
+        ..Default::default()
+    };
+    new_event_user.insert(db.get_ref()).await?;
+
+    UniResponse::ok_none().into()
 }
-#[post("/{event_id}/team/join")]
-pub async fn join_team() -> UniResult<()> {
-    unimplemented!()
+
+#[post("/{event_id}/team/{team_id}/leave")]
+pub async fn leave_team(user: UserJwtGuard, db: WebDb, id: Path<(Uuid, Uuid)>) -> UniResult<()> {
+    let user = user.into_inner();
+    let (event_id, team_id) = id.into_inner();
+    let team_member = EventTeamMembers::find_by_id((event_id, team_id, user.id))
+        .one(db.get_ref())
+        .await?
+        .ok_or(UniError::NotFound("You are not of the team".to_string()))?;
+
+    if team_member.role == EventTeamMemberRole::Captain {
+        return Err(UniError::CustomError(
+            "Captain can't leave team".to_string(),
+        ));
+    }
+
+    team_member.delete(db.get_ref()).await?;
+
+    UniResponse::ok_none().into()
 }
+
 #[post("/{event_id}/join")]
 pub async fn join_event(
     user: UserJwtGuard,
@@ -496,6 +667,7 @@ pub async fn __get_scoreboard(db: WebDb, event_id: Uuid) -> anyhow::Result<Vec<S
                 .filter(users::Column::Id.is_in(user_ids.clone()))
                 .all(db.get_ref())
                 .await?;
+
             let user_map: HashMap<Uuid, users::Model> =
                 users.into_iter().map(|u| (u.id, u)).collect();
 
@@ -571,6 +743,94 @@ pub async fn __get_scoreboard(db: WebDb, event_id: Uuid) -> anyhow::Result<Vec<S
 
             Ok(scoreboard)
         }
+        EventType::JeopardyTeam => {
+            // 1. 获取 event_challenges
+            let event_challenges = EventChallenges::find()
+                .filter(event_challenges::Column::EventId.eq(event_id))
+                .filter(event_challenges::Column::Hidden.eq(false))
+                .all(db.get_ref())
+                .await?;
+
+            // 提前拿到 challenge_ids
+            let challenge_ids: Vec<Uuid> =
+                event_challenges.iter().map(|ec| ec.challenge_id).collect();
+
+            // 2. 获取所有 challenges
+            let challenges = Challenges::find()
+                .filter(challenges::Column::Id.is_in(challenge_ids.clone()))
+                .all(db.get_ref())
+                .await?;
+            let challenge_map: HashMap<Uuid, challenges::Model> =
+                challenges.into_iter().map(|c| (c.id, c)).collect();
+
+            let event_teams = EventTeams::find()
+                .filter(event_teams::Column::EventId.eq(event_id))
+                .all(db.get_ref())
+                .await?;
+
+            let solves = EventChallengeSolves::find()
+                .filter(event_challenge_solves::Column::EventId.eq(event_id))
+                .order_by_asc(event_challenge_solves::Column::ChallengeId)
+                .order_by_asc(event_challenge_solves::Column::CreatedAt)
+                .all(db.get_ref())
+                .await?;
+
+            let mut team_solved: HashSet<(Uuid, Uuid)> = HashSet::new();
+            let mut total_solved_per_chal: HashMap<Uuid, u64> = HashMap::new();
+            let mut solve_order: HashMap<(Uuid, Uuid), u64> = HashMap::new();
+
+            for s in solves {
+                team_solved.insert((s.team_id.unwrap(), s.challenge_id));
+                let entry = total_solved_per_chal.entry(s.challenge_id).or_insert(0);
+                *entry += 1;
+                // 仅在首次遇到该用户对这道题的解时记录名次（防重）
+                solve_order
+                    .entry((s.team_id.unwrap(), s.challenge_id))
+                    .or_insert(*entry);
+            }
+
+            let mut scoreboard = Vec::new();
+            for (no, event_team) in event_teams.iter().enumerate() {
+                let mut challenges = Vec::new();
+
+                for ec in event_challenges.iter() {
+                    let solved = team_solved.contains(&(event_team.id, ec.challenge_id));
+                    // 每题总解出人数（如果你也想展示的话）
+                    let _total_for_chal = total_solved_per_chal
+                        .get(&ec.challenge_id)
+                        .cloned()
+                        .unwrap_or(0);
+                    // 该用户对这题的解题名次（第几个解出）
+                    let order_for_user = solve_order
+                        .get(&(event_team.id, ec.challenge_id))
+                        .cloned()
+                        .unwrap_or(0);
+
+                    let challenge = challenge_map
+                        .get(&ec.challenge_id)
+                        .ok_or(UniError::NotFound("challenge not found".to_string()))?;
+
+                    challenges.push(ChallengeScoreboard {
+                        name: challenge.name.clone(),
+                        solved,
+                        solved_no: order_for_user, // ← 现在是“第几个解出”
+                    });
+                }
+
+                let solved_count = challenges.iter().filter(|c| c.solved).count() as u64;
+
+                scoreboard.push(ScoreboardItem {
+                    no: no as u64 + 1,
+                    name: event_team.name.clone(),
+                    score: event_team.points,
+                    solved_count,
+                    challenges,
+                });
+            }
+
+            Ok(scoreboard)
+        }
+
         _ => Err(UniError::CustomError("event type not supported".to_string()).into()),
     }
 }
@@ -600,22 +860,16 @@ pub struct TrendItem {
     pub points: Vec<TrendPoint>,
 }
 pub async fn __get_trend(db: WebDb, event_id: Uuid) -> anyhow::Result<Vec<TrendItem>> {
+    let event = Events::find_by_id(event_id)
+        .one(db.get_ref())
+        .await?
+        .ok_or(UniError::NotFound("event not found".to_string()))?;
+    // --- 获取所有 solves ---
     let solves = event_challenge_solves::Entity::find()
         .filter(event_challenge_solves::Column::EventId.eq(event_id))
         .order_by_asc(event_challenge_solves::Column::CreatedAt)
         .all(db.get_ref())
         .await?;
-
-    // --- 预取用户 ---
-    let user_ids: Vec<Uuid> = solves.iter().map(|s| s.user_id).collect();
-    let users_map: HashMap<Uuid, users::Model> = users::Entity::find()
-        .filter(users::Column::Id.is_in(user_ids.clone()))
-        .all(db.get_ref())
-        .await?
-        .into_iter()
-        .map(|u| (u.id, u))
-        .collect();
-
     // --- 预取题目 ---
     let challenge_ids: Vec<Uuid> = solves.iter().map(|s| s.challenge_id).collect();
     let challenges_map: HashMap<Uuid, challenges::Model> = challenges::Entity::find()
@@ -626,64 +880,146 @@ pub async fn __get_trend(db: WebDb, event_id: Uuid) -> anyhow::Result<Vec<TrendI
         .map(|c| (c.id, c))
         .collect();
 
-    // --- 按 user_id 分组 ---
-    let mut user_solves_map: HashMap<Uuid, Vec<event_challenge_solves::Model>> = HashMap::new();
-    for solve in solves {
-        user_solves_map
-            .entry(solve.user_id)
-            .or_default()
-            .push(solve);
-    }
-
-    // --- 收集所有时间点 ---
-    let mut all_times = BTreeSet::new(); // 按升序排序
-    for solves in user_solves_map.values() {
-        for s in solves {
-            all_times.insert(s.created_at);
-        }
-    }
-
-    // --- 为每个用户生成趋势点 ---
-    let mut user_scores: HashMap<Uuid, f64> = HashMap::new();
-    let mut trend_items_map: HashMap<Uuid, Vec<TrendPoint>> = HashMap::new();
-
-    for &time in &all_times {
-        for (&user_id, solves) in &user_solves_map {
-            let score = user_scores.entry(user_id).or_insert(0.0);
-
-            // 当前时间点有 solve 就累加
-            for solve in solves.iter().filter(|s| s.created_at == time) {
-                *score += solve.bonus_points;
+    match event.r#type {
+        EventType::JeopardySingle => {
+            // --- 预取用户 ---
+            let user_ids: Vec<Uuid> = solves.iter().map(|s| s.user_id).collect();
+            let users_map: HashMap<Uuid, users::Model> = users::Entity::find()
+                .filter(users::Column::Id.is_in(user_ids.clone()))
+                .all(db.get_ref())
+                .await?
+                .into_iter()
+                .map(|u| (u.id, u))
+                .collect();
+            // --- 按 user_id 分组 ---
+            let mut user_solves_map: HashMap<Uuid, Vec<event_challenge_solves::Model>> =
+                HashMap::new();
+            for solve in solves {
+                user_solves_map
+                    .entry(solve.user_id)
+                    .or_default()
+                    .push(solve);
             }
 
-            let name = solves
-                .iter()
-                .find(|s| s.created_at == time)
-                .and_then(|s| challenges_map.get(&s.challenge_id))
-                .map(|c| c.name.clone())
-                .unwrap_or_else(|| "".to_string());
+            // --- 收集所有时间点 ---
+            let mut all_times = BTreeSet::new(); // 按升序排序
+            for solves in user_solves_map.values() {
+                for s in solves {
+                    all_times.insert(s.created_at);
+                }
+            }
+            // --- 为每个用户生成趋势点 ---
+            let mut user_scores: HashMap<Uuid, f64> = HashMap::new();
+            let mut trend_items_map: HashMap<Uuid, Vec<TrendPoint>> = HashMap::new();
 
-            trend_items_map
-                .entry(user_id)
-                .or_default()
-                .push(TrendPoint {
-                    name,
-                    score: *score,
-                    time,
-                });
+            for &time in &all_times {
+                for (&user_id, solves) in &user_solves_map {
+                    let score = user_scores.entry(user_id).or_insert(0.0);
+
+                    // 当前时间点有 solve 就累加
+                    for solve in solves.iter().filter(|s| s.created_at == time) {
+                        *score += solve.bonus_points;
+                    }
+
+                    let name = solves
+                        .iter()
+                        .find(|s| s.created_at == time)
+                        .and_then(|s| challenges_map.get(&s.challenge_id))
+                        .map(|c| c.name.clone())
+                        .unwrap_or_else(|| "".to_string());
+
+                    trend_items_map
+                        .entry(user_id)
+                        .or_default()
+                        .push(TrendPoint {
+                            name,
+                            score: *score,
+                            time,
+                        });
+                }
+            }
+
+            // --- 转成 Vec<TrendItem> ---
+            let trend_items: Vec<TrendItem> = user_scores
+                .keys()
+                .map(|user_id| TrendItem {
+                    name: users_map.get(user_id).unwrap().nickname.clone(),
+                    points: trend_items_map.get(user_id).unwrap().clone(),
+                })
+                .collect();
+            Ok(trend_items)
         }
+        EventType::JeopardyTeam => {
+            // TODO: 团队赛趋势图
+            let team_ids = solves
+                .iter()
+                .map(|s| s.team_id.unwrap())
+                .collect::<Vec<Uuid>>();
+            let teams_map: HashMap<Uuid, event_teams::Model> = event_teams::Entity::find()
+                .filter(event_teams::Column::Id.is_in(team_ids))
+                .all(db.get_ref())
+                .await?
+                .into_iter()
+                .map(|t| (t.id, t))
+                .collect();
+            let mut team_solves_map: HashMap<Uuid, Vec<event_challenge_solves::Model>> =
+                HashMap::new();
+            for solve in solves {
+                team_solves_map
+                    .entry(solve.team_id.unwrap())
+                    .or_default()
+                    .push(solve);
+            }
+
+            let mut all_times = BTreeSet::new(); // 按升序排序
+            for solves in team_solves_map.values() {
+                for s in solves {
+                    all_times.insert(s.created_at);
+                }
+            }
+
+            let mut team_scores: HashMap<Uuid, f64> = HashMap::new();
+            let mut trend_items_map: HashMap<Uuid, Vec<TrendPoint>> = HashMap::new();
+
+            for &time in &all_times {
+                for (&team_id, solves) in &team_solves_map {
+                    let score = team_scores.entry(team_id).or_insert(0.0);
+
+                    // 当前时间点有 solve 就累加
+                    for solve in solves.iter().filter(|s| s.created_at == time) {
+                        *score += solve.bonus_points;
+                    }
+
+                    let name = solves
+                        .iter()
+                        .find(|s| s.created_at == time)
+                        .and_then(|s| challenges_map.get(&s.challenge_id))
+                        .map(|c| c.name.clone())
+                        .unwrap_or_else(|| "".to_string());
+
+                    trend_items_map
+                        .entry(team_id)
+                        .or_default()
+                        .push(TrendPoint {
+                            name,
+                            score: *score,
+                            time,
+                        });
+                }
+            }
+
+            let trend_items: Vec<TrendItem> = team_scores
+                .keys()
+                .map(|team_id| TrendItem {
+                    name: teams_map.get(team_id).unwrap().name.clone(),
+                    points: trend_items_map.get(team_id).unwrap().clone(),
+                })
+                .collect();
+            Ok(trend_items)
+        }
+
+        _ => Err(UniError::CustomError("event type not supported".to_string()).into()),
     }
-
-    // --- 转成 Vec<TrendItem> ---
-    let trend_items: Vec<TrendItem> = user_scores
-        .keys()
-        .map(|user_id| TrendItem {
-            name: users_map.get(user_id).unwrap().nickname.clone(),
-            points: trend_items_map.get(user_id).unwrap().clone(),
-        })
-        .collect();
-
-    Ok(trend_items)
 }
 
 #[get("/{event_id}/trend")]

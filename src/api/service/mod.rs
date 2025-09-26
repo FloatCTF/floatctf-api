@@ -70,6 +70,7 @@ pub fn config(cfg: &mut ServiceConfig) {
             .service(events::join_event)
             .service(events::leave_event)
             .service(events::create_team)
+            .service(events::join_team)
             .service(events::quit_team),
     );
 }

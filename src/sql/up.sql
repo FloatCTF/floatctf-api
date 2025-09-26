@@ -95,6 +95,7 @@ CREATE TABLE IF NOT EXISTS "event_challenge_solves" (
     "event_id" UUID NOT NULL REFERENCES "events" ("id") ON DELETE CASCADE,
     "challenge_id" UUID NOT NULL REFERENCES "challenges" ("id") ON DELETE CASCADE,
     "user_id" UUID NOT NULL REFERENCES "users" ("id") ON DELETE CASCADE,
+    "team_id" UUID NULL REFERENCES "event_teams" ("id") ON DELETE CASCADE,
     "obtained_points" DOUBLE PRECISION NOT NULL DEFAULT 0,
     "bonus_points" DOUBLE PRECISION NOT NULL DEFAULT 0,
     "created_at" TIMESTAMP NOT NULL DEFAULT now(),

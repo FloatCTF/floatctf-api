@@ -78,7 +78,9 @@ pub fn config(cfg: &mut ServiceConfig) {
                     .service(event_teams::get_teams)
                     .service(event_teams::get_team_members)
                     .service(event_teams::add_user_to_team)
-                    .service(event_teams::remove_user_from_team),
+                    .service(event_teams::remove_user_from_team)
+                    .service(event_teams::ban_team)
+                    .service(event_teams::unbanned_team),
             )
             .service(
                 scope("/{event_id}/challenges")
