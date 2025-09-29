@@ -29,12 +29,12 @@ INSERT INTO
         "updated_at"
     )
 VALUES (
-        '49eab241-d376-41a1-94f1-324f4d06c58e',
-        'admin',
-        '$argon2id$v=19$m=19456,t=2,p=1$KCtP8sQv+e0yUNFBWupjgA$8X7neQRWBVd1r1dfjZu2+AxlMotP/YVFglpUYtFvKxY',
-        'admin@admin.com',
-        '2025-08-28 01:57:46.053702',
-        '2025-08-28 01:57:46.053702'
+        'e9c27136-f30c-4619-8377-756b1148192d',
+        'sysadmin',
+        '$argon2id$v=19$m=19456,t=2,p=1$3THt36/y60+8SreEtA+T5A$xp4mvnbi0niUfEux7u24ZdTnv4t5QnH8ZhA/uF+GDe8',
+        'sysadmin@system.com',
+        '2025-09-29 13:04:49.689893',
+        '2025-09-29 13:04:49.689893'
     );
 
 CREATE TABLE IF NOT EXISTS "challenges" (

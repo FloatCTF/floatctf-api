@@ -190,9 +190,9 @@ pub async fn delete_super_admin(
 pub async fn add_admin() {
     dotenvy::dotenv().ok();
     let db = crate::db::init_db().await.unwrap();
-    let password = "admin";
-    let username = "admin";
-    let email = "admin@admin.com";
+    let username = "sysadmin";
+    let password = "FloatCTF@2025";
+    let email = "sysadmin@system.com";
 
     let salt = SaltString::generate(&mut OsRng);
     let hashed_password = {
