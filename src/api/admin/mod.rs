@@ -63,6 +63,7 @@ pub fn config(cfg: &mut ServiceConfig) {
             .service(events::get_events)
             .service(events::get_event)
             .service(events::get_data)
+            .service(events::get_report)
             .service(
                 scope("/{event_id}/users")
                     .service(event_users::add_user)

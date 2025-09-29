@@ -1,5 +1,13 @@
+use std::fs::File;
+use std::io::Write;
+
 use super::super::preclude::*;
+use crate::api::admin::challenges::generate_safe_name;
+use crate::api::admin::event_teams::{TeamMemberResult, TeamResult};
 use crate::api::service::{ScoreboardItem, TrendItem};
+use crate::entity::prelude::EventWriteup;
+use crate::entity::sea_orm_active_enums::EventTeamMemberRole;
+use crate::entity::{event_team_members, event_writeup};
 use crate::{
     api::service::{__get_scoreboard, __get_trend, calculate_next_dynamic_score},
     auth::SuperAdminJwtGuard,
@@ -15,6 +23,7 @@ use crate::{
 };
 use chrono::NaiveDateTime;
 use sea_orm::{ColumnTrait, QueryFilter, QueryOrder, QuerySelect};
+use zip::write::FileOptions;
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CreateEventRequest {
     pub r#type: EventType,
@@ -313,4 +322,316 @@ pub async fn get_data(
     };
 
     UniResponse::ok(data_present.into()).into()
+}
+
+#[get("/{event_id}/report")]
+pub async fn get_report(
+    _user: SuperAdminJwtGuard,
+    db: WebDb,
+    event_id: Path<Uuid>,
+) -> UniResult<String> {
+    let event_id = event_id.into_inner();
+    let event = Events::find_by_id(event_id)
+        .one(db.get_ref())
+        .await?
+        .ok_or(UniError::NotFound(format!("Event {} not exist", event_id)))?;
+    let upload_dir = std::env::var("UPLOAD_DIR").unwrap_or_else(|_| "uploads".to_string());
+    let target_zip = std::path::Path::new(&upload_dir).join(format!(
+        "{}_{}.zip",
+        generate_safe_name(&event.title),
+        event_id
+    ));
+
+    let event_writeups = EventWriteup::find()
+        .filter(event_writeup::Column::EventId.eq(event_id))
+        .all(db.get_ref())
+        .await?;
+
+    let writeup_paths = event_writeups
+        .iter()
+        .map(|w| w.file_url.clone())
+        .collect::<Vec<_>>();
+
+    let zip_file = File::create(&target_zip).map_err(|e| UniError::CustomError(e.to_string()))?;
+    let mut zip = zip::ZipWriter::new(zip_file);
+    let options = FileOptions::<()>::default();
+
+    zip.add_directory("uploads/", options)
+        .map_err(|e| UniError::CustomError(e.to_string()))?;
+
+    for wp_path in writeup_paths {
+        let path = std::path::Path::new(&wp_path);
+        if !path.exists() {
+            // 可以选择忽略或者报错，这里我忽略并继续
+            eprintln!("文件不存在: {:?}", path);
+            continue;
+        }
+        let file_name = path
+            .file_name()
+            .ok_or(UniError::CustomError("无法获取文件名".to_string()))?;
+        let file_name_str = file_name.to_str().ok_or(UniError::CustomError(
+            "文件名不是有效的UTF-8字符串".to_string(),
+        ))?;
+        let file = File::open(path).map_err(|e| UniError::CustomError(e.to_string()))?;
+        zip.start_file(
+            format!("uploads/{}", file_name_str),
+            FileOptions::<()>::default(),
+        )
+        .map_err(|e| UniError::CustomError(e.to_string()))?;
+        std::io::copy(&mut &file, &mut zip).map_err(|e| UniError::CustomError(e.to_string()))?;
+    }
+
+    // 添加index.html报表 这里要根据不同的比赛类型设计
+    let template_html = r#"
+<html lang="zh-CN">
+<head>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+        "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      max-width: 800px;
+      margin: 20px auto;
+      padding: 0 20px;
+    }
+    h1,
+    h2,
+    h3 {
+      border-bottom: 1px solid #eaecef;
+      padding-bottom: 0.3em;
+    }
+    h1 {
+      font-size: 2em;
+    }
+    h2 {
+      font-size: 1.5em;
+    }
+    h3 {
+      font-size: 1.25em;
+    }
+    code {
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo,
+        Courier, monospace;
+      background-color: rgba(27, 31, 35, 0.05);
+      padding: 0.2em 0.4em;
+      font-size: 85%;
+      border-radius: 3px;
+    }
+    table {
+      width: 100%;   /* 跟随整个浏览器宽度 */
+      max-width: 100%;
+      border-collapse: collapse;
+      margin-top: 1em;
+    }
+    th,
+    td {
+      border: 1px solid #ddd;
+      padding: 0.6em;
+      text-align: left;
+    }
+    thead {
+      background-color: #f3f3f3;
+    }
+  </style>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+  <meta charset="utf-8" />
+  <title>{{ event.title }}' Writeup Report</title>
+</head>
+<body>
+  <h1>{{ event.title }}' Writeup Report</h1>
+  <p>Event ID：<code>{{ event.id }}</code></p>
+  <p>Event Type：<code>{{ event.type }}</code></p>
+  <p> Event Date：<code>{{ event.start_time }} - {{ event.end_time }}</code>
+  </p> {% if event_teams_results %} <h2>Event Teams</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>No.</th>
+        <th>Team ID</th>
+        <th>Name</th>
+        <th>Points</th>
+        <th>Member</th>
+        <th>Writeup</th>
+        <th>banned</th>
+      </tr>
+    </thead>
+    <tbody> {% for team_result in event_teams_results %} <tr>
+        <td>{{ loop.index }}</td>
+        <td>{{ team_result.team.id}}</td>
+        <td>{{ team_result.team.name }}</td>
+        <td>{{ team_result.team.points }}</td>
+        <td>
+          <table>
+            <thead>
+              <tr>
+                <th>Username</th>
+                <th>Nickname</th>
+                <th>Role</th>
+                <th>Points</th>
+              </tr>
+            </thead>
+            <tbody> {% for member in team_result.members%} <tr>
+                <td>{{ member.username }}</td>
+                <td>{{ member.nickname }}</td>
+                <td>{{ member.role }}</td>
+                <td>{{ member.points }}</td>
+              </tr> {% endfor %} </tbody>
+          </table>
+        </td>
+        <td><a href="{{ team_result.writeup_url }}" target="_blank">{{ team_result.writeup_url }}</a></td>
+        <td>{{ team_result.team.banned }}</td>
+      </tr> {% endfor %} </tbody>
+  </table> {% endif %} {% if event_users %} <h2>Event Users</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>No.</th>
+        <th>Username</th>
+        <th>Nickname</th>
+        <th>Points</th>
+        <th>Writeup</th>
+        <th>Banned</th>
+      </tr>
+    </thead>
+    <tbody> {% for user in event_users %} <tr>
+        <td>{{ loop.index }}</td>
+        <td>{{ user.username }}</td>
+        <td>{{ user.nickname }}</td>
+        <td>{{ user.points }}</td>
+        <td><a href="{{ user.writeup_url }}" target="_blank">{{ user.writeup_url }}</a></td>
+        <td>{{ user.banned }}</td>
+      </tr> {% endfor %} </tbody>
+  </table> {% endif %}
+</html>
+"#;
+    let env = minijinja::Environment::new();
+    let tmpl = env
+        .template_from_str(template_html)
+        .map_err(|e| UniError::CustomError(format!("Failed to create template: {}", e)))?;
+    // prepare context
+
+    let ctx = match event.r#type {
+        EventType::JeopardySingle => {
+            let event_users = EventUsers::find()
+                .filter(event_users::Column::EventId.eq(event_id))
+                .find_also_related(Users)
+                .all(db.get_ref())
+                .await?;
+            let event_users_results = {
+                let mut event_users_results = Vec::new();
+                for (event_user, user) in event_users {
+                    if let Some(user) = user {
+                        let writeup = EventWriteup::find()
+                            .filter(event_writeup::Column::UserId.eq(user.id))
+                            .one(db.get_ref())
+                            .await?;
+                        let writeup_url = writeup.map(|w| w.file_url).unwrap_or_default();
+                        let user_result = ReportUser {
+                            username: user.username,
+                            nickname: user.nickname,
+                            points: event_user.points,
+                            writeup_url,
+                            banned: event_user.banned,
+                        };
+                        event_users_results.push(user_result);
+                    }
+                }
+                event_users_results
+            };
+            minijinja::context! {
+                event,
+                event_users => event_users_results,
+            }
+        }
+
+        EventType::JeopardyTeam => {
+            let event_teams = EventTeams::find()
+                .inner_join(EventWriteup) // with wp
+                .filter(event_writeup::Column::EventId.eq(event_id))
+                .all(db.get_ref())
+                .await?;
+            let event_teams_results = {
+                let mut event_teams_results = Vec::new();
+                for team in event_teams {
+                    let members = team
+                        .find_related(event_team_members::Entity)
+                        .find_also_related(Users)
+                        .all(db.get_ref())
+                        .await?;
+                    let mut team_members = Vec::new();
+
+                    for (member, user) in members {
+                        if let Some(user) = user {
+                            let event_user = event_users::Entity::find()
+                                .filter(event_users::Column::EventId.eq(event.id))
+                                .filter(event_users::Column::UserId.eq(user.id))
+                                .one(db.get_ref())
+                                .await?
+                                .ok_or(UniError::NotFound(format!(
+                                    "EventUser {} not exist",
+                                    user.id
+                                )))?;
+
+                            team_members.push(TeamMemberResult {
+                                username: user.username,
+                                nickname: user.nickname,
+                                role: member.role,
+                                points: event_user.points,
+                            });
+                        }
+                    }
+
+                    let writeup = EventWriteup::find()
+                        .filter(event_writeup::Column::TeamId.eq(team.id))
+                        .one(db.get_ref())
+                        .await?;
+                    let writeup_url = writeup.map(|w| w.file_url).unwrap_or_default();
+                    let team_result = ReportTeam {
+                        team,
+                        writeup_url,
+                        members: team_members,
+                    };
+                    event_teams_results.push(team_result);
+                }
+                event_teams_results
+            };
+            minijinja::context! {
+                event,
+                event_teams_results,
+            }
+        }
+        _ => minijinja::context! {
+            event,
+        },
+    };
+    let rendered = tmpl
+        .render(ctx)
+        .map_err(|e| UniError::CustomError(format!("Failed to render template: {}", e)))?;
+    zip.start_file("report.html", FileOptions::<()>::default())
+        .map_err(|e| UniError::CustomError(e.to_string()))?;
+    zip.write_all(rendered.as_bytes())
+        .map_err(|e| UniError::CustomError(e.to_string()))?;
+    // 返回zip文件的路径
+    // uploads/c7b32b99-ed9e-476d-a7dc-b06b03e94c39.zip
+    // writeups/
+    // report.html
+    // wp/1.pdf
+    zip.finish()
+        .map_err(|e| UniError::CustomError(e.to_string()))?;
+    UniResponse::ok(target_zip.to_string_lossy().to_string().into()).into()
+}
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ReportTeam {
+    pub team: event_teams::Model,
+    pub writeup_url: String,
+    pub members: Vec<TeamMemberResult>,
+}
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ReportUser {
+    pub username: String,
+    pub nickname: String,
+    pub points: f64,
+    pub writeup_url: String,
+    pub banned: bool,
 }
