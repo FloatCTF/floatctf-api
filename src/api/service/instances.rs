@@ -216,7 +216,7 @@ pub async fn jeopardy_single_practice_launch(
     }
 
     // 调用公共函数启动实例
-    let identifier = user.id.to_string();
+    let identifier = format!("{}_{}", user.id, lir.challenge_id);
     let res_instance = launch_instance_common(
         &db,
         &docker,
@@ -276,7 +276,7 @@ pub async fn jeopardy_event_single_launch(
     }
 
     // 调用公共启动逻辑
-    let identifier = format!("{}_{}", event_id, user.id);
+    let identifier = format!("{}_{}_{}", event_id, user.id, challenge_id);
 
     let res_instance = launch_instance_common(
         &db,
@@ -365,7 +365,7 @@ pub async fn jeopardy_event_team_launch(
         return UniResponse::ok(instance.into()).into();
     }
 
-    let identifier = format!("{}_{}", event_id, team_id);
+    let identifier = format!("{}_{}_{}", event_id, team_id, challenge_id);
 
     let res_instance = launch_instance_common(
         &db,
