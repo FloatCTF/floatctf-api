@@ -261,7 +261,7 @@ pub async fn import_challenge(
         category: Set(c.category),
         description: Set(c.description),
         attachment: Set(c.attachment),
-
+        safe_name: Set(generate_safe_name(&c.name)),
         toml_str: Set(challenge_toml_str),
         ..Default::default()
     };
@@ -275,6 +275,7 @@ pub async fn import_challenge(
                     challenges::Column::Description,
                     challenges::Column::Attachment,
                     challenges::Column::TomlStr,
+                    challenges::Column::SafeName,
                 ])
                 .to_owned(),
         )

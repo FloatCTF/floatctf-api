@@ -31,6 +31,7 @@ pub struct CreateEventRequest {
     pub description: Option<String>,
     pub hidden: bool,
     pub allow_join: bool,
+    pub rules: String,
     pub start_time: NaiveDateTime,
     pub end_time: NaiveDateTime,
 }
@@ -51,6 +52,7 @@ pub async fn create_event(
         hidden: Set(cer.hidden),
         allow_join: Set(cer.allow_join),
         end_time: Set(cer.end_time),
+        rules: Set(cer.rules),
         ..Default::default()
     };
 
@@ -96,6 +98,7 @@ pub struct PatchEventRequest {
     pub description: Option<String>,
     pub hidden: Option<bool>,
     pub allow_join: Option<bool>,
+    pub rules: Option<String>,
     pub start_time: Option<NaiveDateTime>,
     pub end_time: Option<NaiveDateTime>,
 }
@@ -138,6 +141,10 @@ pub async fn patch_event(
 
     per.allow_join.map(|a| {
         m_event.allow_join = Set(a);
+    });
+
+    per.rules.map(|r| {
+        m_event.rules = Set(r.into());
     });
     let event = m_event.update(db.get_ref()).await?;
 

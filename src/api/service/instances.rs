@@ -423,7 +423,7 @@ async fn launch_instance_common(
             let port = cm
                 .create_and_start(docker, &identifier, &flag)
                 .await
-                .with_context(|| format!("failed to start Web instance for {}", challenge_id))?;
+                .map_err(|e| UniError::InternalError(format!("{}", e)))?;
 
             let url = format!("{}{}:{}", http_prefix, node_ip, port);
             format!(
