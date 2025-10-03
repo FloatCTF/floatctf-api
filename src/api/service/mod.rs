@@ -1,5 +1,6 @@
 mod challenge_solves;
 
+mod challenge_sets;
 mod challenge_writeups;
 mod challenges;
 mod events;
@@ -46,6 +47,11 @@ pub fn config(cfg: &mut ServiceConfig) {
             .service(challenge_writeups::create_challenge_writeup)
             .service(challenge_writeups::get_challenge_writeup)
             .service(challenge_writeups::get_challenge_writeups),
+    );
+    cfg.service(
+        scope("/challenge_sets")
+            .service(challenge_sets::get_challenge_sets)
+            .service(challenge_sets::get_challenge_set),
     );
 
     cfg.service(

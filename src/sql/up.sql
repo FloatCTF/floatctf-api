@@ -196,6 +196,19 @@ CREATE TABLE IF NOT EXISTS "event_writeup" (
     CONSTRAINT event_writeup_pkey PRIMARY KEY ("event_id", "user_id")
 );
 
+CREATE TABLE "challenge_sets" (
+    "id" UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
+    "name" TEXT NOT NULL,
+    "description" TEXT,
+    "created_at" TIMESTAMP NOT NULL DEFAULT now()
+);
+
+-- 题单与题目关联表
+CREATE TABLE "challenge_set_items" (
+    "set_id" UUID NOT NULL REFERENCES "challenge_sets" (id) ON DELETE CASCADE,
+    "challenge_id" UUID NOT NULL REFERENCES "challenges" (id) ON DELETE CASCADE,
+    PRIMARY KEY ("set_id", "challenge_id")
+);
 -- user_logs,training_logs, event_logs, system_logs, admin_logs
 -- users 表索引
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_users_username" ON "users" ("username");

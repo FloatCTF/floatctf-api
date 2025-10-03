@@ -1,3 +1,4 @@
+mod challenge_sets;
 mod challenges;
 mod event_announcements;
 mod event_challenges;
@@ -44,6 +45,17 @@ pub fn config(cfg: &mut ServiceConfig) {
             .service(challenges::patch_challenge)
             .service(challenges::get_challenges)
             .service(challenges::get_challenge), // web import challenge
+    );
+
+    cfg.service(
+        scope("/challenge_sets")
+            .service(challenge_sets::create_challenge_set)
+            .service(challenge_sets::delete_challenge_set)
+            .service(challenge_sets::get_challenge_sets)
+            .service(challenge_sets::get_challenge_set)
+            .service(challenge_sets::delete_challenge_from_set)
+            .service(challenge_sets::add_challenge_to_set)
+            .service(challenge_sets::patch_challenge_set),
     );
 
     cfg.service(
