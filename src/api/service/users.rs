@@ -1,5 +1,5 @@
 use super::super::preclude::*;
-use crate::auth::{Role, gen_jwt_token};
+use crate::auth::{Role, UserJwtGuard, gen_jwt_token};
 use crate::entity::{prelude::Users, users};
 use argon2::password_hash::rand_core::OsRng;
 use argon2::password_hash::{PasswordHasher, SaltString};
@@ -84,4 +84,51 @@ pub async fn create_user(db: WebDb, cur: Json<CreateUserRequest>) -> UniResult<S
             .into(),
     )
     .into()
+}
+
+#[get("/me")]
+pub async fn get_me(user: UserJwtGuard) -> UniResult<users::Model> {
+    let mut user = user.into_inner();
+    user.password_hash = "".to_string();
+    UniResponse::ok(user.into()).into()
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PatchMeRequest {
+    pub nickname: Option<String>,
+    pub email: Option<String>,
+    pub password: Option<String>,
+}
+
+#[patch("/me")]
+pub async fn patch_me(user: UserJwtGuard, db: WebDb, pmr: Json<PatchMeRequest>) -> UniResult<()> {
+    let pmr = pmr.into_inner();
+    let user = user.into_inner();
+
+    let mut m_user = user.into_active_model();
+    pmr.nickname.map(|n| {
+        m_user.nickname = Set(n);
+    });
+    pmr.email.map(|e| {
+        m_user.email = Set(e);
+    });
+    if let Some(p) = pmr.password {
+        let hashed_password = {
+            let salt = SaltString::generate(&mut OsRng);
+            let argon2 = Argon2::default();
+
+            let password_hash = argon2
+                .hash_password(p.as_bytes(), &salt)
+                .map_err(|e| UniError::CustomError(format!("{}", e.to_string())))?
+                .to_string();
+
+            password_hash
+        };
+
+        m_user.password_hash = Set(hashed_password);
+    }
+
+    m_user.update(db.get_ref()).await?;
+
+    UniResponse::ok_none().into()
 }

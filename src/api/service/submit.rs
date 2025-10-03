@@ -40,7 +40,8 @@ pub async fn submit_flag(
     sfr: Json<SubmitFlagRequest>,
 ) -> UniResult<()> {
     let user = user.into_inner();
-    let sfr = sfr.into_inner();
+    let mut sfr = sfr.into_inner();
+    sfr.flag = sfr.flag.trim().to_string();
 
     match sfr.event_id {
         Some(event_id) => {

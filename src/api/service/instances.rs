@@ -421,40 +421,27 @@ async fn launch_instance_common(
     //  这里的逻辑是 如果是web 就返回url, 如果是pwn 就返回nc, 如果是misc 就返回description
 
     //  是根据 有无docker 来判断 而不仅仅是类型, 比如AI题目我可能暂时放到 Misc里
-    let content = match cm.category.as_str() {
-        "Web" => {
-            let port = cm
-                .create_and_start(docker, &identifier, &flag)
-                .await
-                .map_err(|e| UniError::InternalError(format!("{}", e)))?;
-
-            let url = format!("{}{}:{}", http_prefix, node_ip, port);
-            format!(
-                "<a href=\"{url}\" target=\"_blank\" rel=\"noopener noreferrer\" download >{url}</a>",
-            )
-        }
-        "Pwn" => {
-            let port = cm
-                .create_and_start(docker, &identifier, &flag)
-                .await
-                .with_context(|| format!("failed to start Pwn instance for {}", challenge_id))?;
-            format!("nc {} {}", node_ip, port)
-        }
-        // "Misc" => "".to_string(),
-        // "Crypto" => "".to_string(),
-        // "Reverse" => "".to_string(),
-        _ => {
-            if cm.docker.is_some() {
+    let content = match &cm.docker {
+        Some(d) => match d.is_nc {
+            Some(true) => {
                 let port = cm
                     .create_and_start(docker, &identifier, &flag)
                     .await
-                    .with_context(|| format!("failed to start instance for {}", challenge_id))?;
-
-                format!("try nc or http<br />{} {}", node_ip, port)
-            } else {
-                cm.description
+                    .map_err(|e| anyhow!("{}", e))?;
+                format!("nc {} {}", node_ip, port)
             }
-        }
+            _ => {
+                let port = cm
+                    .create_and_start(docker, &identifier, &flag)
+                    .await
+                    .map_err(|e| anyhow!("{}", e))?;
+                let url = format!("{}{}:{}", http_prefix, node_ip, port);
+                format!(
+                    "<a href=\"{url}\" target=\"_blank\" rel=\"noopener noreferrer\" download >{url}</a>",
+                )
+            }
+        },
+        None => cm.description,
     };
 
     let delay = get_setting(&db, "INSTANCE_DESTROY_DELAY")

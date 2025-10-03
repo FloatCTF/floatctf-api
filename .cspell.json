@@ -9,6 +9,8 @@
         "floatctf",
         "floatctfdb",
         "jsonwebtoken",
+        "noopener",
+        "noreferrer",
         "serde",
         "sqlx",
         "strs",

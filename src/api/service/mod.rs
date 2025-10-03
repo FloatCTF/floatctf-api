@@ -21,7 +21,9 @@ pub fn config(cfg: &mut ServiceConfig) {
     cfg.service(
         scope("/users")
             .service(users::user_login)
-            .service(users::create_user),
+            .service(users::create_user)
+            .service(users::get_me)
+            .service(users::patch_me),
     );
 
     cfg.service(
