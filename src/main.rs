@@ -1,8 +1,8 @@
 mod api;
 mod auth;
+mod config;
 mod db;
 mod entity;
-
 use std::env;
 
 use actix_cors::Cors;
@@ -38,6 +38,9 @@ async fn main() -> std::io::Result<()> {
             .expect("DATABASE_URL must be set in .env file!"),
     );
 
+    // for settings
+    config::init_settings(&db).await;
+
     // for docker
     let docker: db::WebDocker =
         web::Data::new(db::init_docker().await.expect("no docker installed!"));
@@ -53,7 +56,6 @@ async fn main() -> std::io::Result<()> {
         let cors = Cors::default()
             .allowed_origin("http://localhost:3000")
             .allowed_origin("http://127.0.0.1")
-            .allowed_origin("http://39.107.235.13:18008")
             .allow_any_header()
             .allow_any_method()
             .supports_credentials()

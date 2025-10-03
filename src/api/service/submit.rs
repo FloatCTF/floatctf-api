@@ -9,6 +9,7 @@ use super::super::preclude::*;
 use crate::{
     api::service::{calculate_next_dynamic_score, instances::__destroy_instance},
     auth::UserJwtGuard,
+    config::get_setting,
     db::WebDocker,
     entity::{
         challenge_solves, challenges, event_challenge_solves, event_team_members, event_users,
@@ -171,7 +172,12 @@ pub async fn jeopardy_event_single_submit_handler(
                 .await?;
 
             //  更新分数
-            let current_points = calculate_next_dynamic_score(event_challenge.points, solved_count);
+            let current_points =
+                calculate_next_dynamic_score(&db, event_challenge.points, solved_count)
+                    .await
+                    .map_err(|e| {
+                        UniError::CustomError(format!("calculate_next_dynamic_score error: {}", e))
+                    })?;
             let event_user = EventUsers::find_by_id((sfr.event_id.unwrap(), user.id))
                 .one(db.get_ref())
                 .await?
@@ -261,7 +267,12 @@ pub async fn jeopardy_event_team_submit_handler(
                 .await?;
 
             //  更新分数
-            let current_points = calculate_next_dynamic_score(event_challenge.points, solved_count);
+            let current_points =
+                calculate_next_dynamic_score(&db, event_challenge.points, solved_count)
+                    .await
+                    .map_err(|e| {
+                        UniError::CustomError(format!("calculate_next_dynamic_score error: {}", e))
+                    })?;
             let event_team = EventTeams::find_by_id(team_member.team_id)
                 .one(db.get_ref())
                 .await?
@@ -308,7 +319,9 @@ pub async fn submit_writeup(
     db: WebDb,
     MultipartForm(form): MultipartForm<WriteupForm>,
 ) -> UniResult<()> {
-    let upload_dir = env::var("UPLOAD_DIR").unwrap();
+    let upload_dir = get_setting(&db, "UPLOAD_DIR")
+        .await
+        .map_err(|e| UniError::CustomError(format!("get upload dir error: {}", e)))?;
     // if not exists, create it
     if !fs::metadata(&upload_dir).is_ok() {
         fs::create_dir_all(&upload_dir).unwrap();

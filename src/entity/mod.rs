@@ -16,5 +16,6 @@ pub mod event_writeup;
 pub mod events;
 pub mod instances;
 pub mod sea_orm_active_enums;
+pub mod settings;
 pub mod super_admin;
 pub mod users;

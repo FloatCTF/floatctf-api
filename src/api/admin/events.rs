@@ -5,6 +5,7 @@ use super::super::preclude::*;
 use crate::api::admin::challenges::generate_safe_name;
 use crate::api::admin::event_teams::{TeamMemberResult, TeamResult};
 use crate::api::service::{ScoreboardItem, TrendItem};
+use crate::config::get_setting;
 use crate::entity::prelude::EventWriteup;
 use crate::entity::sea_orm_active_enums::EventTeamMemberRole;
 use crate::entity::{event_team_members, event_writeup};
@@ -296,10 +297,16 @@ pub async fn get_data(
             }
         };
 
+        let points = calculate_next_dynamic_score(&db, event_challenge.points, solved_count)
+            .await
+            .map_err(|e| {
+                UniError::CustomError(format!("calculate_next_dynamic_score error: {}", e))
+            })?;
+
         let dec = DataEventChallenge {
             name: challenge.clone().map(|c| c.name).unwrap_or_default(),
             category: challenge.map(|c| c.category).unwrap_or_default(),
-            points: calculate_next_dynamic_score(event_challenge.points, solved_count),
+            points: points,
             solved_count,
             solved_percent,
         };
@@ -342,7 +349,9 @@ pub async fn get_report(
         .one(db.get_ref())
         .await?
         .ok_or(UniError::NotFound(format!("Event {} not exist", event_id)))?;
-    let upload_dir = std::env::var("UPLOAD_DIR").unwrap_or_else(|_| "uploads".to_string());
+    let upload_dir = get_setting(&db, "UPLOAD_DIR")
+        .await
+        .map_err(|e| UniError::CustomError(format!("Failed to get upload dir setting: {}", e)))?;
     let target_zip = std::path::Path::new(&upload_dir).join(format!(
         "{}_{}.zip",
         generate_safe_name(&event.title),

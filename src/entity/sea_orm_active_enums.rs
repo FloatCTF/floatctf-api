@@ -37,3 +37,15 @@ pub enum InstanceStatus {
     #[sea_orm(string_value = "failed")]
     Failed,
 }
+#[derive(Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize)]
+#[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "setting_value_type")]
+pub enum SettingValueType {
+    #[sea_orm(string_value = "string")]
+    String,
+    #[sea_orm(string_value = "integer")]
+    Integer,
+    #[sea_orm(string_value = "boolean")]
+    Boolean,
+    #[sea_orm(string_value = "float")]
+    Float,
+}

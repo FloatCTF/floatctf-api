@@ -5,6 +5,7 @@ use base64::Engine;
 use super::super::preclude::*;
 use crate::{
     auth::SuperAdminJwtGuard,
+    config::get_setting,
     db::WebDocker,
     entity::{challenges, prelude::Challenges},
 };
@@ -179,8 +180,9 @@ pub async fn delete_challenge(
         .await?
         .ok_or(UniError::NotFound(format!(" {} not exist", id)))?;
 
-    let del_challenge_path =
-        std::env::var("CHALLENGES_DIR").expect("CHALLENGES_DIR env var must be set");
+    let del_challenge_path = get_setting(&db, "CHALLENGES_DIR")
+        .await
+        .map_err(|e| UniError::CustomError(format!("get setting error: {}", e)))?;
     let del_challenge_path = std::path::Path::new(&del_challenge_path).join(&challenge.safe_name);
     if del_challenge_path.exists() {
         std::fs::remove_dir_all(&del_challenge_path)
@@ -222,7 +224,7 @@ pub async fn web_import_challenge(
     }
 
     if let Some(challenge_zip) = form.challenge_zip {
-        let toml_str = import_challenge_zip(challenge_zip.file)
+        let toml_str = import_challenge_zip(&db, challenge_zip.file)
             .await
             .map_err(|e| UniError::CustomError(format!("import challenge zip error: {}", e)))?;
 
@@ -230,7 +232,7 @@ pub async fn web_import_challenge(
     }
 
     if let Some(challenge_list_zip) = form.challenge_list_zip {
-        let toml_strs = import_challenge_list_zip(challenge_list_zip.file)
+        let toml_strs = import_challenge_list_zip(&db, challenge_list_zip.file)
             .await
             .map_err(|e| {
                 UniError::CustomError(format!("import challenge list zip error: {}", e))
@@ -293,9 +295,12 @@ pub async fn import_challenge(
 }
 
 pub async fn import_challenge_zip(
+    db: &DatabaseConnection,
     challenge_zip: tempfile::NamedTempFile,
 ) -> anyhow::Result<String> {
-    let output_root = std::env::var("CHALLENGES_DIR").expect("YOU must set CHALLENGES_DIR");
+    let output_root = get_setting(&db, "CHALLENGES_DIR")
+        .await
+        .map_err(|e| UniError::CustomError(format!("get setting error: {}", e)))?;
     let mut archive = zip::ZipArchive::new(challenge_zip)?;
 
     let meta_toml = {
@@ -322,6 +327,7 @@ pub async fn import_challenge_zip(
 }
 
 pub async fn import_challenge_list_zip(
+    db: &DatabaseConnection,
     challenge_list_zip: tempfile::NamedTempFile,
 ) -> anyhow::Result<Vec<String>> {
     let mut archive = zip::ZipArchive::new(challenge_list_zip)?;
@@ -331,7 +337,7 @@ pub async fn import_challenge_list_zip(
         let mut file = archive.by_name(&zip_name)?;
         let mut temp_file = NamedTempFile::new()?;
         std::io::copy(&mut file, &mut temp_file)?;
-        let meta_toml = import_challenge_zip(temp_file).await?;
+        let meta_toml = import_challenge_zip(db, temp_file).await?;
         will_insert_toml_strs.push(meta_toml);
     }
     Ok(will_insert_toml_strs)
@@ -362,8 +368,9 @@ pub async fn check_challenges(
     let mut challenge_check_results = Vec::new();
     // check docker image
     // check challenge attachment
-    let challenge_dir =
-        std::env::var("CHALLENGES_DIR").expect("CHALLENGES_DIR env var must be set");
+    let challenge_dir = get_setting(&db, "CHALLENGES_DIR")
+        .await
+        .map_err(|e| UniError::CustomError(format!("get setting error: {}", e)))?;
 
     let challenges = {
         if ccr.challenge_id_list.is_some() {
@@ -451,8 +458,10 @@ pub async fn build_challenge(
             continue;
         }
 
-        let challenges_dir =
-            std::env::var("CHALLENGES_DIR").expect("CHALLENGES_DIR env var must be set");
+        let challenges_dir = get_setting(&db, "CHALLENGES_DIR")
+            .await
+            .map_err(|e| UniError::CustomError(format!("get setting error: {}", e)))?;
+
         let context_path = std::path::Path::new(&challenges_dir)
             .join(&challenge.safe_name)
             .join("src");

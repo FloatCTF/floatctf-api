@@ -6,6 +6,7 @@ mod event_users;
 mod event_writeups;
 mod events;
 mod instances;
+mod settings;
 mod super_admin;
 mod system;
 mod users;
@@ -13,6 +14,13 @@ use actix_web::web::{ServiceConfig, scope};
 
 pub fn config(cfg: &mut ServiceConfig) {
     cfg.service(system::get_sys_info);
+    cfg.service(
+        scope("/settings")
+            .service(settings::get_settings)
+            .service(settings::create_setting)
+            .service(settings::delete_setting)
+            .service(settings::patch_setting),
+    );
 
     cfg.service(
         scope("/users")

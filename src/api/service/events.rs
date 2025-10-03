@@ -244,7 +244,12 @@ pub async fn get_event_challenges(
             };
             // 查用户是否解出 & 解题记录
 
-            let current_points = calculate_next_dynamic_score(event_challenge.points, solved_count);
+            let current_points =
+                calculate_next_dynamic_score(&db, event_challenge.points, solved_count)
+                    .await
+                    .map_err(|e| {
+                        UniError::CustomError(format!("calculate_next_dynamic_score error: {}", e))
+                    })?;
             result.push(EventChallengeResult {
                 challenge: c,
                 current_points,

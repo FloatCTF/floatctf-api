@@ -1,6 +1,7 @@
 use super::super::preclude::*;
 use crate::{
     auth::UserJwtGuard,
+    config::get_setting,
     db::WebDocker,
     entity::{
         challenges, event_instances, event_team_members, event_teams,
@@ -414,8 +415,10 @@ async fn launch_instance_common(
         cm.flag.value.clone()
     };
 
-    let node_ip = std::env::var("NODE_IP").unwrap();
-    let http_prefix = std::env::var("HTTP_PREFIX").unwrap();
+    let node_ip = get_setting(&db, "NODE_IP").await?;
+    let http_prefix = get_setting(&db, "HTTP_PREFIX").await?;
+
+    //  这里的逻辑是 如果是web 就返回url, 如果是pwn 就返回nc, 如果是misc 就返回description
 
     //  是根据 有无docker 来判断 而不仅仅是类型, 比如AI题目我可能暂时放到 Misc里
     let content = match cm.category.as_str() {
@@ -454,10 +457,9 @@ async fn launch_instance_common(
         }
     };
 
-    let delay: i64 = std::env::var("INSTANCE_DESTROY_DELAY")
-        .context("missing env INSTANCE_DESTROY_DELAY")?
-        .parse()
-        .context("invalid INSTANCE_DESTROY_DELAY (must be i64)")?;
+    let delay = get_setting(&db, "INSTANCE_DESTROY_DELAY")
+        .await?
+        .parse::<i64>()?;
 
     let destroy_at = Utc::now().naive_utc() + chrono::Duration::minutes(delay);
     let new_instance = instances::ActiveModel {

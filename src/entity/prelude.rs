@@ -13,5 +13,6 @@ pub use super::event_users::Entity as EventUsers;
 pub use super::event_writeup::Entity as EventWriteup;
 pub use super::events::Entity as Events;
 pub use super::instances::Entity as Instances;
+pub use super::settings::Entity as Settings;
 pub use super::super_admin::Entity as SuperAdmin;
 pub use super::users::Entity as Users;

@@ -1,5 +1,17 @@
 CREATE EXTENSION "uuid-ossp";
 
+CREATE TYPE "setting_value_type" AS ENUM ('string', 'integer', 'boolean','float');
+
+CREATE TABLE IF NOT EXISTS "settings" (
+    "id" UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
+    "key" TEXT NOT NULL UNIQUE,
+    "value" TEXT NOT NULL,
+    "type" "setting_value_type" NOT NULL DEFAULT 'string',
+    "description" TEXT NOT NULL,
+    "protected" BOOLEAN NOT NULL DEFAULT TRUE,
+    "updated_at" TIMESTAMP NOT NULL DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS "users" (
     "id" UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
     "username" TEXT NOT NULL UNIQUE,
