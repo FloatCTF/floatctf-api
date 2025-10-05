@@ -1,6 +1,6 @@
 use actix_web::web;
 use anyhow::Result;
-use bollard::{API_DEFAULT_VERSION, Docker};
+use bollard::Docker;
 
 use sea_orm::DbConn;
 use tracing::info;

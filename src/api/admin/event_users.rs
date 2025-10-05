@@ -1,14 +1,6 @@
-use futures_util::future::join_all;
-use sea_orm::{ColumnTrait, QueryFilter};
-
-use super::super::preclude::*;
 use crate::{
-    auth::SuperAdminJwtGuard,
-    entity::{
-        event_users,
-        prelude::{EventUsers, Events, Users},
-        users,
-    },
+    api::preclude::*,
+    entity::{event_users, events, users},
 };
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -17,24 +9,26 @@ pub struct AddUserRequest {
     pub user_id_list: Option<Vec<Uuid>>,
 }
 
+/// POST /api/admin/events/{event_id}/users
 #[post("")]
 pub async fn add_user(
     _user: SuperAdminJwtGuard,
     db: WebDb,
-    id: Path<Uuid>,
+    event_id: Path<Uuid>,
     aur: Json<AddUserRequest>,
 ) -> UniResult<()> {
     let aur = aur.into_inner();
+    let event_id = event_id.into_inner();
 
-    let event = Events::find_by_id(*id)
+    let event = events::Entity::find_by_id(event_id)
         .one(db.get_ref())
         .await?
-        .ok_or(UniError::NotFound(format!(" {} not exist", id)))?;
+        .ok_or(UniError::NotFound(format!(" {} not exist", event_id)))?;
 
     if aur.user_id_list.is_some() {
         let user_id_list = aur.user_id_list.unwrap();
         for user_id in user_id_list {
-            let user = Users::find_by_id(user_id)
+            let user = users::Entity::find_by_id(user_id)
                 .one(db.get_ref())
                 .await?
                 .ok_or(UniError::NotFound(format!(" {} not exist", user_id)))?;
@@ -52,7 +46,7 @@ pub async fn add_user(
     }
     if aur.user_id.is_some() {
         let user_id = aur.user_id.unwrap();
-        let user = Users::find_by_id(user_id)
+        let user = users::Entity::find_by_id(user_id)
             .one(db.get_ref())
             .await?
             .ok_or(UniError::NotFound(format!(" {} not exist", user_id)))?;
@@ -71,30 +65,31 @@ pub async fn add_user(
     UniError::CustomError("user_id or user_id_list is required".to_string()).into()
 }
 
+/// DELETE /api/admin/events/{event_id}/users/{user_id}
 #[delete("/{user_id}")]
 pub async fn remove_user(
     _user: SuperAdminJwtGuard,
     db: WebDb,
     path: Path<(Uuid, Uuid)>,
 ) -> UniResult<u64> {
-    let (id, user_id) = path.into_inner();
+    let (event_id, user_id) = path.into_inner();
 
-    let event = Events::find_by_id(id)
+    let event = events::Entity::find_by_id(event_id)
         .one(db.get_ref())
         .await?
-        .ok_or(UniError::NotFound(format!(" {} not exist", id)))?;
+        .ok_or(UniError::NotFound(format!(" {} not exist", event_id)))?;
 
-    let user = Users::find_by_id(user_id)
+    let user = users::Entity::find_by_id(user_id)
         .one(db.get_ref())
         .await?
         .ok_or(UniError::NotFound(format!(" {} not exist", user_id)))?;
 
-    let event_user = EventUsers::find_by_id((event.id, user.id))
+    let event_user = event_users::Entity::find_by_id((event.id, user.id))
         .one(db.get_ref())
         .await?
         .ok_or(UniError::NotFound(format!(
             " {} not exist in {}",
-            user_id, id
+            user_id, event_id
         )))?;
 
     let r = event_user.delete(db.get_ref()).await?;
@@ -108,25 +103,28 @@ pub struct EventUserResult {
     pub event_user: event_users::Model,
 }
 
+/// GET /api/admin/events/{event_id}/users
 #[get("")]
 pub async fn get_users(
     _user: SuperAdminJwtGuard,
     db: WebDb,
-    id: Path<Uuid>,
+    event_id: Path<Uuid>,
 ) -> UniResult<Vec<EventUserResult>> {
-    let event = Events::find_by_id(*id)
+    let event_id = event_id.into_inner();
+
+    let event = events::Entity::find_by_id(event_id)
         .one(db.get_ref())
         .await?
-        .ok_or(UniError::NotFound(format!(" {} not exist", id)))?;
+        .ok_or(UniError::NotFound(format!(" {} not exist", event_id)))?;
 
-    let event_users = EventUsers::find()
+    let event_users = event_users::Entity::find()
         .filter(event_users::Column::EventId.eq(event.id))
         .all(db.get_ref())
         .await?;
 
     let mut users = Vec::new();
     for event_user in event_users {
-        let user = Users::find_by_id(event_user.user_id)
+        let user = users::Entity::find_by_id(event_user.user_id)
             .one(db.get_ref())
             .await?
             .ok_or(UniError::NotFound(format!(
@@ -140,6 +138,7 @@ pub async fn get_users(
     UniResponse::ok(users.into()).into()
 }
 
+/// POST /api/admin/events/{event_id}/users/{user_id}/banned
 #[post("/{user_id}/banned")]
 
 pub async fn banned_user(
@@ -147,24 +146,24 @@ pub async fn banned_user(
     db: WebDb,
     path: Path<(Uuid, Uuid)>,
 ) -> UniResult<()> {
-    let (id, user_id) = path.into_inner();
+    let (event_id, user_id) = path.into_inner();
 
-    let event = Events::find_by_id(id)
+    let event = events::Entity::find_by_id(event_id)
         .one(db.get_ref())
         .await?
-        .ok_or(UniError::NotFound(format!(" {} not exist", id)))?;
+        .ok_or(UniError::NotFound(format!(" {} not exist", event_id)))?;
 
-    let user = Users::find_by_id(user_id)
+    let user = users::Entity::find_by_id(user_id)
         .one(db.get_ref())
         .await?
         .ok_or(UniError::NotFound(format!(" {} not exist", user_id)))?;
 
-    let event_user = EventUsers::find_by_id((event.id, user.id))
+    let event_user = event_users::Entity::find_by_id((event.id, user.id))
         .one(db.get_ref())
         .await?
         .ok_or(UniError::NotFound(format!(
             " {} not exist in {}",
-            user_id, id
+            user_id, event_id
         )))?;
 
     let mut event_user: event_users::ActiveModel = event_user.into();
@@ -174,30 +173,31 @@ pub async fn banned_user(
     UniResponse::ok_none().into()
 }
 
+/// POST /api/admin/events/{event_id}/users/{user_id}/unbanned
 #[post("/{user_id}/unbanned")]
 pub async fn unbanned_user(
     _user: SuperAdminJwtGuard,
     db: WebDb,
     path: Path<(Uuid, Uuid)>,
 ) -> UniResult<()> {
-    let (id, user_id) = path.into_inner();
+    let (event_id, user_id) = path.into_inner();
 
-    let event = Events::find_by_id(id)
+    let event = events::Entity::find_by_id(event_id)
         .one(db.get_ref())
         .await?
-        .ok_or(UniError::NotFound(format!(" {} not exist", id)))?;
+        .ok_or(UniError::NotFound(format!(" {} not exist", event_id)))?;
 
-    let user = Users::find_by_id(user_id)
+    let user = users::Entity::find_by_id(user_id)
         .one(db.get_ref())
         .await?
         .ok_or(UniError::NotFound(format!(" {} not exist", user_id)))?;
 
-    let event_user = EventUsers::find_by_id((event.id, user.id))
+    let event_user = event_users::Entity::find_by_id((event.id, user.id))
         .one(db.get_ref())
         .await?
         .ok_or(UniError::NotFound(format!(
             " {} not exist in {}",
-            user_id, id
+            user_id, event_id
         )))?;
 
     let mut event_user: event_users::ActiveModel = event_user.into();

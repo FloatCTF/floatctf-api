@@ -1,8 +1,4 @@
-use super::super::preclude::*;
-use crate::{
-    auth::SuperAdminJwtGuard,
-    entity::{prelude::Users, users},
-};
+use crate::{api::preclude::*, entity::users};
 use argon2::{
     Argon2,
     password_hash::{PasswordHasher, SaltString, rand_core::OsRng},
@@ -15,6 +11,8 @@ pub struct CreateUserRequest {
     nickname: String,
     email: String,
 }
+
+/// POST /api/admin/users
 #[post("")]
 pub async fn create_user(
     _user: SuperAdminJwtGuard,
@@ -48,63 +46,27 @@ pub async fn create_user(
     UniResponse::ok(user.into()).into()
 }
 
-type UpdateUserRequest = CreateUserRequest;
-#[put("/{id}")]
-pub async fn update_user(
-    _user: SuperAdminJwtGuard,
-    db: WebDb,
-    uur: Json<UpdateUserRequest>,
-    id: Path<Uuid>,
-) -> UniResult<users::Model> {
-    let uur = uur.into_inner();
-
-    let hashed_password = {
-        let salt = SaltString::generate(&mut OsRng);
-        let argon2 = Argon2::default();
-
-        let password_hash = argon2
-            .hash_password(uur.password.as_bytes(), &salt)
-            .map_err(|e| UniError::CustomError(format!("{}", e.to_string())))?
-            .to_string();
-
-        password_hash
-    };
-
-    let user = Users::find_by_id(*id)
-        .one(db.get_ref())
-        .await?
-        .ok_or(UniError::NotFound(format!(" {} not exist", id)))?;
-
-    let mut m_user = user.into_active_model();
-
-    m_user.username = Set(uur.username);
-    m_user.password_hash = Set(hashed_password);
-    m_user.email = Set(uur.email);
-    m_user.updated_at = Set(Utc::now().naive_utc());
-
-    let user = m_user.update(db.get_ref()).await?;
-
-    UniResponse::ok(user.into()).into()
-}
-
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PathUserRequest {
     username: Option<String>,
     password: Option<String>,
     email: Option<String>,
 }
-#[patch("/{id}")]
+
+/// PATCH /api/admin/users/{user_id}
+#[patch("/{user_id}")]
 pub async fn patch_user(
     _user: SuperAdminJwtGuard,
     db: WebDb,
     pur: Json<PathUserRequest>,
-    id: Path<Uuid>,
+    user_id: Path<Uuid>,
 ) -> UniResult<users::Model> {
     let pur = pur.into_inner();
-    let user = Users::find_by_id(*id)
+    let user_id = user_id.into_inner();
+    let user = users::Entity::find_by_id(user_id)
         .one(db.get_ref())
         .await?
-        .ok_or(UniError::NotFound(format!(" {} not exist", id)))?;
+        .ok_or(UniError::NotFound(format!(" {} not exist", user_id)))?;
 
     let mut m_user = user.into_active_model();
 
@@ -139,6 +101,7 @@ pub async fn patch_user(
     UniResponse::ok(user.into()).into()
 }
 
+/// GET /api/admin/users
 #[get("")]
 pub async fn get_users(
     _user: SuperAdminJwtGuard,
@@ -147,7 +110,7 @@ pub async fn get_users(
 ) -> UniResult<Vec<users::Model>> {
     let mut query_params = query_params.0;
 
-    let stmt = Users::find();
+    let stmt = users::Entity::find();
 
     if let (Some(limit), Some(page)) = (query_params.limit, query_params.page) {
         let paginator = stmt.paginate(db.get_ref(), limit);
@@ -163,26 +126,34 @@ pub async fn get_users(
     }
 }
 
+/// GET /api/admin/users/{id}
 #[get("/{id}")]
 pub async fn get_user(
     _user: SuperAdminJwtGuard,
     db: WebDb,
-    id: Path<Uuid>,
+    user_id: Path<Uuid>,
 ) -> UniResult<users::Model> {
-    let model = Users::find_by_id(*id)
+    let user_id = user_id.into_inner();
+    let model = users::Entity::find_by_id(user_id)
         .one(db.get_ref())
         .await?
-        .ok_or(UniError::NotFound(format!(" {} not exist", id)))?;
+        .ok_or(UniError::NotFound(format!(" {} not exist", user_id)))?;
 
     UniResponse::ok(model.into()).into()
 }
 
+/// DELETE /api/admin/users/{id}
 #[delete("/{id}")]
-pub async fn delete_user(_user: SuperAdminJwtGuard, db: WebDb, id: Path<Uuid>) -> UniResult<u64> {
-    let user = Users::find_by_id(*id)
+pub async fn delete_user(
+    _user: SuperAdminJwtGuard,
+    db: WebDb,
+    user_id: Path<Uuid>,
+) -> UniResult<u64> {
+    let user_id = user_id.into_inner();
+    let user = users::Entity::find_by_id(user_id)
         .one(db.get_ref())
         .await?
-        .ok_or(UniError::NotFound(format!(" {} not exist", id)))?;
+        .ok_or(UniError::NotFound(format!(" {} not exist", user_id)))?;
 
     let r = user.delete(db.get_ref()).await?;
 

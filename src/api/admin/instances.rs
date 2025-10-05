@@ -1,9 +1,6 @@
-use super::super::preclude::*;
-use crate::{
-    auth::SuperAdminJwtGuard,
-    entity::{instances, prelude::Instances},
-};
+use crate::{api::preclude::*, entity::instances};
 
+/// GET /api/admin/instances
 #[get("")]
 pub async fn get_instances(
     _user: SuperAdminJwtGuard,
@@ -12,7 +9,7 @@ pub async fn get_instances(
 ) -> UniResult<Vec<instances::Model>> {
     let mut query_params = query_params.0;
 
-    let stmt = Instances::find();
+    let stmt = instances::Entity::find();
 
     if let (Some(limit), Some(page)) = (query_params.limit, query_params.page) {
         let paginator = stmt.paginate(db.get_ref(), limit);
@@ -28,16 +25,18 @@ pub async fn get_instances(
     }
 }
 
-#[get("/{id}")]
+/// GET /api/admin/instances/{instance_id}
+#[get("/{instance_id}")]
 pub async fn get_instance(
     _user: SuperAdminJwtGuard,
     db: WebDb,
-    id: Path<Uuid>,
+    instance_id: Path<Uuid>,
 ) -> UniResult<instances::Model> {
-    let model = Instances::find_by_id(*id)
+    let instance_id = instance_id.into_inner();
+    let model = instances::Entity::find_by_id(instance_id)
         .one(db.get_ref())
         .await?
-        .ok_or(UniError::NotFound(format!(" {} not exist", id)))?;
+        .ok_or(UniError::NotFound(format!(" {} not exist", instance_id)))?;
 
     UniResponse::ok(model.into()).into()
 }

@@ -1,4 +1,5 @@
-use actix_web::{HttpResponse, Responder, get};
+use crate::api::preclude::*;
+use actix_web::get;
 use bollard::Docker;
 use bollard::container::ListContainersOptions;
 use bollard::image::ListImagesOptions;
@@ -6,11 +7,6 @@ use pnet::datalink;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use sysinfo::{Components, Disks, Networks, System};
-
-use crate::{
-    api::{UniResponse, UniResult},
-    auth::SuperAdminJwtGuard,
-};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SystemInformation {
@@ -66,7 +62,7 @@ pub struct DockerInformation {
     pub running_container_count: usize,
     pub total_disk: u64,
 }
-
+/// GET /api/admin/monitor
 #[get("/monitor")]
 pub async fn get_sys_info(_: SuperAdminJwtGuard) -> UniResult<SystemInformation> {
     // ---------- 系统信息 ----------

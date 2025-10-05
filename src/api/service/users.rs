@@ -1,10 +1,13 @@
-use super::super::preclude::*;
-use crate::auth::{Role, UserJwtGuard, gen_jwt_token};
-use crate::entity::{prelude::Users, users};
-use argon2::password_hash::rand_core::OsRng;
-use argon2::password_hash::{PasswordHasher, SaltString};
-use argon2::{Argon2, PasswordHash, PasswordVerifier};
-use sea_orm::{ColumnTrait, QueryFilter};
+use crate::{
+    api::preclude::*,
+    auth::{Role, UserJwtGuard, gen_jwt_token},
+    entity::{prelude::Users, users},
+};
+
+use argon2::{
+    Argon2, PasswordHash, PasswordVerifier,
+    password_hash::{PasswordHasher, SaltString, rand_core::OsRng},
+};
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct UserLoginRequest {
@@ -12,6 +15,7 @@ pub struct UserLoginRequest {
     password: String,
 }
 
+/// POST /api/users/session
 #[post("/session")]
 pub async fn user_login(db: WebDb, ulr: Json<UserLoginRequest>) -> UniResult<String> {
     let ulr = ulr.into_inner();
@@ -52,6 +56,7 @@ pub struct CreateUserRequest {
     email: String,
 }
 
+/// POST /api/users
 #[post("")]
 pub async fn create_user(db: WebDb, cur: Json<CreateUserRequest>) -> UniResult<String> {
     let cur = cur.into_inner();
@@ -86,6 +91,7 @@ pub async fn create_user(db: WebDb, cur: Json<CreateUserRequest>) -> UniResult<S
     .into()
 }
 
+/// GET /api/users/me
 #[get("/me")]
 pub async fn get_me(user: UserJwtGuard) -> UniResult<users::Model> {
     let mut user = user.into_inner();
@@ -100,6 +106,7 @@ pub struct PatchMeRequest {
     pub password: Option<String>,
 }
 
+/// PATCH /api/users/me
 #[patch("/me")]
 pub async fn patch_me(user: UserJwtGuard, db: WebDb, pmr: Json<PatchMeRequest>) -> UniResult<()> {
     let pmr = pmr.into_inner();

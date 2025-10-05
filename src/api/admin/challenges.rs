@@ -1,20 +1,19 @@
-use std::io::Read;
-
-use base64::Engine;
-
-use super::super::preclude::*;
 use crate::{
+    api::preclude::*,
     auth::SuperAdminJwtGuard,
     config::get_setting,
     db::WebDocker,
     entity::{challenges, prelude::Challenges},
 };
 use actix_multipart::form::{MultipartForm, tempfile::TempFile, text::Text};
+use base64::Engine;
 use fcmc::ChallengeMeta;
 use sea_orm::{
     ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set, sea_query::OnConflict,
 };
+use std::io::Read;
 use tempfile::NamedTempFile;
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CreateChallengeRequest {
     pub name: String,
@@ -24,7 +23,7 @@ pub struct CreateChallengeRequest {
     pub attachment: Option<String>,
     pub toml_str: String,
 }
-
+// POST /api/admin/challenges
 #[post("")]
 pub async fn create_challenge(
     _user: SuperAdminJwtGuard,
@@ -48,36 +47,6 @@ pub async fn create_challenge(
     UniResponse::ok(challenge.into()).into()
 }
 
-type UpdateChallengeRequest = CreateChallengeRequest;
-#[put("/{id}")]
-pub async fn update_challenge(
-    _user: SuperAdminJwtGuard,
-    db: WebDb,
-    ucr: Json<UpdateChallengeRequest>,
-    id: Path<Uuid>,
-) -> UniResult<challenges::Model> {
-    let ucr = ucr.into_inner();
-
-    let challenge = Challenges::find_by_id(*id)
-        .one(db.get_ref())
-        .await?
-        .ok_or(UniError::NotFound(format!(" {} not exist", id)))?;
-
-    let mut m_challenge = challenge.into_active_model();
-
-    m_challenge.name = Set(ucr.name);
-    m_challenge.category = Set(ucr.category);
-    m_challenge.description = Set(ucr.description);
-    m_challenge.attachment = Set(ucr.attachment);
-    m_challenge.toml_str = Set(ucr.toml_str);
-    m_challenge.hidden = Set(ucr.hidden);
-    m_challenge.updated_at = Set(Utc::now().naive_utc());
-
-    let challenge = m_challenge.update(db.get_ref()).await?;
-
-    UniResponse::ok(challenge.into()).into()
-}
-
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PatchChallengeRequest {
     pub name: Option<String>,
@@ -87,19 +56,20 @@ pub struct PatchChallengeRequest {
     pub hidden: Option<bool>,
     pub toml_str: Option<String>,
 }
-#[patch("/{id}")]
+/// PATCH /api/admin/challenges/{challenge_id}
+#[patch("/{challenge_id}")]
 pub async fn patch_challenge(
     _user: SuperAdminJwtGuard,
     db: WebDb,
     pcr: Json<PatchChallengeRequest>,
-    id: Path<Uuid>,
+    challenge_id: Path<Uuid>,
 ) -> UniResult<challenges::Model> {
     let pcr = pcr.into_inner();
-
-    let challenge = Challenges::find_by_id(*id)
+    let challenge_id = challenge_id.into_inner();
+    let challenge = Challenges::find_by_id(challenge_id)
         .one(db.get_ref())
         .await?
-        .ok_or(UniError::NotFound(format!(" {} not exist", id)))?;
+        .ok_or(UniError::NotFound(format!(" {} not exist", challenge_id)))?;
 
     let mut m_challenge = challenge.into_active_model();
 
@@ -131,6 +101,7 @@ pub async fn patch_challenge(
     UniResponse::ok(challenge.into()).into()
 }
 
+/// GET /api/admin/challenges
 #[get("")]
 pub async fn get_challenges(
     _user: SuperAdminJwtGuard,
@@ -155,7 +126,8 @@ pub async fn get_challenges(
     }
 }
 
-#[get("/{id}")]
+/// GET /api/admin/challenges/{challenge_id}
+#[get("/{challenge_id}")]
 pub async fn get_challenge(
     _user: SuperAdminJwtGuard,
     db: WebDb,
@@ -169,16 +141,18 @@ pub async fn get_challenge(
     UniResponse::ok(model.into()).into()
 }
 
-#[delete("/{id}")]
+/// DELETE /api/admin/challenges/{challenge_id}
+#[delete("/{challenge_id}")]
 pub async fn delete_challenge(
     _user: SuperAdminJwtGuard,
     db: WebDb,
-    id: Path<Uuid>,
+    challenge_id: Path<Uuid>,
 ) -> UniResult<u64> {
-    let challenge = Challenges::find_by_id(*id)
+    let challenge_id = challenge_id.into_inner();
+    let challenge = Challenges::find_by_id(challenge_id)
         .one(db.get_ref())
         .await?
-        .ok_or(UniError::NotFound(format!(" {} not exist", id)))?;
+        .ok_or(UniError::NotFound(format!(" {} not exist", challenge_id)))?;
 
     let del_challenge_path = get_setting(&db, "CHALLENGES_DIR")
         .await
@@ -202,7 +176,7 @@ struct UploadForm {
     challenge_list_zip: Option<TempFile>,
     toml_str_b64: Option<Text<String>>,
 }
-
+/// POST /api/admin/challenges/import
 #[post("/import")]
 pub async fn web_import_challenge(
     _user: SuperAdminJwtGuard,
@@ -343,6 +317,7 @@ pub async fn import_challenge_list_zip(
     Ok(will_insert_toml_strs)
 }
 
+/// POST /api/admin/challenges/check
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ChallengeCheckResult {
     pub id: Uuid,
@@ -416,6 +391,7 @@ pub fn generate_safe_name(original: &str) -> String {
         .collect()
 }
 
+/// POST /api/admin/challenges/build
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BuildChallengeRequest {
     pub challenge_id: Option<Uuid>,

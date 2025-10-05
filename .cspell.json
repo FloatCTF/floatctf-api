@@ -3,6 +3,7 @@
         "actix",
         "chrono",
         "codegen",
+        "datalink",
         "dotenv",
         "dotenvy",
         "fcmc",
@@ -11,9 +12,11 @@
         "jsonwebtoken",
         "noopener",
         "noreferrer",
+        "pnet",
         "serde",
         "sqlx",
         "strs",
+        "sysinfo",
         "thiserror",
         "writeups"
     ]

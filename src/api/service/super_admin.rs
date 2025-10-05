@@ -1,9 +1,9 @@
+use crate::{
+    api::preclude::*,
+    auth::{Role, gen_jwt_token},
+    entity::{prelude::SuperAdmin, super_admin},
+};
 use argon2::{Argon2, PasswordHash, PasswordVerifier};
-use sea_orm::{ColumnTrait, QueryFilter};
-
-use super::super::preclude::*;
-use crate::auth::{Role, gen_jwt_token};
-use crate::entity::{prelude::SuperAdmin, super_admin};
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct SuperAdminLoginRequest {
@@ -11,6 +11,7 @@ pub struct SuperAdminLoginRequest {
     password: String,
 }
 
+/// POST /api/admin/session
 #[post("/admin/session")]
 pub async fn super_admin_login(db: WebDb, slr: Json<SuperAdminLoginRequest>) -> UniResult<String> {
     let slr = slr.into_inner();

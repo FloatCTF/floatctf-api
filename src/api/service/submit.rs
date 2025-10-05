@@ -1,27 +1,17 @@
-use std::{env, fs};
-
-use actix_multipart::form::{MultipartForm, tempfile::TempFile, text::Text};
-
-use actix_web::HttpRequest;
-use sea_orm::{ColumnTrait, QueryFilter};
-
-use super::super::preclude::*;
 use crate::{
-    api::service::{calculate_next_dynamic_score, instances::__destroy_instance},
-    auth::UserJwtGuard,
-    config::get_setting,
-    db::WebDocker,
+    api::{
+        preclude::*,
+        service::{calculate_next_dynamic_score, instances::__destroy_instance},
+    },
     entity::{
-        challenge_solves, challenges, event_challenge_solves, event_team_members, event_users,
-        event_writeup, events, instances,
-        prelude::{
-            Challenges, EventChallengeSolves, EventChallenges, EventTeamMembers, EventTeams,
-            EventUsers, Events, Instances,
-        },
+        challenge_solves, challenges, event_challenge_solves, event_challenges, event_team_members,
+        event_teams, event_users, event_writeup, events, instances,
         sea_orm_active_enums::{EventType, InstanceStatus},
         users,
     },
 };
+use actix_multipart::form::{MultipartForm, tempfile::TempFile, text::Text};
+use std::fs;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct SubmitFlagRequest {
@@ -32,6 +22,7 @@ pub struct SubmitFlagRequest {
     pub flag: String,
 }
 
+/// POST /api/submit/flag
 #[post("/flag")]
 pub async fn submit_flag(
     user: UserJwtGuard,
@@ -45,7 +36,7 @@ pub async fn submit_flag(
 
     match sfr.event_id {
         Some(event_id) => {
-            let event = Events::find_by_id(event_id)
+            let event = events::Entity::find_by_id(event_id)
                 .one(db.get_ref())
                 .await?
                 .ok_or(UniError::NotFound("no event".into()))?;
@@ -79,13 +70,13 @@ pub async fn jeopardy_single_practice_handler(
         .instance_id
         .ok_or(UniError::NotFound("no instance_id".into()))?;
 
-    let instance = Instances::find_by_id(instance_id)
+    let instance = instances::Entity::find_by_id(instance_id)
         .filter(instances::Column::Status.eq(InstanceStatus::Running))
         .one(db.get_ref())
         .await?
         .ok_or(UniError::NotFound("no instance".into()))?;
 
-    let challenge = Challenges::find_by_id(instance.challenge_id)
+    let challenge = challenges::Entity::find_by_id(instance.challenge_id)
         .one(db.get_ref())
         .await?
         .ok_or(UniError::NotFound("no challenge".into()))?;
@@ -132,13 +123,13 @@ pub async fn jeopardy_event_single_submit_handler(
         .instance_id
         .ok_or(UniError::NotFound("no instance_id".into()))?;
 
-    let instance = Instances::find_by_id(instance_id)
+    let instance = instances::Entity::find_by_id(instance_id)
         .filter(instances::Column::Status.eq(InstanceStatus::Running))
         .one(db.get_ref())
         .await?
         .ok_or(UniError::NotFound("no instance".into()))?;
 
-    let challenge = Challenges::find_by_id(instance.challenge_id)
+    let challenge = challenges::Entity::find_by_id(instance.challenge_id)
         .one(db.get_ref())
         .await?
         .ok_or(UniError::NotFound("no challenge".into()))?;
@@ -161,12 +152,12 @@ pub async fn jeopardy_event_single_submit_handler(
         Some(challenge_solve) => challenge_solve,
         None => {
             let event_challenge =
-                EventChallenges::find_by_id((sfr.event_id.unwrap(), challenge.id))
+                event_challenges::Entity::find_by_id((sfr.event_id.unwrap(), challenge.id))
                     .one(db.get_ref())
                     .await?
                     .ok_or(UniError::NotFound("no event_challenge".into()))?;
 
-            let solved_count = EventChallengeSolves::find()
+            let solved_count = event_challenge_solves::Entity::find()
                 .filter(event_challenge_solves::Column::EventId.eq(sfr.event_id.unwrap()))
                 .filter(event_challenge_solves::Column::ChallengeId.eq(challenge.id))
                 .count(db.get_ref())
@@ -179,7 +170,7 @@ pub async fn jeopardy_event_single_submit_handler(
                     .map_err(|e| {
                         UniError::CustomError(format!("calculate_next_dynamic_score error: {}", e))
                     })?;
-            let event_user = EventUsers::find_by_id((sfr.event_id.unwrap(), user.id))
+            let event_user = event_users::Entity::find_by_id((sfr.event_id.unwrap(), user.id))
                 .one(db.get_ref())
                 .await?
                 .ok_or(UniError::NotFound("no event_user".into()))?;
@@ -216,7 +207,7 @@ pub async fn jeopardy_event_team_submit_handler(
     sfr: SubmitFlagRequest,
     user: users::Model,
 ) -> UniResult<()> {
-    let team_member = EventTeamMembers::find()
+    let team_member = event_team_members::Entity::find()
         .filter(event_team_members::Column::EventId.eq(sfr.event_id.unwrap()))
         .filter(event_team_members::Column::UserId.eq(user.id))
         .one(db.get_ref())
@@ -227,13 +218,13 @@ pub async fn jeopardy_event_team_submit_handler(
         .instance_id
         .ok_or(UniError::NotFound("no instance_id".into()))?;
 
-    let instance = Instances::find_by_id(instance_id)
+    let instance = instances::Entity::find_by_id(instance_id)
         .filter(instances::Column::Status.eq(InstanceStatus::Running))
         .one(db.get_ref())
         .await?
         .ok_or(UniError::NotFound("no instance".into()))?;
 
-    let challenge = Challenges::find_by_id(instance.challenge_id)
+    let challenge = challenges::Entity::find_by_id(instance.challenge_id)
         .one(db.get_ref())
         .await?
         .ok_or(UniError::NotFound("no challenge".into()))?;
@@ -256,12 +247,12 @@ pub async fn jeopardy_event_team_submit_handler(
         Some(challenge_solve) => challenge_solve,
         None => {
             let event_challenge =
-                EventChallenges::find_by_id((sfr.event_id.unwrap(), challenge.id))
+                event_challenges::Entity::find_by_id((sfr.event_id.unwrap(), challenge.id))
                     .one(db.get_ref())
                     .await?
                     .ok_or(UniError::NotFound("no event_challenge".into()))?;
 
-            let solved_count = EventChallengeSolves::find()
+            let solved_count = event_challenge_solves::Entity::find()
                 .filter(event_challenge_solves::Column::EventId.eq(sfr.event_id.unwrap()))
                 .filter(event_challenge_solves::Column::ChallengeId.eq(challenge.id))
                 .count(db.get_ref())
@@ -274,7 +265,7 @@ pub async fn jeopardy_event_team_submit_handler(
                     .map_err(|e| {
                         UniError::CustomError(format!("calculate_next_dynamic_score error: {}", e))
                     })?;
-            let event_team = EventTeams::find_by_id(team_member.team_id)
+            let event_team = event_teams::Entity::find_by_id(team_member.team_id)
                 .one(db.get_ref())
                 .await?
                 .ok_or(UniError::NotFound("no event_team".into()))?;
@@ -314,6 +305,7 @@ pub struct WriteupForm {
 }
 
 // now just for the event
+/// POST /api/submit/writeup
 #[post("writeup")]
 pub async fn submit_writeup(
     user: UserJwtGuard,
@@ -336,7 +328,7 @@ pub async fn submit_writeup(
     let team_id = form.team_id.map(|x| x.into_inner());
     let writeup_file_name = {
         if let Some(team_id) = team_id.clone() {
-            let team = EventTeams::find_by_id(team_id)
+            let team = event_teams::Entity::find_by_id(team_id)
                 .one(db.get_ref())
                 .await?
                 .ok_or(UniError::NotFound("no team".into()))?;

@@ -1,15 +1,9 @@
-use sea_orm::{ColumnTrait, QueryFilter};
-
-use super::super::preclude::*;
 use crate::{
-    auth::UserJwtGuard,
-    entity::{
-        challenges, instances,
-        prelude::{Challenges, Instances},
-        sea_orm_active_enums::InstanceStatus,
-    },
+    api::preclude::*,
+    entity::{challenges, instances, sea_orm_active_enums::InstanceStatus},
 };
 
+/// GET /api/challenges
 #[get("")]
 pub async fn get_challenges(
     _user: UserJwtGuard,
@@ -18,7 +12,7 @@ pub async fn get_challenges(
 ) -> UniResult<Vec<challenges::Model>> {
     let mut query_params = query_params.0;
 
-    let stmt = Challenges::find().filter(challenges::Column::Hidden.eq(false));
+    let stmt = challenges::Entity::find().filter(challenges::Column::Hidden.eq(false));
 
     if let (Some(limit), Some(page)) = (query_params.limit, query_params.page) {
         let paginator = stmt.paginate(db.get_ref(), limit);
@@ -34,32 +28,36 @@ pub async fn get_challenges(
     }
 }
 
-#[get("/{id}")]
+/// GET /api/challenges/{challenge_id}
+#[get("/{challenge_id}")]
 pub async fn get_challenge(
     _user: UserJwtGuard,
     db: WebDb,
-    id: Path<Uuid>,
+    challenge_id: Path<Uuid>,
 ) -> UniResult<challenges::Model> {
-    match Challenges::find_by_id(*id)
+    let challenge_id = challenge_id.into_inner();
+    match challenges::Entity::find_by_id(challenge_id)
         .filter(challenges::Column::Hidden.eq(false))
         .one(db.get_ref())
         .await?
     {
         Some(model) => UniResponse::ok(model.into()).into(),
-        None => UniError::NotFound(format!(" {} not exist", id)).into(),
+        None => UniError::NotFound(format!(" {} not exist", challenge_id)).into(),
     }
 }
 
-#[get("/{id}/instance")]
+/// GET /api/challenges/{challenge_id}/instance
+#[get("/{challenge_id}/instance")]
 pub async fn get_challenge_instance(
     user: UserJwtGuard,
     db: WebDb,
-    id: Path<Uuid>,
+    challenge_id: Path<Uuid>,
 ) -> UniResult<instances::Model> {
     let user = user.into_inner();
+    let challenge_id = challenge_id.into_inner();
 
-    let instance = Instances::find()
-        .filter(instances::Column::ChallengeId.eq(*id))
+    let instance = instances::Entity::find()
+        .filter(instances::Column::ChallengeId.eq(challenge_id))
         .filter(instances::Column::Status.eq(InstanceStatus::Running))
         .filter(instances::Column::UserId.eq(user.id))
         .filter(instances::Column::Ref.eq("Training"))

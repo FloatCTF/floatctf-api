@@ -1,17 +1,5 @@
-use actix_web::{
-    delete, get, patch, post,
-    web::{Json, Path},
-};
-use sea_orm::{
-    ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, IntoActiveModel, QueryFilter,
-};
-use serde::{Deserialize, Serialize};
-use uuid::Uuid;
-
 use crate::{
-    api::{UniError, UniResponse, UniResult},
-    auth::SuperAdminJwtGuard,
-    db::WebDb,
+    api::preclude::*,
     entity::{challenge_set_items, challenge_sets, challenges},
 };
 
@@ -21,7 +9,7 @@ pub struct CreateChallengeSetRequest {
     pub description: Option<String>,
     pub challenge_id_list: Option<Vec<Uuid>>,
 }
-
+/// POST /api/admin/challenge_sets
 #[post("")]
 pub async fn create_challenge_set(
     _user: SuperAdminJwtGuard,
@@ -50,11 +38,14 @@ pub async fn create_challenge_set(
 
     UniResponse::ok_none().into()
 }
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PatchChallengeSetRequest {
     pub name: Option<String>,
     pub description: Option<String>,
 }
+
+/// PATCH /api/admin/challenge_sets/{challenge_set_id}
 #[patch("/{challenge_set_id}")]
 pub async fn patch_challenge_set(
     _user: SuperAdminJwtGuard,
@@ -80,6 +71,8 @@ pub async fn patch_challenge_set(
     let challenge_set = m_challenge_set.update(db.get_ref()).await?;
     UniResponse::ok(challenge_set.into()).into()
 }
+
+/// DELETE /api/admin/challenge_sets/{challenge_set_id}
 #[delete("/{challenge_set_id}")]
 pub async fn delete_challenge_set(
     _user: SuperAdminJwtGuard,
@@ -93,6 +86,7 @@ pub async fn delete_challenge_set(
     UniResponse::ok_none().into()
 }
 
+/// GET /api/admin/challenge_sets
 #[get("")]
 pub async fn get_challenge_sets(
     _user: SuperAdminJwtGuard,
@@ -102,6 +96,7 @@ pub async fn get_challenge_sets(
     UniResponse::ok(challenge_sets.into()).into()
 }
 
+/// GET /api/admin/challenge_sets/{challenge_set_id}
 #[get("/{challenge_set_id}")]
 pub async fn get_challenge_set(
     _user: SuperAdminJwtGuard,
@@ -124,6 +119,7 @@ pub async fn get_challenge_set(
     UniResponse::ok(challenges.into()).into()
 }
 
+/// DELETE /api/admin/challenge_sets/{challenge_set_id}/challenges/{challenge_id}
 #[delete("/{challenge_set_id}/challenges/{challenge_id}")]
 pub async fn delete_challenge_from_set(
     _user: SuperAdminJwtGuard,
@@ -138,10 +134,12 @@ pub async fn delete_challenge_from_set(
         .await?;
     UniResponse::ok_none().into()
 }
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AddChallengeToSetRequest {
     pub challenge_id_list: Vec<Uuid>,
 }
+/// POST /api/admin/challenge_sets/{challenge_set_id}/challenges
 #[post("/{challenge_set_id}/challenges")]
 pub async fn add_challenge_to_set(
     _user: SuperAdminJwtGuard,

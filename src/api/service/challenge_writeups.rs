@@ -1,34 +1,30 @@
-use base64::write;
-use sea_orm::{ColumnTrait, QueryFilter};
-
-use super::super::preclude::*;
 use crate::{
+    api::preclude::*,
     auth::UserJwtGuard,
-    entity::{
-        challenge_writeup, challenges, instances,
-        prelude::{Challenges, Instances},
-        sea_orm_active_enums::InstanceStatus,
-        users::{self, Entity},
-    },
+    entity::{challenge_writeup, challenges, users},
 };
 
-#[get("/{id}/my_writeup")]
+/// GET /api/challenges/{challenge_id}/my_writeup
+#[get("/{challenge_id}/my_writeup")]
 pub async fn get_challenge_writeup(
     user: UserJwtGuard,
     db: WebDb,
-    id: Path<Uuid>,
+    challenge_id: Path<Uuid>,
 ) -> UniResult<challenge_writeup::Model> {
     let user = user.into_inner();
+    let challenge_id = challenge_id.into_inner();
 
     let writeup = challenge_writeup::Entity::find()
-        .filter(challenge_writeup::Column::ChallengeId.eq(*id))
+        .filter(challenge_writeup::Column::ChallengeId.eq(challenge_id))
         .filter(challenge_writeup::Column::UserId.eq(user.id))
         .one(db.get_ref())
         .await?;
 
     match writeup {
         Some(writeup) => UniResponse::ok(writeup.into()).into(),
-        None => UniError::NotFound(format!("Writeup for challenge {} not found", id)).into(),
+        None => {
+            UniError::NotFound(format!("Writeup for challenge {} not found", challenge_id)).into()
+        }
     }
 }
 
@@ -37,19 +33,21 @@ pub struct CreateChallengeWriteup {
     pub content: String,
 }
 
-#[post("/{id}/my_writeup")]
+/// POST /api/challenges/{challenge_id}/my_writeup
+#[post("/{challenge_id}/my_writeup")]
 pub async fn create_challenge_writeup(
     user: UserJwtGuard,
     db: WebDb,
-    id: Path<Uuid>,
+    challenge_id: Path<Uuid>,
     ccw: Json<CreateChallengeWriteup>,
 ) -> UniResult<challenge_writeup::Model> {
     let user = user.into_inner();
     let ccw = ccw.into_inner();
+    let challenge_id = challenge_id.into_inner();
 
     // 查找是否存在
     let existing = challenge_writeup::Entity::find()
-        .filter(challenge_writeup::Column::ChallengeId.eq(*id))
+        .filter(challenge_writeup::Column::ChallengeId.eq(challenge_id))
         .filter(challenge_writeup::Column::UserId.eq(user.id))
         .one(db.get_ref())
         .await?;
@@ -63,7 +61,7 @@ pub async fn create_challenge_writeup(
         }
         None => {
             let active = challenge_writeup::ActiveModel {
-                challenge_id: Set(*id),
+                challenge_id: Set(challenge_id),
                 user_id: Set(user.id),
                 content: Set(ccw.content),
                 ..Default::default()
@@ -82,14 +80,18 @@ pub struct ChallengeWriteupResult {
     pub challenge: challenges::Model,
     pub writeup: challenge_writeup::Model,
 }
-#[get("/{id}/writeups")]
+
+/// GET /api/challenges/{challenge_id}/writeups
+#[get("/{challenge_id}/writeups")]
 pub async fn get_challenge_writeups(
     _user: UserJwtGuard,
     db: WebDb,
-    id: Path<Uuid>,
+    challenge_id: Path<Uuid>,
 ) -> UniResult<Vec<ChallengeWriteupResult>> {
+    let challenge_id = challenge_id.into_inner();
+
     let writeups = challenge_writeup::Entity::find()
-        .filter(challenge_writeup::Column::ChallengeId.eq(*id))
+        .filter(challenge_writeup::Column::ChallengeId.eq(challenge_id))
         .find_also_related(challenges::Entity)
         .all(db.get_ref())
         .await?;
@@ -121,19 +123,23 @@ pub async fn get_challenge_writeups(
     UniResponse::ok(results.into()).into()
 }
 
-// get writeup by id
-// for /writeups/{id}
-#[get("/{id}")]
+/// GET /api/writeups/{writeup_id}
+#[get("/{writeup_id}")]
 pub async fn get_writeup(
     _user: UserJwtGuard,
     db: WebDb,
-    id: Path<Uuid>,
+    writeup_id: Path<Uuid>,
 ) -> UniResult<ChallengeWriteupResult> {
-    let writeup = challenge_writeup::Entity::find_by_id(*id)
+    let writeup_id = writeup_id.into_inner();
+
+    let writeup = challenge_writeup::Entity::find_by_id(writeup_id)
         .find_also_related(challenges::Entity)
         .one(db.get_ref())
         .await?
-        .ok_or(UniError::NotFound(format!("Writeup {} not found", id)))?;
+        .ok_or(UniError::NotFound(format!(
+            "Writeup {} not found",
+            writeup_id
+        )))?;
 
     let (writeup, challenge) = writeup;
 
@@ -158,6 +164,7 @@ pub async fn get_writeup(
     UniResponse::ok(result.into()).into()
 }
 
+/// GET /api/writeups
 #[get("")]
 pub async fn get_writeups(
     _user: UserJwtGuard,

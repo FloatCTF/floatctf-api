@@ -1,22 +1,12 @@
+use crate::{
+    api::preclude::*,
+    entity::{challenge_solves, users},
+};
+
+use chrono::NaiveDateTime;
 use std::collections::HashMap;
 
-use super::super::preclude::*;
-use crate::{
-    auth::UserJwtGuard,
-    db::WebDocker,
-    entity::{
-        challenge_solves, challenges, instances,
-        prelude::{Challenges, Instances},
-        sea_orm_active_enums::InstanceStatus,
-        users,
-    },
-};
-use actix_web::{HttpMessage, HttpRequest, delete};
-use chrono::NaiveDateTime;
-use fcmc::ChallengeMeta;
-use sea_orm::entity::prelude::Uuid;
-use sea_orm::{ColumnTrait, ModelTrait, QueryFilter};
-
+/// GET /api/challenge_solves
 #[get("")]
 pub async fn get_solves(
     user: UserJwtGuard,
@@ -51,6 +41,7 @@ pub struct TopUser {
     solved_last_at: NaiveDateTime,
 }
 
+/// GET /api/challenge_solves/top15users
 #[get("/top15users")]
 pub async fn get_top_15_users(_user: UserJwtGuard, db: WebDb) -> UniResult<Vec<TopUser>> {
     let solves = challenge_solves::Entity::find()

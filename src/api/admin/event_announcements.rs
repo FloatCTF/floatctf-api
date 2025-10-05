@@ -1,13 +1,6 @@
-use sea_orm::{ColumnTrait, QueryFilter};
-
-use super::super::preclude::*;
 use crate::{
-    auth::SuperAdminJwtGuard,
-    entity::{
-        event_announcements,
-        prelude::{EventAnnouncements, Events, Users},
-        users,
-    },
+    api::preclude::*,
+    entity::{event_announcements, events},
 };
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -16,18 +9,20 @@ pub struct AddEventAnnouncementRequest {
     pub content: String,
 }
 
+/// POST /api/admin/events/{event_id}/announcements
 #[post("")]
 pub async fn add_event_announcement(
     db: WebDb,
-    id: Path<Uuid>,
+    event_id: Path<Uuid>,
     atr: Json<AddEventAnnouncementRequest>,
 ) -> UniResult<event_announcements::Model> {
     let atr = atr.into_inner();
+    let event_id = event_id.into_inner();
 
-    let event = Events::find_by_id(*id)
+    let event = events::Entity::find_by_id(event_id)
         .one(db.get_ref())
         .await?
-        .ok_or(UniError::NotFound(format!(" {} not exist", id)))?;
+        .ok_or(UniError::NotFound(format!(" {} not exist", event_id)))?;
 
     let new_event_announcement = event_announcements::ActiveModel {
         event_id: Set(event.id),
@@ -41,69 +36,78 @@ pub async fn add_event_announcement(
     UniResponse::ok(event_announcement.into()).into()
 }
 
-pub type PatchEventAnnouncementRequest = AddEventAnnouncementRequest;
-
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PatchEventAnnouncementRequest {
+    pub title: Option<String>,
+    pub content: Option<String>,
+}
+/// PATCH /api/admin/events/{event_id}/announcements/{announcement_id}
 #[patch("/{announcement_id}")]
-pub async fn update_event_announcement(
+pub async fn patch_event_announcement(
     db: WebDb,
     path: Path<(Uuid, Uuid)>,
     atr: Json<PatchEventAnnouncementRequest>,
 ) -> UniResult<event_announcements::Model> {
-    let (id, announcement_id) = path.into_inner();
+    let (event_id, announcement_id) = path.into_inner();
     let atr = atr.into_inner();
 
-    let mut event_announcement = EventAnnouncements::find_by_id(announcement_id)
-        .filter(event_announcements::Column::EventId.eq(id))
+    let mut event_announcement = event_announcements::Entity::find_by_id(announcement_id)
+        .filter(event_announcements::Column::EventId.eq(event_id))
         .one(db.get_ref())
         .await?
-        .ok_or(UniError::NotFound(format!(" {} not exist", id)))?
+        .ok_or(UniError::NotFound(format!(" {} not exist", event_id)))?
         .into_active_model();
+    atr.title.map(|title| event_announcement.title = Set(title));
+    atr.content
+        .map(|content| event_announcement.content = Set(content));
 
-    event_announcement.title = Set(atr.title);
-    event_announcement.content = Set(atr.content);
     let event_announcement = event_announcement.update(db.get_ref()).await?;
 
     UniResponse::ok(event_announcement.into()).into()
 }
 
+/// DELETE /api/admin/events/{event_id}/announcements/{announcement_id}
 #[delete("/{announcement_id}")]
 pub async fn remove_event_announcement(db: WebDb, path: Path<(Uuid, Uuid)>) -> UniResult<u64> {
-    let (id, announcement_id) = path.into_inner();
+    let (event_id, announcement_id) = path.into_inner();
 
-    let event_announcement = EventAnnouncements::find_by_id(announcement_id)
-        .filter(event_announcements::Column::EventId.eq(id))
+    let event_announcement = event_announcements::Entity::find_by_id(announcement_id)
+        .filter(event_announcements::Column::EventId.eq(event_id))
         .one(db.get_ref())
         .await?
-        .ok_or(UniError::NotFound(format!(" {} not exist", id)))?;
+        .ok_or(UniError::NotFound(format!(" {} not exist", event_id)))?;
 
     let r = event_announcement.delete(db.get_ref()).await?;
 
     UniResponse::ok(r.rows_affected.into()).into()
 }
 
+/// GET /api/admin/events/{event_id}/announcements/{announcement_id}
 #[get("/{announcement_id}")]
 pub async fn get_event_announcement(
     db: WebDb,
     path: Path<(Uuid, Uuid)>,
 ) -> UniResult<event_announcements::Model> {
-    let (id, announcement_id) = path.into_inner();
+    let (event_id, announcement_id) = path.into_inner();
 
-    let event_announcement = EventAnnouncements::find_by_id(announcement_id)
-        .filter(event_announcements::Column::EventId.eq(id))
+    let event_announcement = event_announcements::Entity::find_by_id(announcement_id)
+        .filter(event_announcements::Column::EventId.eq(event_id))
         .one(db.get_ref())
         .await?
-        .ok_or(UniError::NotFound(format!(" {} not exist", id)))?;
+        .ok_or(UniError::NotFound(format!(" {} not exist", event_id)))?;
 
     UniResponse::ok(event_announcement.into()).into()
 }
 
+/// GET /api/admin/events/{event_id}/announcements
 #[get("")]
 pub async fn list_event_announcements(
     db: WebDb,
-    id: Path<Uuid>,
+    event_id: Path<Uuid>,
 ) -> UniResult<Vec<event_announcements::Model>> {
-    let event_announcements = EventAnnouncements::find()
-        .filter(event_announcements::Column::EventId.eq(*id))
+    let event_id = event_id.into_inner();
+    let event_announcements = event_announcements::Entity::find()
+        .filter(event_announcements::Column::EventId.eq(event_id))
         .all(db.get_ref())
         .await?;
 

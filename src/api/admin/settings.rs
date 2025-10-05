@@ -1,18 +1,9 @@
-use actix_web::{
-    delete, get, patch, post,
-    web::{Json, Path},
-};
-use sea_orm::{ActiveModelTrait, ActiveValue::Set, EntityTrait, IntoActiveModel, ModelTrait};
-use serde::{Deserialize, Serialize};
-use uuid::Uuid;
-
 use crate::{
-    api::{UniError, UniResponse, UniResult},
-    auth::SuperAdminJwtGuard,
-    db::WebDb,
+    api::preclude::*,
     entity::{sea_orm_active_enums::SettingValueType, settings},
 };
 
+/// GET /api/admin/settings
 #[get("")]
 pub async fn get_settings(_user: SuperAdminJwtGuard, db: WebDb) -> UniResult<Vec<settings::Model>> {
     let settings = settings::Entity::find().all(db.get_ref()).await?;
@@ -28,6 +19,7 @@ pub struct CreateSettingRequest {
     pub r#type: SettingValueType,
 }
 
+/// POST /api/admin/settings
 #[post("")]
 pub async fn create_setting(
     _user: SuperAdminJwtGuard,
@@ -56,19 +48,21 @@ pub struct PatchSettingRequest {
     pub protected: Option<bool>,
     pub r#type: Option<SettingValueType>,
 }
-#[patch("/{id}")]
+
+/// PATCH /api/admin/settings/{setting_id}
+#[patch("/{setting_id}")]
 pub async fn patch_setting(
     _user: SuperAdminJwtGuard,
     db: WebDb,
-    id: Path<Uuid>,
+    setting_id: Path<Uuid>,
     psr: Json<PatchSettingRequest>,
 ) -> UniResult<settings::Model> {
-    let id = id.into_inner();
+    let setting_id = setting_id.into_inner();
     let psr = psr.into_inner();
-    let setting = settings::Entity::find_by_id(id)
+    let setting = settings::Entity::find_by_id(setting_id)
         .one(db.get_ref())
         .await?
-        .ok_or(UniError::NotFound(format!(" {} not exist", id)))?;
+        .ok_or(UniError::NotFound(format!(" {} not exist", setting_id)))?;
 
     let mut m_setting = setting.into_active_model();
 
@@ -91,10 +85,17 @@ pub async fn patch_setting(
     UniResponse::ok(setting.into()).into()
 }
 
-#[delete("/{id}")]
-pub async fn delete_setting(_user: SuperAdminJwtGuard, db: WebDb, id: Path<Uuid>) -> UniResult<()> {
-    let id = id.into_inner();
-    let setting = settings::Entity::find_by_id(id).one(db.get_ref()).await?;
+/// DELETE /api/admin/settings/{setting_id}
+#[delete("/{setting_id}")]
+pub async fn delete_setting(
+    _user: SuperAdminJwtGuard,
+    db: WebDb,
+    setting_id: Path<Uuid>,
+) -> UniResult<()> {
+    let setting_id = setting_id.into_inner();
+    let setting = settings::Entity::find_by_id(setting_id)
+        .one(db.get_ref())
+        .await?;
     if let Some(setting) = setting {
         if setting.protected {
             return Err(UniError::CustomError(format!(

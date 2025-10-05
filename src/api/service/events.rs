@@ -1,28 +1,14 @@
-use chrono::NaiveDateTime;
-use sea_orm::{ColumnTrait, QueryFilter, QueryOrder};
-use std::collections::BTreeSet;
-use std::{
-    collections::{HashMap, HashSet},
-    result,
-};
-
-use super::super::preclude::*;
-use crate::entity::prelude::{EventInstances, EventWriteup};
-use crate::entity::{event_announcements, event_instances, event_writeup};
 use crate::{
-    api::service::calculate_next_dynamic_score,
-    auth::UserJwtGuard,
+    api::{preclude::*, service::calculate_next_dynamic_score},
     entity::{
-        challenges, event_challenge_solves, event_challenges, event_team_members, event_teams,
-        event_users, events, instances,
-        prelude::{
-            Challenges, EventAnnouncements, EventChallengeSolves, EventChallenges,
-            EventTeamMembers, EventTeams, EventUsers, Events, Instances, Users,
-        },
+        challenges, event_announcements, event_challenge_solves, event_challenges, event_instances,
+        event_team_members, event_teams, event_users, event_writeup, events, instances,
         sea_orm_active_enums::{EventTeamMemberRole, EventType, InstanceStatus},
         users,
     },
 };
+use chrono::NaiveDateTime;
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct EventTeamMemberResult {
@@ -41,13 +27,14 @@ pub struct EventInfo {
     joined: bool,
 }
 
+/// GET /api/events
 #[get("")]
 pub async fn get_events(user: UserJwtGuard, db: WebDb) -> UniResult<Vec<EventInfo>> {
     let user = user.into_inner();
 
-    let events_with_users = Events::find()
+    let events_with_users = events::Entity::find()
         .filter(events::Column::Hidden.eq(false))
-        .find_with_related(EventUsers)
+        .find_with_related(event_users::Entity)
         .all(db.get_ref())
         .await?;
 
@@ -65,35 +52,37 @@ pub async fn get_events(user: UserJwtGuard, db: WebDb) -> UniResult<Vec<EventInf
 
     UniResponse::ok(result.into()).into()
 }
+
+/// GET /api/events/{event_id}
 #[get("/{event_id}")]
 pub async fn get_event(user: UserJwtGuard, db: WebDb, id: Path<Uuid>) -> UniResult<EventInfo> {
     let user = user.into_inner();
 
-    let event = Events::find_by_id(*id)
+    let event = events::Entity::find_by_id(*id)
         .filter(events::Column::Hidden.eq(false))
         .one(db.get_ref())
         .await?
         .ok_or(UniError::NotFound("event not found".to_string()))?;
 
-    let joined = EventUsers::find_by_id((*id, user.id))
+    let joined = event_users::Entity::find_by_id((*id, user.id))
         .one(db.get_ref())
         .await?
         .is_some();
 
-    let event_member = EventTeamMembers::find()
+    let event_member = event_team_members::Entity::find()
         .filter(event_team_members::Column::EventId.eq(*id))
         .filter(event_team_members::Column::UserId.eq(user.id))
-        .find_also_related(EventTeams)
+        .find_also_related(event_teams::Entity)
         .one(db.get_ref())
         .await?;
 
     let team = event_member.map(|(_, team)| team).flatten();
     match team {
         Some(team) => {
-            let members = EventTeamMembers::find()
+            let members = event_team_members::Entity::find()
                 .filter(event_team_members::Column::EventId.eq(*id))
                 .filter(event_team_members::Column::TeamId.eq(team.id))
-                .find_also_related(Users)
+                .find_also_related(users::Entity)
                 .all(db.get_ref())
                 .await?;
             let members = members
@@ -135,6 +124,7 @@ pub struct EventChallengeResult {
     pub solved_no: u64,
 }
 
+/// GET /api/events/{event_id}/challenges
 #[get("/{event_id}/challenges")]
 pub async fn get_event_challenges(
     user: UserJwtGuard,
@@ -145,7 +135,7 @@ pub async fn get_event_challenges(
     let _user = user.clone();
 
     // team 化
-    let event = Events::find_by_id(*id)
+    let event = events::Entity::find_by_id(*id)
         .filter(events::Column::Hidden.eq(false))
         .one(db.get_ref())
         .await?
@@ -157,7 +147,7 @@ pub async fn get_event_challenges(
             "Event has not started yet".to_string(),
         ));
     }
-    let joined = EventUsers::find_by_id((*id, user.id))
+    let joined = event_users::Entity::find_by_id((*id, user.id))
         .one(db.get_ref())
         .await?
         .is_some();
@@ -166,16 +156,16 @@ pub async fn get_event_challenges(
     }
 
     let stmt = event
-        .find_related(EventChallenges)
+        .find_related(event_challenges::Entity)
         .filter(event_challenges::Column::Hidden.eq(false))
-        .find_also_related(Challenges); // join 关联挑战表
+        .find_also_related(challenges::Entity); // join 关联挑战表
 
     let c_ec = stmt.all(db.get_ref()).await?;
 
     let mut result = Vec::new();
     for (event_challenge, challenge) in c_ec {
         if let Some(c) = challenge {
-            let solved_count = EventChallengeSolves::find()
+            let solved_count = event_challenge_solves::Entity::find()
                 .filter(event_challenge_solves::Column::EventId.eq(*id))
                 .filter(event_challenge_solves::Column::ChallengeId.eq(c.id))
                 .count(db.get_ref())
@@ -184,16 +174,17 @@ pub async fn get_event_challenges(
             let (solved, solved_no) = {
                 match event.r#type {
                     EventType::JeopardySingle => {
-                        let user_solve = EventChallengeSolves::find_by_id((*id, c.id, user.id))
-                            .one(db.get_ref())
-                            .await?;
+                        let user_solve =
+                            event_challenge_solves::Entity::find_by_id((*id, c.id, user.id))
+                                .one(db.get_ref())
+                                .await?;
 
                         let mut solved_no = 0;
                         let solved = user_solve.is_some();
 
                         if let Some(us) = user_solve {
                             // 统计比用户早的提交数量
-                            let before_count = EventChallengeSolves::find()
+                            let before_count = event_challenge_solves::Entity::find()
                                 .filter(event_challenge_solves::Column::EventId.eq(*id))
                                 .filter(event_challenge_solves::Column::ChallengeId.eq(c.id))
                                 .filter(event_challenge_solves::Column::CreatedAt.lt(us.created_at))
@@ -205,14 +196,14 @@ pub async fn get_event_challenges(
                         (solved, solved_no)
                     }
                     EventType::JeopardyTeam => {
-                        let team_member = EventTeamMembers::find()
+                        let team_member = event_team_members::Entity::find()
                             .filter(event_team_members::Column::EventId.eq(*id))
                             .filter(event_team_members::Column::UserId.eq(user.id))
                             .one(db.get_ref())
                             .await?
                             .ok_or(UniError::NotFound("you are not in any team".into()))?;
 
-                        let team_solve = EventChallengeSolves::find()
+                        let team_solve = event_challenge_solves::Entity::find()
                             .filter(event_challenge_solves::Column::EventId.eq(*id))
                             .filter(event_challenge_solves::Column::ChallengeId.eq(c.id))
                             .filter(event_challenge_solves::Column::TeamId.eq(team_member.team_id))
@@ -224,7 +215,7 @@ pub async fn get_event_challenges(
 
                         if let Some(ts) = team_solve {
                             // 统计比用户早的提交数量
-                            let before_count = EventChallengeSolves::find()
+                            let before_count = event_challenge_solves::Entity::find()
                                 .filter(event_challenge_solves::Column::EventId.eq(*id))
                                 .filter(event_challenge_solves::Column::ChallengeId.eq(c.id))
                                 .filter(event_challenge_solves::Column::CreatedAt.lt(ts.created_at))
@@ -270,6 +261,7 @@ pub struct EventInstance {
     pub challenge_name: String,
     pub user_nickname: String,
 }
+/// GET /api/events/{event_id}/instances
 #[get("/{event_id}/instances")]
 pub async fn get_event_instances(
     user: UserJwtGuard,
@@ -278,7 +270,7 @@ pub async fn get_event_instances(
 ) -> UniResult<Vec<EventInstance>> {
     let user = user.into_inner();
 
-    let event = Events::find_by_id(*id)
+    let event = events::Entity::find_by_id(*id)
         .filter(events::Column::Hidden.eq(false))
         .one(db.get_ref())
         .await?
@@ -294,12 +286,12 @@ pub async fn get_event_instances(
     match event.r#type {
         EventType::JeopardySingle => {
             // 👇 查 instance 并关联 challenge 和 user
-            let data = Instances::find()
+            let data = instances::Entity::find()
                 .filter(instances::Column::Status.eq(InstanceStatus::Running))
                 .filter(instances::Column::UserId.eq(user.id))
                 .filter(instances::Column::Ref.eq("JeopardySingle"))
-                .find_also_related(Challenges) // instance -> challenge
-                .find_also_related(Users) // instance -> user
+                .find_also_related(challenges::Entity) // instance -> challenge
+                .find_also_related(users::Entity) // instance -> user
                 .all(db.get_ref())
                 .await?;
 
@@ -316,20 +308,20 @@ pub async fn get_event_instances(
             UniResponse::ok(instances.into()).into()
         }
         EventType::JeopardyTeam => {
-            let team_member = EventTeamMembers::find()
+            let team_member = event_team_members::Entity::find()
                 .filter(event_team_members::Column::EventId.eq(*id))
                 .filter(event_team_members::Column::UserId.eq(user.id))
                 .one(db.get_ref())
                 .await?
                 .ok_or(UniError::NotFound("you are not in any team".into()))?;
 
-            let data = EventInstances::find()
+            let data = event_instances::Entity::find()
                 .filter(event_instances::Column::EventId.eq(*id))
                 .filter(event_instances::Column::TeamId.eq(team_member.team_id))
-                .find_also_related(Instances)
+                .find_also_related(instances::Entity)
                 .filter(instances::Column::Status.eq(InstanceStatus::Running))
                 .filter(instances::Column::Ref.eq("JeopardyTeam"))
-                .find_also_related(Challenges)
+                .find_also_related(challenges::Entity)
                 .all(db.get_ref())
                 .await?;
 
@@ -349,7 +341,7 @@ pub async fn get_event_instances(
         )),
     }
 }
-
+/// GET /api/events/{event_id}/challenges/{challenge_id}/instance
 #[get("/{event_id}/challenges/{challenge_id}/instance")]
 pub async fn get_event_challenge_instance(
     user: UserJwtGuard,
@@ -359,7 +351,7 @@ pub async fn get_event_challenge_instance(
     let user = user.into_inner();
     let (event_id, challenge_id) = id.into_inner();
 
-    let event = Events::find_by_id(event_id)
+    let event = events::Entity::find_by_id(event_id)
         .filter(events::Column::Hidden.eq(false))
         .one(db.get_ref())
         .await?
@@ -367,11 +359,11 @@ pub async fn get_event_challenge_instance(
 
     match event.r#type {
         EventType::JeopardySingle => {
-            let (_event_instance, instance) = EventInstances::find()
+            let (_event_instance, instance) = event_instances::Entity::find()
                 .filter(event_instances::Column::EventId.eq(event_id))
                 .filter(event_instances::Column::ChallengeId.eq(challenge_id))
                 .filter(event_instances::Column::UserId.eq(user.id))
-                .find_also_related(Instances)
+                .find_also_related(instances::Entity)
                 .filter(instances::Column::Status.eq(InstanceStatus::Running))
                 .filter(instances::Column::Ref.eq("JeopardySingle"))
                 .one(db.get_ref())
@@ -380,18 +372,18 @@ pub async fn get_event_challenge_instance(
             UniResponse::ok(instance).into()
         }
         EventType::JeopardyTeam => {
-            let team_member = EventTeamMembers::find()
+            let team_member = event_team_members::Entity::find()
                 .filter(event_team_members::Column::EventId.eq(event_id))
                 .filter(event_team_members::Column::UserId.eq(user.id))
                 .one(db.get_ref())
                 .await?
                 .ok_or(UniError::NotFound("you are not in any team".into()))?;
 
-            let (_event_instance, instance) = EventInstances::find()
+            let (_event_instance, instance) = event_instances::Entity::find()
                 .filter(event_instances::Column::EventId.eq(event_id))
                 .filter(event_instances::Column::ChallengeId.eq(challenge_id))
                 .filter(event_instances::Column::TeamId.eq(team_member.team_id))
-                .find_also_related(Instances)
+                .find_also_related(instances::Entity)
                 .filter(instances::Column::Status.eq(InstanceStatus::Running))
                 .filter(instances::Column::Ref.eq("JeopardyTeam"))
                 .one(db.get_ref())
@@ -410,7 +402,7 @@ pub async fn get_event_challenge_instance(
 pub struct CreateUserTeam {
     pub name: String,
 }
-
+/// POST /api/events/{event_id}/team
 #[post("/{event_id}/team")]
 pub async fn create_team(
     user: UserJwtGuard,
@@ -421,7 +413,7 @@ pub async fn create_team(
     let user = user.into_inner();
     let cut = cut.into_inner();
     let event_id = *id;
-    let event = Events::find_by_id(event_id)
+    let event = events::Entity::find_by_id(event_id)
         .filter(events::Column::Hidden.eq(false))
         .one(db.get_ref())
         .await?
@@ -434,7 +426,7 @@ pub async fn create_team(
         ));
     }
     // 判断是否已经加入了团队
-    let event_user = EventUsers::find_by_id((event_id, user.id))
+    let event_user = event_users::Entity::find_by_id((event_id, user.id))
         .one(db.get_ref())
         .await?;
 
@@ -468,18 +460,18 @@ pub async fn create_team(
 
     UniResponse::ok(team.into()).into()
 }
-
+/// DELETE /api/events/{event_id}/team/{team_id}
 #[delete("/{event_id}/team/{team_id}")]
 pub async fn quit_team(user: UserJwtGuard, db: WebDb, id: Path<(Uuid, Uuid)>) -> UniResult<()> {
     let user = user.into_inner();
     let (event_id, team_id) = id.into_inner();
-    let team_member = EventTeamMembers::find_by_id((event_id, team_id, user.id))
+    let team_member = event_team_members::Entity::find_by_id((event_id, team_id, user.id))
         .one(db.get_ref())
         .await?
         .ok_or(UniError::NotFound("You are not of the team".to_string()))?;
 
     if team_member.role == EventTeamMemberRole::Captain {
-        let team = EventTeams::find_by_id(team_id)
+        let team = event_teams::Entity::find_by_id(team_id)
             .one(db.get_ref())
             .await?
             .ok_or(UniError::NotFound("team not found".to_string()))?;
@@ -488,7 +480,7 @@ pub async fn quit_team(user: UserJwtGuard, db: WebDb, id: Path<(Uuid, Uuid)>) ->
         team_member.delete(db.get_ref()).await?;
     }
 
-    let event_user = EventUsers::find_by_id((event_id, user.id))
+    let event_user = event_users::Entity::find_by_id((event_id, user.id))
         .one(db.get_ref())
         .await?
         .ok_or(UniError::NotFound("You are not of the event".to_string()))?;
@@ -497,18 +489,19 @@ pub async fn quit_team(user: UserJwtGuard, db: WebDb, id: Path<(Uuid, Uuid)>) ->
     UniResponse::ok_none().into()
 }
 
+/// POST /api/events/{event_id}/team/{team_id}/join
 #[post("/{event_id}/team/{team_id}/join")]
 pub async fn join_team(user: UserJwtGuard, db: WebDb, id: Path<(Uuid, Uuid)>) -> UniResult<()> {
     let user = user.into_inner();
     let (event_id, team_id) = id.into_inner();
-    let team_member = EventTeamMembers::find_by_id((event_id, team_id, user.id))
+    let team_member = event_team_members::Entity::find_by_id((event_id, team_id, user.id))
         .one(db.get_ref())
         .await?;
 
     if team_member.is_some() {
         return Err(UniError::CustomError("already joined team".to_string()));
     }
-    let event_team = EventTeams::find_by_id(team_id)
+    let event_team = event_teams::Entity::find_by_id(team_id)
         .one(db.get_ref())
         .await?
         .ok_or(UniError::NotFound("team not found".to_string()))?;
@@ -532,11 +525,12 @@ pub async fn join_team(user: UserJwtGuard, db: WebDb, id: Path<(Uuid, Uuid)>) ->
     UniResponse::ok_none().into()
 }
 
+/// POST /api/events/{event_id}/team/{team_id}/leave
 #[post("/{event_id}/team/{team_id}/leave")]
 pub async fn leave_team(user: UserJwtGuard, db: WebDb, id: Path<(Uuid, Uuid)>) -> UniResult<()> {
     let user = user.into_inner();
     let (event_id, team_id) = id.into_inner();
-    let team_member = EventTeamMembers::find_by_id((event_id, team_id, user.id))
+    let team_member = event_team_members::Entity::find_by_id((event_id, team_id, user.id))
         .one(db.get_ref())
         .await?
         .ok_or(UniError::NotFound("You are not of the team".to_string()))?;
@@ -552,6 +546,7 @@ pub async fn leave_team(user: UserJwtGuard, db: WebDb, id: Path<(Uuid, Uuid)>) -
     UniResponse::ok_none().into()
 }
 
+/// POST /api/events/{event_id}/join
 #[post("/{event_id}/join")]
 pub async fn join_event(
     user: UserJwtGuard,
@@ -559,7 +554,7 @@ pub async fn join_event(
     id: Path<Uuid>,
 ) -> UniResult<event_users::Model> {
     let user = user.into_inner();
-    let event = Events::find_by_id(*id)
+    let event = events::Entity::find_by_id(*id)
         .filter(events::Column::Hidden.eq(false))
         .one(db.get_ref())
         .await?
@@ -588,10 +583,11 @@ pub async fn join_event(
     UniResponse::ok(user.into()).into()
 }
 
+/// DELETE /api/events/{event_id}/leave
 #[delete("/{event_id}/leave")]
 pub async fn leave_event(user: UserJwtGuard, db: WebDb, id: Path<Uuid>) -> UniResult<u64> {
     let user = user.into_inner();
-    let event = Events::find_by_id(*id)
+    let event = events::Entity::find_by_id(*id)
         .filter(events::Column::Hidden.eq(false))
         .one(db.get_ref())
         .await?
@@ -606,7 +602,7 @@ pub async fn leave_event(user: UserJwtGuard, db: WebDb, id: Path<Uuid>) -> UniRe
             "Event has already started".to_string(),
         ));
     }
-    let event_user = EventUsers::find_by_id((*id, user.id))
+    let event_user = event_users::Entity::find_by_id((*id, user.id))
         .one(db.get_ref())
         .await?
         .ok_or(UniError::NotFound("event user not found".to_string()))?;
@@ -631,7 +627,7 @@ pub struct ScoreboardItem {
     pub challenges: Vec<ChallengeScoreboard>,
 }
 pub async fn __get_scoreboard(db: WebDb, event_id: Uuid) -> anyhow::Result<Vec<ScoreboardItem>> {
-    let event = Events::find_by_id(event_id)
+    let event = events::Entity::find_by_id(event_id)
         .one(db.get_ref())
         .await?
         .ok_or(UniError::NotFound("event not found".to_string()))?;
@@ -639,7 +635,7 @@ pub async fn __get_scoreboard(db: WebDb, event_id: Uuid) -> anyhow::Result<Vec<S
     match event.r#type {
         EventType::JeopardySingle => {
             // 1. 获取 event_challenges
-            let event_challenges = EventChallenges::find()
+            let event_challenges = event_challenges::Entity::find()
                 .filter(event_challenges::Column::EventId.eq(event_id))
                 .filter(event_challenges::Column::Hidden.eq(false))
                 .all(db.get_ref())
@@ -650,7 +646,7 @@ pub async fn __get_scoreboard(db: WebDb, event_id: Uuid) -> anyhow::Result<Vec<S
                 event_challenges.iter().map(|ec| ec.challenge_id).collect();
 
             // 2. 获取所有 challenges
-            let challenges = Challenges::find()
+            let challenges = challenges::Entity::find()
                 .filter(challenges::Column::Id.is_in(challenge_ids.clone()))
                 .all(db.get_ref())
                 .await?;
@@ -659,7 +655,7 @@ pub async fn __get_scoreboard(db: WebDb, event_id: Uuid) -> anyhow::Result<Vec<S
 
             // 3. 获取所有 event_users
             // banned
-            let event_users = EventUsers::find()
+            let event_users = event_users::Entity::find()
                 .filter(event_users::Column::EventId.eq(event_id))
                 .filter(event_users::Column::Banned.eq(false))
                 .order_by_desc(event_users::Column::Points)
@@ -668,7 +664,7 @@ pub async fn __get_scoreboard(db: WebDb, event_id: Uuid) -> anyhow::Result<Vec<S
             let user_ids: Vec<Uuid> = event_users.iter().map(|eu| eu.user_id).collect();
 
             // 4. 获取所有 users
-            let users = Users::find()
+            let users = users::Entity::find()
                 .filter(users::Column::Id.is_in(user_ids.clone()))
                 .all(db.get_ref())
                 .await?;
@@ -677,7 +673,7 @@ pub async fn __get_scoreboard(db: WebDb, event_id: Uuid) -> anyhow::Result<Vec<S
                 users.into_iter().map(|u| (u.id, u)).collect();
 
             // 5. 获取所有 solves（按 challenge_id + created_at 排序）
-            let solves = EventChallengeSolves::find()
+            let solves = event_challenge_solves::Entity::find()
                 .filter(event_challenge_solves::Column::EventId.eq(event_id))
                 .order_by_asc(event_challenge_solves::Column::ChallengeId)
                 .order_by_asc(event_challenge_solves::Column::CreatedAt)
@@ -750,7 +746,7 @@ pub async fn __get_scoreboard(db: WebDb, event_id: Uuid) -> anyhow::Result<Vec<S
         }
         EventType::JeopardyTeam => {
             // 1. 获取 event_challenges
-            let event_challenges = EventChallenges::find()
+            let event_challenges = event_challenges::Entity::find()
                 .filter(event_challenges::Column::EventId.eq(event_id))
                 .filter(event_challenges::Column::Hidden.eq(false))
                 .all(db.get_ref())
@@ -761,19 +757,19 @@ pub async fn __get_scoreboard(db: WebDb, event_id: Uuid) -> anyhow::Result<Vec<S
                 event_challenges.iter().map(|ec| ec.challenge_id).collect();
 
             // 2. 获取所有 challenges
-            let challenges = Challenges::find()
+            let challenges = challenges::Entity::find()
                 .filter(challenges::Column::Id.is_in(challenge_ids.clone()))
                 .all(db.get_ref())
                 .await?;
             let challenge_map: HashMap<Uuid, challenges::Model> =
                 challenges.into_iter().map(|c| (c.id, c)).collect();
 
-            let event_teams = EventTeams::find()
+            let event_teams = event_teams::Entity::find()
                 .filter(event_teams::Column::EventId.eq(event_id))
                 .all(db.get_ref())
                 .await?;
 
-            let solves = EventChallengeSolves::find()
+            let solves = event_challenge_solves::Entity::find()
                 .filter(event_challenge_solves::Column::EventId.eq(event_id))
                 .order_by_asc(event_challenge_solves::Column::ChallengeId)
                 .order_by_asc(event_challenge_solves::Column::CreatedAt)
@@ -840,6 +836,7 @@ pub async fn __get_scoreboard(db: WebDb, event_id: Uuid) -> anyhow::Result<Vec<S
     }
 }
 
+/// GET /api/events/{event_id}/scoreboard
 #[get("/{event_id}/scoreboard")]
 pub async fn get_scoreboard(
     _user: UserJwtGuard,
@@ -865,7 +862,7 @@ pub struct TrendItem {
     pub points: Vec<TrendPoint>,
 }
 pub async fn __get_trend(db: WebDb, event_id: Uuid) -> anyhow::Result<Vec<TrendItem>> {
-    let event = Events::find_by_id(event_id)
+    let event = events::Entity::find_by_id(event_id)
         .one(db.get_ref())
         .await?
         .ok_or(UniError::NotFound("event not found".to_string()))?;
@@ -1027,6 +1024,7 @@ pub async fn __get_trend(db: WebDb, event_id: Uuid) -> anyhow::Result<Vec<TrendI
     }
 }
 
+/// GET /api/events/{event_id}/trend
 #[get("/{event_id}/trend")]
 pub async fn get_trend(
     _user: UserJwtGuard,
@@ -1040,13 +1038,14 @@ pub async fn get_trend(
     UniResponse::ok(trend_items.into()).into()
 }
 
+/// GET /api/events/{event_id}/announcements
 #[get("/{event_id}/announcements")]
 pub async fn get_announcements(
     _user: UserJwtGuard,
     db: WebDb,
     event_id: Path<Uuid>,
 ) -> UniResult<Vec<event_announcements::Model>> {
-    let announcements = EventAnnouncements::find()
+    let announcements = event_announcements::Entity::find()
         .filter(event_announcements::Column::EventId.eq(*event_id))
         .order_by_desc(event_announcements::Column::CreatedAt)
         .all(db.get_ref())
@@ -1055,6 +1054,7 @@ pub async fn get_announcements(
     UniResponse::ok(announcements.into()).into()
 }
 
+/// GET /api/events/{event_id}/submit_wp_status
 #[get("/{event_id}/submit_wp_status")]
 
 pub async fn get_submit_wp_status(
@@ -1062,7 +1062,7 @@ pub async fn get_submit_wp_status(
     db: WebDb,
     event_id: Path<Uuid>,
 ) -> UniResult<NaiveDateTime> {
-    let wp = EventWriteup::find()
+    let wp = event_writeup::Entity::find()
         .filter(event_writeup::Column::EventId.eq(*event_id))
         .order_by_desc(event_writeup::Column::CreatedAt)
         .one(db.get_ref())

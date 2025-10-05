@@ -1,13 +1,9 @@
+use crate::api::preclude::*;
+use crate::entity::{super_admin, users};
 use actix_web::FromRequest;
 use chrono::{Duration, Utc};
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode};
-use sea_orm::{EntityTrait, entity::prelude::Uuid};
-use serde::{Deserialize, Serialize};
 
-use crate::{
-    db::WebDb,
-    entity::{prelude::SuperAdmin, prelude::Users, super_admin, users},
-};
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub enum Role {
     User,
@@ -82,8 +78,9 @@ impl FromRequest for UserJwtGuard {
                 if token.starts_with("Bearer ") {
                     let jwt = token.trim_start_matches("Bearer ").trim().to_string();
                     if let Ok(claims) = validate_jwt(jwt) {
-                        if let Ok(Some(user)) =
-                            Users::find_by_id(claims.sub).one(db.get_ref()).await
+                        if let Ok(Some(user)) = users::Entity::find_by_id(claims.sub)
+                            .one(db.get_ref())
+                            .await
                         {
                             return Ok(UserJwtGuard(user));
                         }
@@ -116,8 +113,9 @@ impl FromRequest for SuperAdminJwtGuard {
                 if token.starts_with("Bearer ") {
                     let jwt = token.trim_start_matches("Bearer ").trim().to_string();
                     if let Ok(claims) = validate_jwt(jwt) {
-                        if let Ok(Some(super_admin)) =
-                            SuperAdmin::find_by_id(claims.sub).one(db.get_ref()).await
+                        if let Ok(Some(super_admin)) = super_admin::Entity::find_by_id(claims.sub)
+                            .one(db.get_ref())
+                            .await
                         {
                             return Ok(SuperAdminJwtGuard(super_admin));
                         }

@@ -1,14 +1,9 @@
-use actix_web::{get, web::Path};
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect, Related};
-use uuid::Uuid;
-
 use crate::{
-    api::{UniError, UniResponse, UniResult},
-    auth::UserJwtGuard,
-    db::WebDb,
+    api::preclude::*,
     entity::{challenge_set_items, challenge_sets, challenges},
 };
 
+/// GET /api/challenge_sets
 #[get("")]
 pub async fn get_challenge_sets(
     _user: UserJwtGuard,
@@ -18,6 +13,7 @@ pub async fn get_challenge_sets(
     UniResponse::ok(challenge_sets.into()).into()
 }
 
+/// GET /api/challenge_sets/{challenge_set_id}
 #[get("/{challenge_set_id}")]
 pub async fn get_challenge_set(
     _user: UserJwtGuard,

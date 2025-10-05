@@ -1,12 +1,6 @@
-use sea_orm::{ColumnTrait, QueryFilter, sea_query::OnConflict};
-
-use super::super::preclude::*;
 use crate::{
-    auth::SuperAdminJwtGuard,
-    entity::{
-        challenges, event_challenges,
-        prelude::{Challenges, EventChallenges, Events},
-    },
+    api::preclude::*,
+    entity::{challenges, event_challenges, events},
 };
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -15,19 +9,21 @@ pub struct AddChallengeRequest {
     pub challenge_id_list: Option<Vec<Uuid>>,
 }
 
+/// POST /api/admin/events/{event_id}/challenges
 #[post("")]
 pub async fn add_challenge(
     _user: SuperAdminJwtGuard,
     db: WebDb,
-    id: Path<Uuid>,
+    event_id: Path<Uuid>,
     acr: Json<AddChallengeRequest>,
 ) -> UniResult<Vec<event_challenges::Model>> {
     let acr = acr.into_inner();
+    let event_id = event_id.into_inner();
 
-    let event = Events::find_by_id(*id)
+    let event = events::Entity::find_by_id(event_id)
         .one(db.get_ref())
         .await?
-        .ok_or(UniError::NotFound(format!("event {} not exist", id)))?;
+        .ok_or(UniError::NotFound(format!("event {} not exist", event_id)))?;
 
     let mut event_challenges_list = Vec::new();
 
@@ -40,7 +36,7 @@ pub async fn add_challenge(
 
     for challenge_id in challenge_ids {
         // 先检查 challenge 是否存在
-        let challenge = Challenges::find_by_id(challenge_id)
+        let challenge = challenges::Entity::find_by_id(challenge_id)
             .one(db.get_ref())
             .await?
             .ok_or(UniError::NotFound(format!(
@@ -86,29 +82,30 @@ pub async fn add_challenge(
 }
 
 pub type DeleteChallengeRequest = AddChallengeRequest;
+/// DELETE /api/admin/events/{event_id}/challenges
 #[delete("")]
 pub async fn remove_challenge(
     _user: SuperAdminJwtGuard,
     db: WebDb,
-    id: Path<Uuid>,
+    event_id: Path<Uuid>,
     dcr: Json<DeleteChallengeRequest>,
 ) -> UniResult<u64> {
     let dcr = dcr.into_inner();
-
-    let event = Events::find_by_id(*id)
+    let event_id = event_id.into_inner();
+    let event = events::Entity::find_by_id(event_id)
         .one(db.get_ref())
         .await?
-        .ok_or(UniError::NotFound(format!(" {} not exist", id)))?;
+        .ok_or(UniError::NotFound(format!(" {} not exist", event_id)))?;
 
     let mut rows_affected = 0;
 
     if let Some(challenge_id) = dcr.challenge_id {
-        let challenge = Challenges::find_by_id(challenge_id)
+        let challenge = challenges::Entity::find_by_id(challenge_id)
             .one(db.get_ref())
             .await?
             .ok_or(UniError::NotFound(format!(" {} not exist", challenge_id)))?;
 
-        let event_challenge = EventChallenges::find()
+        let event_challenge = event_challenges::Entity::find()
             .filter(event_challenges::Column::EventId.eq(event.id))
             .filter(event_challenges::Column::ChallengeId.eq(challenge.id))
             .one(db.get_ref())
@@ -121,12 +118,12 @@ pub async fn remove_challenge(
 
     if let Some(challenge_id_list) = dcr.challenge_id_list {
         for challenge_id in challenge_id_list {
-            let challenge = Challenges::find_by_id(challenge_id)
+            let challenge = challenges::Entity::find_by_id(challenge_id)
                 .one(db.get_ref())
                 .await?
                 .ok_or(UniError::NotFound(format!(" {} not exist", challenge_id)))?;
 
-            let event_challenge = EventChallenges::find()
+            let event_challenge = event_challenges::Entity::find()
                 .filter(event_challenges::Column::EventId.eq(event.id))
                 .filter(event_challenges::Column::ChallengeId.eq(challenge.id))
                 .one(db.get_ref())
@@ -147,20 +144,23 @@ pub struct EventChallengeResult {
     pub challenge: challenges::Model,
 }
 
+/// GET /api/admin/events/{event_id}/challenges
 #[get("")]
 pub async fn get_challenges(
     _user: SuperAdminJwtGuard,
     db: WebDb,
-    id: Path<Uuid>,
+    event_id: Path<Uuid>,
 ) -> UniResult<Vec<EventChallengeResult>> {
-    let event = Events::find_by_id(*id)
+    let event_id = event_id.into_inner();
+
+    let event = events::Entity::find_by_id(event_id)
         .one(db.get_ref())
         .await?
-        .ok_or(UniError::NotFound(format!(" {} not exist", id)))?;
+        .ok_or(UniError::NotFound(format!(" {} not exist", event_id)))?;
 
     let stmt = event
-        .find_related(EventChallenges)
-        .find_also_related(Challenges);
+        .find_related(event_challenges::Entity)
+        .find_also_related(challenges::Entity);
     // .filter(challenges::Column::Hidden.eq(false)); 并不需要， 比赛题目可以是隐藏的 再说 这是 admin api
 
     let event_challenges = stmt.all(db.get_ref()).await?;
@@ -183,29 +183,31 @@ pub async fn get_challenges(
 }
 
 pub type HiddenChallengeRequest = AddChallengeRequest;
+
+/// POST /api/admin/events/{event_id}/challenges/hidden
 #[post("/hidden")]
 pub async fn hidden_challenges(
     _user: SuperAdminJwtGuard,
     db: WebDb,
-    id: Path<Uuid>,
+    event_id: Path<Uuid>,
     hcr: Json<HiddenChallengeRequest>,
 ) -> UniResult<Vec<event_challenges::Model>> {
     let hcr = hcr.into_inner();
-
-    let event = Events::find_by_id(*id)
+    let event_id = event_id.into_inner();
+    let event = events::Entity::find_by_id(event_id)
         .one(db.get_ref())
         .await?
-        .ok_or(UniError::NotFound(format!(" {} not exist", id)))?;
+        .ok_or(UniError::NotFound(format!(" {} not exist", event_id)))?;
 
     let mut event_challenges_list = Vec::new();
 
     if let Some(challenge_id) = hcr.challenge_id {
-        let challenge = Challenges::find_by_id(challenge_id)
+        let challenge = challenges::Entity::find_by_id(challenge_id)
             .one(db.get_ref())
             .await?
             .ok_or(UniError::NotFound(format!(" {} not exist", challenge_id)))?;
 
-        let event_challenge = EventChallenges::find()
+        let event_challenge = event_challenges::Entity::find()
             .filter(event_challenges::Column::EventId.eq(event.id))
             .filter(event_challenges::Column::ChallengeId.eq(challenge.id))
             .one(db.get_ref())
@@ -221,12 +223,12 @@ pub async fn hidden_challenges(
 
     if let Some(challenge_id_list) = hcr.challenge_id_list {
         for challenge_id in challenge_id_list {
-            let challenge = Challenges::find_by_id(challenge_id)
+            let challenge = challenges::Entity::find_by_id(challenge_id)
                 .one(db.get_ref())
                 .await?
                 .ok_or(UniError::NotFound(format!(" {} not exist", challenge_id)))?;
 
-            let event_challenge = EventChallenges::find()
+            let event_challenge = event_challenges::Entity::find()
                 .filter(event_challenges::Column::EventId.eq(event.id))
                 .filter(event_challenges::Column::ChallengeId.eq(challenge.id))
                 .one(db.get_ref())
@@ -245,29 +247,31 @@ pub async fn hidden_challenges(
 }
 
 pub type OpenChallengeRequest = AddChallengeRequest;
+/// POST /api/admin/events/{event_id}/challenges/open
 #[post("/open")]
 pub async fn open_challenges(
     _user: SuperAdminJwtGuard,
     db: WebDb,
-    id: Path<Uuid>,
+    event_id: Path<Uuid>,
     ocr: Json<OpenChallengeRequest>,
 ) -> UniResult<Vec<event_challenges::Model>> {
     let ocr = ocr.into_inner();
+    let event_id = event_id.into_inner();
 
-    let event = Events::find_by_id(*id)
+    let event = events::Entity::find_by_id(event_id)
         .one(db.get_ref())
         .await?
-        .ok_or(UniError::NotFound(format!(" {} not exist", id)))?;
+        .ok_or(UniError::NotFound(format!(" {} not exist", event_id)))?;
 
     let mut event_challenges_list = Vec::new();
 
     if let Some(challenge_id) = ocr.challenge_id {
-        let challenge = Challenges::find_by_id(challenge_id)
+        let challenge = challenges::Entity::find_by_id(challenge_id)
             .one(db.get_ref())
             .await?
             .ok_or(UniError::NotFound(format!(" {} not exist", challenge_id)))?;
 
-        let event_challenge = EventChallenges::find()
+        let event_challenge = event_challenges::Entity::find()
             .filter(event_challenges::Column::EventId.eq(event.id))
             .filter(event_challenges::Column::ChallengeId.eq(challenge.id))
             .one(db.get_ref())
@@ -283,12 +287,12 @@ pub async fn open_challenges(
 
     if let Some(challenge_id_list) = ocr.challenge_id_list {
         for challenge_id in challenge_id_list {
-            let challenge = Challenges::find_by_id(challenge_id)
+            let challenge = challenges::Entity::find_by_id(challenge_id)
                 .one(db.get_ref())
                 .await?
                 .ok_or(UniError::NotFound(format!(" {} not exist", challenge_id)))?;
 
-            let event_challenge = EventChallenges::find()
+            let event_challenge = event_challenges::Entity::find()
                 .filter(event_challenges::Column::EventId.eq(event.id))
                 .filter(event_challenges::Column::ChallengeId.eq(challenge.id))
                 .one(db.get_ref())

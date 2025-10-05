@@ -1,37 +1,27 @@
-use super::super::preclude::*;
 use crate::{
-    auth::UserJwtGuard,
-    config::get_setting,
-    db::WebDocker,
+    api::preclude::*,
     entity::{
-        challenges, event_instances, event_team_members, event_teams,
-        events::Entity,
-        instances,
-        prelude::{
-            Challenges, EventInstances, EventTeamMembers, EventTeams, Events, Instances, Users,
-        },
+        challenges, event_instances, event_team_members, events, instances,
         sea_orm_active_enums::{EventType, InstanceStatus},
         users,
     },
 };
-use actix_web::{HttpMessage, HttpRequest, delete};
-use anyhow::{Context, Result, anyhow};
+use actix_web::HttpRequest; // TODO : for log
+use anyhow::{Context, anyhow};
 use fcmc::ChallengeMeta;
-use sea_orm::{ColumnTrait, JoinType, ModelTrait, QueryFilter, RelationTrait};
-use sea_orm::{QuerySelect, entity::prelude::Uuid};
 
+/// GET /api/instances
 #[get("")]
 pub async fn get_instances(
     user: UserJwtGuard,
     db: WebDb,
     query_params: Query<QueryParams>,
-    request: HttpRequest,
 ) -> UniResult<Vec<instances::Model>> {
     // challenge no hidden
     let user = user.into_inner();
     let mut query_params = query_params.0;
 
-    let stmt = Instances::find()
+    let stmt = instances::Entity::find()
         .filter(instances::Column::Status.eq(InstanceStatus::Running))
         .filter(instances::Column::Ref.eq("Training"))
         .filter(instances::Column::UserId.eq(user.id));
@@ -59,24 +49,21 @@ pub async fn get_instances(
     }
 }
 
-#[get("/{id}")]
+/// GET /api/instances/{instance_id}
+#[get("/{instance_id}")]
 pub async fn get_instance(
-    _user: UserJwtGuard,
+    user: UserJwtGuard,
     db: WebDb,
-    id: Path<Uuid>,
-    request: HttpRequest,
+    instance_id: Path<Uuid>,
 ) -> UniResult<instances::Model> {
-    let user_id = request
-        .extensions()
-        .get::<Uuid>()
-        .ok_or_else(|| UniError::InternalError("can't parse the Uuid from jwt".to_string()))?
-        .to_owned();
+    let instance_id = instance_id.into_inner();
+    let user = user.into_inner();
 
-    let mut model = Instances::find_by_id(*id)
-        .filter(instances::Column::UserId.eq(user_id))
+    let mut model = instances::Entity::find_by_id(instance_id)
+        .filter(instances::Column::UserId.eq(user.id))
         .one(db.get_ref())
         .await?
-        .ok_or(UniError::NotFound(format!(" {} not exist", id)))?;
+        .ok_or(UniError::NotFound(format!(" {} not exist", instance_id)))?;
 
     model.flag.clear();
 
@@ -90,13 +77,13 @@ pub struct LaunchInstanceRequest {
     // for team
 }
 
+/// POST /api/instances/launch
 #[post("/launch")]
 pub async fn launch_instance(
     user: UserJwtGuard,
     db: WebDb,
     docker: WebDocker,
     lir: Json<LaunchInstanceRequest>,
-    request: HttpRequest,
 ) -> UniResult<instances::Model> {
     let user = user.into_inner();
     let lir = lir.into_inner();
@@ -105,7 +92,7 @@ pub async fn launch_instance(
 
     match lir.event_id {
         Some(event_id) => {
-            let event = Events::find_by_id(event_id)
+            let event = events::Entity::find_by_id(event_id)
                 .one(db.get_ref())
                 .await?
                 .ok_or(UniError::NotFound("no event".into()))?;
@@ -132,16 +119,17 @@ pub async fn launch_instance(
     }
 }
 
-#[delete("/{id}")]
+/// DELETE /api/instances/{instance_id}
+#[delete("/{instance_id}")]
 pub async fn destroy_instance(
     user: UserJwtGuard,
     db: WebDb,
     docker: WebDocker,
-    id: Path<Uuid>,
-    request: HttpRequest,
+    instance_id: Path<Uuid>,
 ) -> UniResult<u64> {
     let user = user.into_inner();
-    __destroy_instance(db, docker, *id, user).await
+    let instance_id = instance_id.into_inner();
+    __destroy_instance(db, docker, instance_id, user).await
 }
 
 pub async fn __destroy_instance(
@@ -150,7 +138,7 @@ pub async fn __destroy_instance(
     id: Uuid,
     user: users::Model,
 ) -> UniResult<u64> {
-    let running_instance = Instances::find_by_id(id)
+    let running_instance = instances::Entity::find_by_id(id)
         .filter(instances::Column::Status.eq(InstanceStatus::Running))
         .filter(instances::Column::UserId.eq(user.id))
         .one(db.get_ref())
@@ -158,7 +146,7 @@ pub async fn __destroy_instance(
 
     if let Some(instance) = running_instance {
         let challenge = instance
-            .find_related(Challenges)
+            .find_related(challenges::Entity)
             .one(db.get_ref())
             .await?
             .ok_or_else(|| UniError::NotFound("challenge not found?".to_string()))?;
@@ -188,7 +176,7 @@ pub async fn jeopardy_single_practice_launch(
     user: users::Model,
     lir: LaunchInstanceRequest,
 ) -> UniResult<instances::Model> {
-    let running_instances_count = Instances::find()
+    let running_instances_count = instances::Entity::find()
         .filter(instances::Column::Status.eq(InstanceStatus::Running))
         .filter(instances::Column::UserId.eq(user.id))
         .filter(instances::Column::Ref.eq("Training"))
@@ -206,7 +194,7 @@ pub async fn jeopardy_single_practice_launch(
     }
 
     // 是否已经有运行中的实例
-    if let Some(running_instance) = Instances::find()
+    if let Some(running_instance) = instances::Entity::find()
         .filter(instances::Column::Status.eq(InstanceStatus::Running))
         .filter(instances::Column::ChallengeId.eq(lir.challenge_id))
         .filter(instances::Column::UserId.eq(user.id))
@@ -241,7 +229,7 @@ pub async fn jeopardy_event_single_launch(
     let event_id = lir.event_id.unwrap();
     let challenge_id = lir.challenge_id;
 
-    let running_instances_count = EventInstances::find()
+    let running_instances_count = event_instances::Entity::find()
         .filter(event_instances::Column::EventId.eq(event_id))
         .filter(event_instances::Column::UserId.eq(user.id))
         .join(
@@ -264,11 +252,11 @@ pub async fn jeopardy_event_single_launch(
     }
 
     // 检查是否已有运行实例
-    if let Some((_, Some(instance))) = EventInstances::find()
+    if let Some((_, Some(instance))) = event_instances::Entity::find()
         .filter(event_instances::Column::EventId.eq(event_id))
         .filter(event_instances::Column::ChallengeId.eq(challenge_id))
         .filter(event_instances::Column::UserId.eq(user.id))
-        .find_also_related(Instances)
+        .find_also_related(instances::Entity)
         .filter(instances::Column::Status.eq(InstanceStatus::Running))
         .one(db.get_ref())
         .await?
@@ -314,14 +302,14 @@ pub async fn jeopardy_event_team_launch(
     let challenge_id = lir.challenge_id;
 
     let (team_id, team_member_count) = {
-        let team_member = EventTeamMembers::find()
+        let team_member = event_team_members::Entity::find()
             .filter(event_team_members::Column::EventId.eq(event_id))
             .filter(event_team_members::Column::UserId.eq(user.id))
             .one(db.get_ref())
             .await?
             .ok_or(UniError::NotFound("you are not in any team".into()))?;
 
-        let team_member_count = EventTeamMembers::find()
+        let team_member_count = event_team_members::Entity::find()
             .filter(event_team_members::Column::TeamId.eq(team_member.team_id))
             .count(db.get_ref())
             .await?;
@@ -330,7 +318,7 @@ pub async fn jeopardy_event_team_launch(
     };
 
     // team_members * 2
-    let running_instances_count = EventInstances::find()
+    let running_instances_count = event_instances::Entity::find()
         .filter(event_instances::Column::EventId.eq(event_id))
         .filter(event_instances::Column::UserId.eq(user.id))
         .filter(event_instances::Column::TeamId.eq(team_id))
@@ -353,11 +341,11 @@ pub async fn jeopardy_event_team_launch(
         .into();
     }
 
-    let running_instance = EventInstances::find()
+    let running_instance = event_instances::Entity::find()
         .filter(event_instances::Column::EventId.eq(event_id))
         .filter(event_instances::Column::ChallengeId.eq(challenge_id))
         .filter(event_instances::Column::TeamId.eq(team_id))
-        .find_also_related(Instances)
+        .find_also_related(instances::Entity)
         .filter(instances::Column::Status.eq(InstanceStatus::Running))
         .one(db.get_ref())
         .await?;
@@ -401,7 +389,7 @@ async fn launch_instance_common(
     r#ref: String,
 ) -> anyhow::Result<instances::Model> {
     // challenge 查询 & meta 解析
-    let challenge = Challenges::find_by_id(challenge_id)
+    let challenge = challenges::Entity::find_by_id(challenge_id)
         .one(db.get_ref())
         .await?
         .ok_or_else(|| anyhow!("no such challenge: {}", challenge_id))?;
@@ -468,7 +456,10 @@ async fn launch_instance_common(
     let d_db = db.clone();
     let d_docker = docker.clone();
     let d_id = res.id;
-    let d_user = Users::find_by_id(user_id).one(db.get_ref()).await?.unwrap();
+    let d_user = users::Entity::find_by_id(user_id)
+        .one(db.get_ref())
+        .await?
+        .unwrap();
 
     actix_web::rt::spawn(async move {
         let now = Utc::now().naive_utc();
@@ -488,7 +479,9 @@ async fn launch_instance_common(
 
     Ok(res)
 }
+
 pub fn gen_flag() -> String {
+    // TODO： for event custom flag prefix
     let unique_flag = Uuid::new_v4();
     format!("flag{{{}}}", unique_flag)
 }

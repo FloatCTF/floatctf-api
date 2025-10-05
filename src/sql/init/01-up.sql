@@ -31,38 +31,6 @@ CREATE TABLE IF NOT EXISTS "super_admin" (
     "updated_at" TIMESTAMP NOT NULL DEFAULT now()
 );
 
-INSERT INTO
-    "super_admin" (
-        "id",
-        "username",
-        "password_hash",
-        "email",
-        "created_at",
-        "updated_at"
-    )
-VALUES (
-        'e9c27136-f30c-4619-8377-756b1148192d',
-        'sysadmin',
-        '$argon2id$v=19$m=19456,t=2,p=1$3THt36/y60+8SreEtA+T5A$xp4mvnbi0niUfEux7u24ZdTnv4t5QnH8ZhA/uF+GDe8',
-        'sysadmin@system.com',
-        '2025-09-29 13:04:49.689893',
-        '2025-09-29 13:04:49.689893'
-    );
-
-CREATE TABLE IF NOT EXISTS "challenges" (
-    "id" UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
-    "name" TEXT NOT NULL UNIQUE,
-    -- ALTER TABLE challenges ADD COLUMN safe_name TEXT; 允许'
-    "safe_name" TEXT NOT NULL UNIQUE,
-    "category" TEXT NOT NULL DEFAULT 'other',
-    "description" TEXT NOT NULL DEFAULT 'no description',
-    "attachment" TEXT NULL,
-    "hidden" BOOLEAN NOT NULL DEFAULT TRUE,
-    "toml_str" TEXT NOT NULL,
-    "created_at" TIMESTAMP NOT NULL DEFAULT now(),
-    "updated_at" TIMESTAMP NOT NULL DEFAULT now()
-);
-
 CREATE TYPE "instance_status" AS ENUM ('pending', 'running', 'completed', 'failed');
 
 CREATE TABLE IF NOT EXISTS "instances" (
@@ -196,123 +164,16 @@ CREATE TABLE IF NOT EXISTS "event_writeup" (
     CONSTRAINT event_writeup_pkey PRIMARY KEY ("event_id", "user_id")
 );
 
-CREATE TABLE "challenge_sets" (
+CREATE TABLE IF NOT EXISTS "challenge_sets" (
     "id" UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
     "name" TEXT NOT NULL,
     "description" TEXT,
     "created_at" TIMESTAMP NOT NULL DEFAULT now()
 );
 
--- 题单与题目关联表
-CREATE TABLE "challenge_set_items" (
+CREATE TABLE IF NOT EXISTS "challenge_set_items" (
     "set_id" UUID NOT NULL REFERENCES "challenge_sets" (id) ON DELETE CASCADE,
     "challenge_id" UUID NOT NULL REFERENCES "challenges" (id) ON DELETE CASCADE,
     PRIMARY KEY ("set_id", "challenge_id")
 );
 -- user_logs,training_logs, event_logs, system_logs, admin_logs
--- users 表索引
-CREATE UNIQUE INDEX IF NOT EXISTS "idx_users_username" ON "users" ("username");
-
-CREATE UNIQUE INDEX IF NOT EXISTS "idx_users_email" ON "users" ("email");
-
--- instances 表索引
-CREATE INDEX IF NOT EXISTS "idx_instances_status" ON "instances" ("status");
-
-CREATE INDEX IF NOT EXISTS "idx_instances_challenge_id" ON "instances" ("challenge_id");
-
-CREATE INDEX IF NOT EXISTS "idx_instances_user_id" ON "instances" ("user_id");
-
--- events 表索引
-CREATE INDEX IF NOT EXISTS "idx_events_type" ON "events" ("type");
-
-CREATE INDEX IF NOT EXISTS "idx_events_start_time" ON "events" ("start_time");
-
-CREATE INDEX IF NOT EXISTS "idx_events_end_time" ON "events" ("end_time");
-
--- event_users 表索引
-CREATE INDEX IF NOT EXISTS "idx_event_users_user_id" ON "event_users" ("user_id");
-
-CREATE INDEX IF NOT EXISTS "idx_event_users_event_id" ON "event_users" ("event_id");
-
--- event_instances 表索引
-CREATE INDEX IF NOT EXISTS "idx_event_instances_event_id" ON "event_instances" ("event_id");
-
-CREATE INDEX IF NOT EXISTS "idx_event_instances_instance_id" ON "event_instances" ("instance_id");
-
--- event_teams 表索引
-CREATE INDEX IF NOT EXISTS "idx_event_teams_event_id" ON "event_teams" ("event_id");
-
--- event_team_members 表索引
-CREATE INDEX IF NOT EXISTS "idx_event_team_members_team_id" ON "event_team_members" ("team_id");
-
-CREATE INDEX IF NOT EXISTS "idx_event_team_members_user_id" ON "event_team_members" ("user_id");
-
-CREATE INDEX "idx_event_user_challenge" ON "event_instances" (
-    "event_id",
-    "user_id",
-    "challenge_id"
-);
-
-CREATE INDEX "idx_event_team_challenge" ON "event_instances" (
-    "event_id",
-    "team_id",
-    "challenge_id"
-);
--- for updated_at
-CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
-BEGIN
-   NEW."updated_at" = now();
-   RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER "trg_users_updated_at"
-BEFORE UPDATE ON "users"
-FOR EACH ROW
-EXECUTE FUNCTION update_updated_at_column();
-
-CREATE TRIGGER "trg_super_admin_updated_at"
-BEFORE UPDATE ON "super_admin"
-FOR EACH ROW
-EXECUTE FUNCTION update_updated_at_column();
-
-CREATE TRIGGER "trg_challenges_updated_at"
-BEFORE UPDATE ON "challenges"
-FOR EACH ROW
-EXECUTE FUNCTION update_updated_at_column();
-
-CREATE TRIGGER "trg_instances_updated_at"
-BEFORE UPDATE ON "instances"
-FOR EACH ROW
-EXECUTE FUNCTION update_updated_at_column();
-
-CREATE TRIGGER "trg_events_updated_at"
-BEFORE UPDATE ON "events"
-FOR EACH ROW
-EXECUTE FUNCTION update_updated_at_column();
-
-CREATE TRIGGER "trg_event_teams_updated_at"
-BEFORE UPDATE ON "event_teams"
-FOR EACH ROW
-EXECUTE FUNCTION update_updated_at_column();
-
-CREATE OR REPLACE FUNCTION generate_safe_name(original TEXT)
-RETURNS TEXT AS $$
-BEGIN
-  RETURN regexp_replace(lower(original), '[^a-z0-9]+', '_', 'g');
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE OR REPLACE FUNCTION set_safe_name()
-RETURNS TRIGGER AS $$
-BEGIN
-  NEW.safe_name := generate_safe_name(NEW.name);
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER trg_set_safe_name
-BEFORE INSERT OR UPDATE OF name ON challenges
-FOR EACH ROW
-EXECUTE FUNCTION set_safe_name();

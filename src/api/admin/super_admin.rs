@@ -1,18 +1,16 @@
-use super::super::preclude::*;
-use crate::{
-    auth::SuperAdminJwtGuard,
-    entity::{prelude::SuperAdmin, super_admin},
-};
+use crate::{api::preclude::*, entity::super_admin};
 use argon2::{
     Argon2,
     password_hash::{PasswordHasher, SaltString, rand_core::OsRng},
 };
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CreateSuperAdminRequest {
     username: String,
     password: String,
     email: String,
 }
+/// POST /api/admin/super_admin
 #[post("")]
 pub async fn create_super_admin(
     _user: SuperAdminJwtGuard,
@@ -45,62 +43,28 @@ pub async fn create_super_admin(
     UniResponse::ok(super_admin.into()).into()
 }
 
-type UpdateSuperAdminRequest = CreateSuperAdminRequest;
-#[post("/{id}")]
-pub async fn update_super_admin(
-    _user: SuperAdminJwtGuard,
-    db: WebDb,
-    usr: Json<UpdateSuperAdminRequest>,
-    id: Path<Uuid>,
-) -> UniResult<super_admin::Model> {
-    let usr = usr.into_inner();
-    let hashed_password = {
-        let salt = SaltString::generate(&mut OsRng);
-        let argon2 = Argon2::default();
-
-        let password_hash = argon2
-            .hash_password(usr.password.as_bytes(), &salt)
-            .map_err(|e| UniError::CustomError(format!("{}", e.to_string())))?
-            .to_string();
-
-        password_hash
-    };
-
-    let super_admin = SuperAdmin::find_by_id(*id)
-        .one(db.get_ref())
-        .await?
-        .ok_or_else(|| UniError::NotFound(format!("{} not exist", id)))?;
-
-    let mut m_super_admin = super_admin.into_active_model();
-
-    m_super_admin.username = Set(usr.username);
-    m_super_admin.password_hash = Set(hashed_password);
-    m_super_admin.email = Set(usr.email);
-
-    let super_admin = m_super_admin.update(db.get_ref()).await?;
-
-    UniResponse::ok(super_admin.into()).into()
-}
-
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PatchSuperAdminRequest {
     username: Option<String>,
     password: Option<String>,
     email: Option<String>,
 }
-#[post("/{id}")]
+
+/// POST /api/admin/super_admin/{super_user_id}
+#[post("/{super_user_id}")]
 pub async fn patch_super_admin(
     _user: SuperAdminJwtGuard,
     db: WebDb,
     psr: Json<PatchSuperAdminRequest>,
-    id: Path<Uuid>,
+    super_user_id: Path<Uuid>,
 ) -> UniResult<super_admin::Model> {
     let psr = psr.into_inner();
+    let super_user_id = super_user_id.into_inner();
 
-    let super_admin = SuperAdmin::find_by_id(*id)
+    let super_admin = super_admin::Entity::find_by_id(super_user_id)
         .one(db.get_ref())
         .await?
-        .ok_or_else(|| UniError::NotFound(format!("{} not exist", id)))?;
+        .ok_or_else(|| UniError::NotFound(format!("{} not exist", super_user_id)))?;
 
     let mut m_super_admin = super_admin.into_active_model();
 
@@ -132,6 +96,7 @@ pub async fn patch_super_admin(
     UniResponse::ok(super_admin.into()).into()
 }
 
+/// GET /api/admin/super_admin
 #[get("")]
 pub async fn get_super_admins(
     _user: SuperAdminJwtGuard,
@@ -140,7 +105,7 @@ pub async fn get_super_admins(
 ) -> UniResult<Vec<super_admin::Model>> {
     let mut query_params = query_params.0;
 
-    let stmt = SuperAdmin::find();
+    let stmt = super_admin::Entity::find();
 
     if let (Some(limit), Some(page)) = (query_params.limit, query_params.page) {
         let paginator = stmt.paginate(db.get_ref(), limit);
@@ -156,30 +121,35 @@ pub async fn get_super_admins(
     }
 }
 
-#[get("/{id}")]
+/// GET /api/admin/super_admin/{super_user_id}
+#[get("/{super_user_id}")]
 pub async fn get_super_admin(
     _user: SuperAdminJwtGuard,
     db: WebDb,
-    id: Path<Uuid>,
+    super_user_id: Path<Uuid>,
 ) -> UniResult<super_admin::Model> {
-    let model = SuperAdmin::find_by_id(*id)
+    let super_user_id = super_user_id.into_inner();
+    let model = super_admin::Entity::find_by_id(super_user_id)
         .one(db.get_ref())
         .await?
-        .ok_or_else(|| UniError::NotFound(format!("{} not exist", id)))?;
+        .ok_or_else(|| UniError::NotFound(format!("{} not exist", super_user_id)))?;
 
     UniResponse::ok(model.into()).into()
 }
 
+/// DELETE /api/admin/super_admin/{super_user_id}
 #[delete("/{id}")]
 pub async fn delete_super_admin(
     _user: SuperAdminJwtGuard,
     db: WebDb,
-    id: Path<Uuid>,
+    super_user_id: Path<Uuid>,
 ) -> UniResult<u64> {
-    let super_admin = SuperAdmin::find_by_id(*id)
+    let super_user_id = super_user_id.into_inner();
+
+    let super_admin = super_admin::Entity::find_by_id(super_user_id)
         .one(db.get_ref())
         .await?
-        .ok_or_else(|| UniError::NotFound(format!("{} not exist", id)))?;
+        .ok_or_else(|| UniError::NotFound(format!("{} not exist", super_user_id)))?;
 
     let r = super_admin.delete(db.get_ref()).await?;
 

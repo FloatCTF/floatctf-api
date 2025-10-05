@@ -1,5 +1,5 @@
 mod admin;
-mod preclude;
+pub mod preclude;
 mod service;
 
 pub use admin::config as admin_config;
