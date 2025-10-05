@@ -256,7 +256,7 @@ pub async fn get_event_challenges(
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct EventInstance {
+pub struct EventInstanceResult {
     pub instance: instances::Model,
     pub challenge_name: String,
     pub user_nickname: String,
@@ -267,7 +267,7 @@ pub async fn get_event_instances(
     user: UserJwtGuard,
     db: WebDb,
     id: Path<Uuid>,
-) -> UniResult<Vec<EventInstance>> {
+) -> UniResult<Vec<EventInstanceResult>> {
     let user = user.into_inner();
 
     let event = events::Entity::find_by_id(*id)
@@ -296,9 +296,9 @@ pub async fn get_event_instances(
                 .await?;
 
             // 👇 把结果组装成 EventInstance
-            let instances: Vec<EventInstance> = data
+            let instances: Vec<EventInstanceResult> = data
                 .into_iter()
-                .map(|(instance, challenge_opt, user_opt)| EventInstance {
+                .map(|(instance, challenge_opt, user_opt)| EventInstanceResult {
                     instance,
                     challenge_name: challenge_opt.map(|c| c.name).unwrap_or_default(),
                     user_nickname: user_opt.map(|u| u.nickname).unwrap_or_default(),
@@ -326,13 +326,15 @@ pub async fn get_event_instances(
                 .await?;
 
             // 👇 把结果组装成 EventInstance
-            let instances: Vec<EventInstance> = data
+            let instances: Vec<EventInstanceResult> = data
                 .into_iter()
-                .map(|(_event_instance, instance, challenge)| EventInstance {
-                    instance: instance.unwrap(),
-                    challenge_name: challenge.map(|c| c.name).unwrap_or_default(),
-                    user_nickname: "".to_string(), // 团队赛没有用户昵称 TODO: 这里应该是团队名称
-                })
+                .map(
+                    |(_event_instance, instance, challenge)| EventInstanceResult {
+                        instance: instance.unwrap(),
+                        challenge_name: challenge.map(|c| c.name).unwrap_or_default(),
+                        user_nickname: "".to_string(), // 团队赛没有用户昵称 TODO: 这里应该是团队名称
+                    },
+                )
                 .collect();
             UniResponse::ok(instances.into()).into()
         }

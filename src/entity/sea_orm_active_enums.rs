@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
     db_type = "Enum",
     enum_name = "event_team_member_role"
 )]
+#[serde(rename_all = "snake_case")]
 pub enum EventTeamMemberRole {
     #[sea_orm(string_value = "captain")]
     Captain,
@@ -17,6 +18,7 @@ pub enum EventTeamMemberRole {
 }
 #[derive(Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize)]
 #[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "event_type")]
+#[serde(rename_all = "snake_case")]
 pub enum EventType {
     #[sea_orm(string_value = "jeopardy_single")]
     JeopardySingle,
@@ -27,6 +29,7 @@ pub enum EventType {
 }
 #[derive(Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize)]
 #[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "instance_status")]
+#[serde(rename_all = "snake_case")]
 pub enum InstanceStatus {
     #[sea_orm(string_value = "pending")]
     Pending,
@@ -39,6 +42,7 @@ pub enum InstanceStatus {
 }
 #[derive(Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize)]
 #[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "setting_value_type")]
+#[serde(rename_all = "snake_case")]
 pub enum SettingValueType {
     #[sea_orm(string_value = "string")]
     String,

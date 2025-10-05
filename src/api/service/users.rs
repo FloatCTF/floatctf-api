@@ -27,7 +27,7 @@ pub async fn user_login(db: WebDb, ulr: Json<UserLoginRequest>) -> UniResult<Str
     {
         Some(user) => {
             let verified = {
-                let parsed_hash = PasswordHash::new(&user.password_hash).map_err(|e| {
+                let parsed_hash = PasswordHash::new(&user.password).map_err(|e| {
                     UniError::InternalError(format!("Failed to new the PasswordHash: {e}"))
                 })?;
                 Argon2::default()
@@ -75,7 +75,7 @@ pub async fn create_user(db: WebDb, cur: Json<CreateUserRequest>) -> UniResult<S
 
     let new_user = users::ActiveModel {
         username: Set(cur.username),
-        password_hash: Set(hashed_password),
+        password: Set(hashed_password),
         email: Set(cur.email),
         nickname: Set(cur.nickname),
         ..Default::default()
@@ -95,7 +95,7 @@ pub async fn create_user(db: WebDb, cur: Json<CreateUserRequest>) -> UniResult<S
 #[get("/me")]
 pub async fn get_me(user: UserJwtGuard) -> UniResult<users::Model> {
     let mut user = user.into_inner();
-    user.password_hash = "".to_string();
+    user.password = "".to_string();
     UniResponse::ok(user.into()).into()
 }
 
@@ -132,7 +132,7 @@ pub async fn patch_me(user: UserJwtGuard, db: WebDb, pmr: Json<PatchMeRequest>) 
             password_hash
         };
 
-        m_user.password_hash = Set(hashed_password);
+        m_user.password = Set(hashed_password);
     }
 
     m_user.update(db.get_ref()).await?;

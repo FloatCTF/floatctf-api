@@ -23,7 +23,7 @@ pub async fn super_admin_login(db: WebDb, slr: Json<SuperAdminLoginRequest>) -> 
     {
         Some(super_admin) => {
             let verified = {
-                let parsed_hash = PasswordHash::new(&super_admin.password_hash).map_err(|e| {
+                let parsed_hash = PasswordHash::new(&super_admin.password).map_err(|e| {
                     UniError::InternalError(format!("Failed to new the PasswordHash: {e}"))
                 })?;
                 Argon2::default()

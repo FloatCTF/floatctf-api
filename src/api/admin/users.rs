@@ -35,7 +35,7 @@ pub async fn create_user(
 
     let new_user = users::ActiveModel {
         username: Set(cur.username),
-        password_hash: Set(hashed_password),
+        password: Set(hashed_password),
         email: Set(cur.email),
         nickname: Set(cur.nickname),
         ..Default::default()
@@ -87,7 +87,7 @@ pub async fn patch_user(
             password_hash
         };
 
-        m_user.password_hash = Set(hashed_password);
+        m_user.password = Set(hashed_password);
     }
 
     pur.email.map(|e| {
@@ -164,42 +164,13 @@ pub async fn delete_user(
 pub async fn add_users() {
     dotenvy::dotenv().ok();
     let db = crate::db::init_db().await.unwrap();
-    let users = [
-        users::ActiveModel {
-            username: Set("user2".to_string()),
-            password_hash: Set("user2".to_string()),
-            email: Set("user2".to_string()),
-            nickname: Set("user2".to_string()),
-            ..Default::default()
-        },
-        {
-            users::ActiveModel {
-                username: Set("user3".to_string()),
-                password_hash: Set("user3".to_string()),
-                email: Set("user3".to_string()),
-                nickname: Set("user3".to_string()),
-                ..Default::default()
-            }
-        },
-        {
-            users::ActiveModel {
-                username: Set("user4".to_string()),
-                password_hash: Set("user4".to_string()),
-                email: Set("user4".to_string()),
-                nickname: Set("user4".to_string()),
-                ..Default::default()
-            }
-        },
-        {
-            users::ActiveModel {
-                username: Set("user5".to_string()),
-                password_hash: Set("user5".to_string()),
-                email: Set("user5".to_string()),
-                nickname: Set("user5".to_string()),
-                ..Default::default()
-            }
-        },
-    ];
+    let users = [users::ActiveModel {
+        username: Set("user2".to_string()),
+        password: Set("user2".to_string()),
+        email: Set("user2".to_string()),
+        nickname: Set("user2".to_string()),
+        ..Default::default()
+    }];
 
     for user in users {
         user.insert(&db).await.unwrap();

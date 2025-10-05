@@ -33,7 +33,7 @@ pub async fn create_super_admin(
 
     let new_super_admin = super_admin::ActiveModel {
         username: Set(csr.username),
-        password_hash: Set(hashed_password),
+        password: Set(hashed_password),
         email: Set(csr.email),
         ..Default::default()
     };
@@ -84,7 +84,7 @@ pub async fn patch_super_admin(
 
             password_hash
         };
-        m_super_admin.password_hash = Set(hashed_password);
+        m_super_admin.password = Set(hashed_password);
     }
 
     psr.email.map(|e| {
@@ -174,7 +174,7 @@ pub async fn add_admin() {
 
     let new_super_admin = super_admin::ActiveModel {
         username: Set(username.into()),
-        password_hash: Set(hashed_password.to_string()),
+        password: Set(hashed_password.to_string()),
         email: Set(email.into()),
         ..Default::default()
     };
