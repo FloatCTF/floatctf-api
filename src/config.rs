@@ -3,43 +3,49 @@ use crate::entity::settings;
 use sea_orm::{
     ActiveValue::Set, ColumnTrait, DbConn, EntityTrait, QueryFilter, sea_query::OnConflict,
 };
+use std::env;
 
 pub async fn init_settings(db: &DbConn) {
     let defaults = vec![
         (
             "INSTANCE_DESTROY_DELAY",
-            "60",
+            env::var("INSTANCE_DESTROY_DELAY").unwrap_or("60".to_string()),
             SettingValueType::Integer,
             "实例销毁延迟时间 (分钟)",
         ),
         (
             "EVENT_SCORE_DECAY",
-            "15",
+            env::var("EVENT_SCORE_DECAY").unwrap_or("15".to_string()),
             SettingValueType::Integer,
             "比赛题目分数衰减系数",
         ),
         (
             "EVENT_SCORE_MIN_PERCENT",
-            "0.45",
+            env::var("EVENT_SCORE_MIN_PERCENT").unwrap_or("0.45".to_string()),
             SettingValueType::Float,
             "比赛题目最低分数为题目的百分比",
         ),
         (
             "CHALLENGES_DIR",
-            "./fcmc/challenges",
+            env::var("CHALLENGES_DIR").unwrap_or("./challenges".to_string()),
             SettingValueType::String,
             "题目位置",
         ),
         (
             "HTTP_PREFIX",
-            "http://",
+            env::var("HTTP_PREFIX").unwrap_or("http://".to_string()),
             SettingValueType::String,
             "HTTP前缀",
         ),
-        ("NODE_IP", "127.0.0.1", SettingValueType::String, "节点IP"),
+        (
+            "NODE_IP",
+            env::var("NODE_IP").unwrap_or("127.0.0.1".to_string()),
+            SettingValueType::String,
+            "节点IP",
+        ),
         (
             "UPLOAD_DIR",
-            "uploads",
+            env::var("UPLOAD_DIR").unwrap_or("./uploads".to_string()),
             SettingValueType::String,
             "上传目录位置",
         ),
