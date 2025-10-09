@@ -8,6 +8,7 @@ use crate::{
 use actix_multipart::form::{MultipartForm, tempfile::TempFile, text::Text};
 use base64::Engine;
 use fcmc::ChallengeMeta;
+
 use sea_orm::{
     ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set, sea_query::OnConflict,
 };
@@ -385,9 +386,20 @@ pub async fn check_challenges(
 }
 pub fn generate_safe_name(original: &str) -> String {
     original
-        .to_lowercase()
         .chars()
-        .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+        .map(|c| {
+            if c.is_ascii() {
+                // 保留 ASCII 字母、数字、空格、点号、下划线、连字符
+                if c.is_ascii_alphanumeric() || c == ' ' || c == '.' || c == '_' || c == '-' {
+                    c
+                } else {
+                    '_'
+                }
+            } else {
+                // 中文、日文、韩文、emoji 等非 ASCII 字符不处理
+                c
+            }
+        })
         .collect()
 }
 
