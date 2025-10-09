@@ -2,7 +2,7 @@ INSERT INTO
     "super_admin" (
         "id",
         "username",
-        "password_hash",
+        "password",
         "email",
         "created_at",
         "updated_at"
@@ -15,17 +15,3 @@ VALUES (
         '2025-09-29 13:04:49.689893',
         '2025-09-29 13:04:49.689893'
     );
-
-CREATE TABLE IF NOT EXISTS "challenges" (
-    "id" UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
-    "name" TEXT NOT NULL UNIQUE,
-    -- ALTER TABLE challenges ADD COLUMN safe_name TEXT; 允许'
-    "safe_name" TEXT NOT NULL UNIQUE,
-    "category" TEXT NOT NULL DEFAULT 'other',
-    "description" TEXT NOT NULL DEFAULT 'no description',
-    "attachment" TEXT NULL,
-    "hidden" BOOLEAN NOT NULL DEFAULT TRUE,
-    "toml_str" TEXT NOT NULL,
-    "created_at" TIMESTAMP NOT NULL DEFAULT now(),
-    "updated_at" TIMESTAMP NOT NULL DEFAULT now()
-);
