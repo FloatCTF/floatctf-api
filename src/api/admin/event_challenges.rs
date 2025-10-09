@@ -59,7 +59,10 @@ pub async fn add_challenge(
                 match toml::from_str::<toml::Value>(&challenge.toml_str) {
                     // 只有 添加到 event_challenges 才会有 points
                     // 所以这里的 points 是从 challenge.toml_str 中解析出来的
-                    Ok(value) => value.get("points").and_then(|v| v.as_float()).unwrap_or(0) as f64,
+                    Ok(value) => value
+                        .get("points")
+                        .and_then(|v| v.as_float())
+                        .unwrap_or(0.0) as f64,
                     Err(_err) => {
                         println!("Error parsing TOML: {}", _err);
                         100 as f64
