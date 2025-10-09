@@ -105,10 +105,10 @@ pub async fn launch_instance(
 
             match event.r#type {
                 EventType::JeopardySingle => {
-                    return jeopardy_event_single_launch(db, docker, user, lir).await;
+                    return jeopardy_event_single_launch(db, docker, user, lir, event).await;
                 }
                 EventType::JeopardyTeam => {
-                    return jeopardy_event_team_launch(db, docker, user, lir).await;
+                    return jeopardy_event_team_launch(db, docker, user, lir, event).await;
                 }
                 _ => return UniError::InternalError("unimplemented!".into()).into(),
             }
@@ -213,6 +213,7 @@ pub async fn jeopardy_single_practice_launch(
         identifier,
         user.id,
         "Training".into(),
+        None,
     )
     .await
     .map_err(|e| UniError::InternalError(e.to_string()))?;
@@ -225,6 +226,7 @@ pub async fn jeopardy_event_single_launch(
     docker: WebDocker,
     user: users::Model,
     lir: LaunchInstanceRequest,
+    event: events::Model,
 ) -> UniResult<instances::Model> {
     let event_id = lir.event_id.unwrap();
     let challenge_id = lir.challenge_id;
@@ -274,6 +276,7 @@ pub async fn jeopardy_event_single_launch(
         identifier,
         user.id,
         "JeopardySingle".into(),
+        event.flag_prefix,
     )
     .await
     .map_err(|e| UniError::InternalError(e.to_string()))?;
@@ -297,6 +300,7 @@ pub async fn jeopardy_event_team_launch(
     docker: WebDocker,
     user: users::Model,
     lir: LaunchInstanceRequest,
+    event: events::Model,
 ) -> UniResult<instances::Model> {
     let event_id = lir.event_id.unwrap();
     let challenge_id = lir.challenge_id;
@@ -363,6 +367,7 @@ pub async fn jeopardy_event_team_launch(
         identifier,
         user.id,
         "JeopardyTeam".into(),
+        event.flag_prefix,
     )
     .await
     .map_err(|e| UniError::InternalError(e.to_string()))?;
@@ -387,6 +392,7 @@ async fn launch_instance_common(
     identifier: String,
     user_id: Uuid,
     r#ref: String,
+    flag_prefix: Option<String>,
 ) -> anyhow::Result<instances::Model> {
     // challenge 查询 & meta 解析
     let challenge = challenges::Entity::find_by_id(challenge_id)
@@ -398,7 +404,7 @@ async fn launch_instance_common(
         .context("failed to parse challenge toml_str")?;
 
     let flag = if cm.flag.value.is_empty() {
-        gen_flag()
+        gen_flag(&db, flag_prefix).await
     } else {
         cm.flag.value.clone()
     };
@@ -429,7 +435,7 @@ async fn launch_instance_common(
                 )
             }
         },
-        None => cm.description,
+        None => "".into(),
     };
 
     let delay = get_setting(&db, "INSTANCE_DESTROY_DELAY")
@@ -480,8 +486,15 @@ async fn launch_instance_common(
     Ok(res)
 }
 
-pub fn gen_flag() -> String {
-    // TODO： for event custom flag prefix
-    let unique_flag = Uuid::new_v4();
-    format!("flag{{{}}}", unique_flag)
+pub async fn gen_flag(db: &WebDb, flag_prefix: Option<String>) -> String {
+    let unique_value = Uuid::new_v4();
+
+    let prefix = match flag_prefix {
+        Some(prefix) => prefix,
+        None => get_setting(db, "FLAG_PREFIX")
+            .await
+            .unwrap_or("flag".into()),
+    };
+
+    format!("{}{{{}}}", prefix, unique_value)
 }

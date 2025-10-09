@@ -86,7 +86,7 @@ def rust_to_ts(rust_code: str, known_enums: set, enums_module: str):
     import_line = ""
     if imports:
         import_line = (
-            f"import {{ {', '.join(sorted(imports))} }} from './{enums_module}';\n\n"
+            f"import type {{ {', '.join(sorted(imports))} }} from './{enums_module}';\n\n"
         )
 
     return import_line + f"export type {type_name} = {{\n" + "\n".join(lines) + "\n};\n"

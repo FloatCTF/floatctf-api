@@ -62,6 +62,7 @@ pub struct PatchEventRequest {
     pub hidden: Option<bool>,
     pub allow_join: Option<bool>,
     pub rules: Option<String>,
+    pub flag_prefix: Option<String>,
     pub start_time: Option<NaiveDateTime>,
     pub end_time: Option<NaiveDateTime>,
 }
@@ -112,6 +113,11 @@ pub async fn patch_event(
     per.rules.map(|r| {
         m_event.rules = Set(r.into());
     });
+
+    per.flag_prefix.map(|f| {
+        m_event.flag_prefix = Set(f.into());
+    });
+
     let event = m_event.update(db.get_ref()).await?;
 
     UniResponse::ok(event.into()).into()

@@ -49,6 +49,12 @@ pub async fn init_settings(db: &DbConn) {
             SettingValueType::String,
             "上传目录位置",
         ),
+        (
+            "FLAG_PREFIX",
+            "flag".to_string(),
+            SettingValueType::String,
+            "全局flag前缀",
+        ),
     ];
 
     for (key, value, value_type, description) in defaults {

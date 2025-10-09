@@ -72,6 +72,7 @@ CREATE TABLE IF NOT EXISTS "events" (
     "start_time" TIMESTAMP NOT NULL,
     "rules" TEXT NOT NULL DEFAULT 'do not cheat',
     "allow_join" BOOLEAN NOT NULL DEFAULT FALSE,
+    "flag_prefix" TEXT NULL DEFAULT 'flag',
     "end_time" TIMESTAMP NOT NULL,
     "created_at" TIMESTAMP NOT NULL DEFAULT now(),
     "updated_at" TIMESTAMP NOT NULL DEFAULT now()

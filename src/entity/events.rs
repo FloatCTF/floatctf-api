@@ -22,6 +22,8 @@ pub struct Model {
     #[sea_orm(column_type = "Text")]
     pub rules: String,
     pub allow_join: bool,
+    #[sea_orm(column_type = "Text", nullable)]
+    pub flag_prefix: Option<String>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
