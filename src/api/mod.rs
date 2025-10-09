@@ -1,6 +1,6 @@
-mod admin;
+pub mod admin;
 pub mod preclude;
-mod service;
+pub mod service;
 
 pub use admin::config as admin_config;
 pub use service::config as service_config;

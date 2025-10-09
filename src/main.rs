@@ -45,6 +45,12 @@ async fn main() -> std::io::Result<()> {
     let docker: db::WebDocker =
         web::Data::new(db::init_docker().await.expect("no docker installed!"));
 
+    // for running instances
+    api::admin::kill_running_instances(db.clone(), docker.clone())
+        .await
+        .expect("kill running instances failed!");
+
+    // for server
     let ip = env::var("SERVER_LISTEN_IP").unwrap_or("127.0.0.1".to_string());
     let port = env::var("SERVER_LISTEN_PORT")
         .unwrap_or("8080".to_string())

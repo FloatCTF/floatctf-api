@@ -1,5 +1,5 @@
-use crate::entity::sea_orm_active_enums::SettingValueType;
-use crate::entity::settings;
+use crate::entity::{instances, settings};
+use crate::{db::WebDb, entity::sea_orm_active_enums::SettingValueType};
 use sea_orm::{
     ActiveValue::Set, ColumnTrait, DbConn, EntityTrait, QueryFilter, sea_query::OnConflict,
 };

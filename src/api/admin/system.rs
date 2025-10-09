@@ -4,6 +4,7 @@ use bollard::Docker;
 use bollard::container::ListContainersOptions;
 use bollard::image::ListImagesOptions;
 use pnet::datalink;
+use sea_orm::{ConnectionTrait, Statement};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use sysinfo::{Components, Disks, Networks, System};
@@ -220,3 +221,35 @@ pub async fn get_sys_info(_: SuperAdminJwtGuard) -> UniResult<SystemInformation>
     )
     .into()
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+struct SqlRequest {
+    sql: String,
+}
+// #[post("/sql")]
+// pub async fn sql(
+//     _: SuperAdminJwtGuard,
+//     body: Json<SqlRequest>,
+//     db: WebDb,
+// ) -> UniResult<serde_json::Value> {
+//     let sql = body.into_inner().sql;
+
+//     // 使用 SeaORM 原生查询执行 SQL
+//     match db
+//         .get_ref()
+//         .query_all(Statement::from_string(
+//             sea_orm::DatabaseBackend::Postgres,
+//             sql.to_string(),
+//         ))
+//         .await
+//     {
+//         Ok(rows) => {
+//             let rows: Vec<_> = rows
+//                 .into_iter()
+//                 .map(|row| row.try_get::<String>("", "name").unwrap_or_default())
+//                 .collect();
+//             let a = Json(json!({ "result": rows }));
+//         }
+//         Err(e) => UniError::CustomError(format!("SQL 执行失败: {}", e)).into(),
+//     }
+// }

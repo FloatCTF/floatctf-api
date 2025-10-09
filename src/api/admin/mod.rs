@@ -12,6 +12,7 @@ mod super_admin;
 mod system;
 mod users;
 use actix_web::web::{ServiceConfig, scope};
+pub use instances::kill_running_instances;
 
 pub fn config(cfg: &mut ServiceConfig) {
     // GET /api/admin/monitor

@@ -1,4 +1,7 @@
-use crate::{api::preclude::*, entity::instances};
+use crate::{
+    api::{preclude::*, service::__destroy_instance},
+    entity::{instances, sea_orm_active_enums::InstanceStatus, users},
+};
 
 /// GET /api/admin/instances
 #[get("")]
@@ -39,4 +42,22 @@ pub async fn get_instance(
         .ok_or(UniError::NotFound(format!(" {} not exist", instance_id)))?;
 
     UniResponse::ok(model.into()).into()
+}
+
+pub async fn kill_running_instances(db: WebDb, docker: WebDocker) -> anyhow::Result<()> {
+    let instances_users = instances::Entity::find()
+        .filter(instances::Column::Status.eq(InstanceStatus::Running))
+        .find_also_related(users::Entity)
+        .all(db.get_ref())
+        .await?;
+
+    for (instance, user) in instances_users
+        .into_iter()
+        .filter_map(|(i, u)| u.map(|user| (i, user)))
+    {
+        __destroy_instance(db.clone(), docker.clone(), instance.id, user).await?;
+        tracing::info!("Killed instance {}", instance.id);
+    }
+
+    Ok(())
 }
