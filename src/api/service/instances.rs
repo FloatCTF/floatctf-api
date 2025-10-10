@@ -154,17 +154,18 @@ pub async fn __destroy_instance(
         let cm = ChallengeMeta::from_toml_str(&challenge.toml_str)
             .map_err(|e| UniError::InternalError(format!("destroy the instance: {}", e)))?;
 
-        //  no docker
-        if cm.docker.is_some() {
-            cm.stop_and_remove(docker.get_ref(), &instance.identifier)
-                .await
-                .map_err(|e| UniError::InternalError(format!("destroy the instance: {}", e)))?;
-        }
-
+        let instance_identifier = instance.identifier.clone();
         let mut m_instance = instance.into_active_model();
         m_instance.status = Set(InstanceStatus::Completed);
         m_instance.updated_at = Set(Utc::now().naive_utc());
         m_instance.update(db.get_ref()).await?;
+
+        //  no docker
+        if cm.docker.is_some() {
+            cm.stop_and_remove(docker.get_ref(), &instance_identifier)
+                .await
+                .map_err(|e| UniError::InternalError(format!("destroy the instance: {}", e)))?;
+        }
     }
 
     UniResponse::ok(1.into()).into()
@@ -205,7 +206,12 @@ pub async fn jeopardy_single_practice_launch(
     }
 
     // 调用公共函数启动实例
-    let identifier = format!("{}_{}", user.id, lir.challenge_id);
+    let identifier = {
+        let user_id_prefix = get_uuid_prefix(&user.id);
+        let challenge_id_prefix = get_uuid_prefix(&lir.challenge_id);
+        format!("P-{}-{}", user_id_prefix, challenge_id_prefix)
+    };
+
     let res_instance = launch_instance_common(
         &db,
         &docker,
@@ -267,7 +273,15 @@ pub async fn jeopardy_event_single_launch(
     }
 
     // 调用公共启动逻辑
-    let identifier = format!("{}_{}_{}", event_id, user.id, challenge_id);
+    let identifier = {
+        let event_id_preifx = get_uuid_prefix(&event_id);
+        let user_id_prefix = get_uuid_prefix(&user.id);
+        let challenge_id_prefix = get_uuid_prefix(&challenge_id);
+        format!(
+            "JS-{}-{}-{}",
+            event_id_preifx, user_id_prefix, challenge_id_prefix
+        )
+    };
 
     let res_instance = launch_instance_common(
         &db,
@@ -358,7 +372,15 @@ pub async fn jeopardy_event_team_launch(
         return UniResponse::ok(instance.into()).into();
     }
 
-    let identifier = format!("{}_{}_{}", event_id, team_id, challenge_id);
+    let identifier = {
+        let event_id_preifx = get_uuid_prefix(&event_id);
+        let team_id_prefix = get_uuid_prefix(&team_id);
+        let challenge_id_prefix = get_uuid_prefix(&challenge_id);
+        format!(
+            "JT-{}-{}-{}",
+            event_id_preifx, team_id_prefix, challenge_id_prefix
+        )
+    };
 
     let res_instance = launch_instance_common(
         &db,
@@ -497,4 +519,9 @@ pub async fn gen_flag(db: &WebDb, flag_prefix: Option<String>) -> String {
     };
 
     format!("{}{{{}}}", prefix, unique_value)
+}
+
+pub fn get_uuid_prefix(uuid: &Uuid) -> String {
+    let uuid_str = uuid.to_string();
+    uuid_str.split('-').next().unwrap_or("").to_string()
 }
