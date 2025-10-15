@@ -1,5 +1,5 @@
 use crate::{
-    api::preclude::*,
+    api::{preclude::*, service::events::EventStatus},
     entity::{
         challenges, event_instances, event_team_members, events, instances,
         sea_orm_active_enums::{EventType, InstanceStatus},
@@ -97,10 +97,11 @@ pub async fn launch_instance(
                 .await?
                 .ok_or(UniError::NotFound("no event".into()))?;
 
-            //  guard for end
-            let now = Utc::now().naive_utc();
-            if now >= event.end_time {
-                return Err(UniError::CustomError("Event has already ended".to_string()));
+            match EventStatus::check(&db, &event_id).await? {
+                EventStatus::Ended | EventStatus::NotStarted => {
+                    return Err(UniError::CustomError("Event is no ongoing".to_string()));
+                }
+                EventStatus::Ongoing => {}
             }
 
             match event.r#type {

@@ -141,12 +141,13 @@ pub async fn get_event_challenges(
         .await?
         .ok_or(UniError::NotFound("event not found".to_string()))?;
 
-    let now = Utc::now().naive_utc(); // 当前 UTC 时间
-    if now < event.start_time {
-        return Err(UniError::CustomError(
-            "Event has not started yet".to_string(),
-        ));
+    match EventStatus::check(&db, &event.id).await? {
+        EventStatus::NotStarted => {
+            return Err(UniError::CustomError("Event is not start".to_string()));
+        }
+        EventStatus::Ongoing | EventStatus::Ended => {}
     }
+
     let joined = event_users::Entity::find_by_id((*id, user.id))
         .one(db.get_ref())
         .await?
@@ -276,11 +277,11 @@ pub async fn get_event_instances(
         .await?
         .ok_or(UniError::NotFound("event not found".to_string()))?;
 
-    let now = Utc::now().naive_utc(); // 当前 UTC 时间
-    if now < event.start_time {
-        return Err(UniError::CustomError(
-            "Event has not started yet".to_string(),
-        ));
+    match EventStatus::check(&db, &event.id).await? {
+        EventStatus::NotStarted => {
+            return Err(UniError::CustomError("Event is no ongoing".to_string()));
+        }
+        EventStatus::Ongoing | EventStatus::Ended => {}
     }
 
     match event.r#type {
@@ -421,12 +422,13 @@ pub async fn create_team(
         .await?
         .ok_or(UniError::NotFound("event not found".to_string()))?;
 
-    let now = Utc::now().naive_utc(); // 当前 UTC 时间
-    if now >= event.start_time {
-        return Err(UniError::CustomError(
-            "Event has already started".to_string(),
-        ));
+    match EventStatus::check(&db, &event.id).await? {
+        EventStatus::Ongoing | EventStatus::Ended => {
+            return Err(UniError::CustomError("Event has not yet begun".to_string()));
+        }
+        EventStatus::NotStarted => {}
     }
+
     // 判断是否已经加入了团队
     let event_user = event_users::Entity::find_by_id((event_id, user.id))
         .one(db.get_ref())
@@ -566,11 +568,11 @@ pub async fn join_event(
         return Err(UniError::CustomError("event not allow join".to_string()));
     }
 
-    let now = Utc::now().naive_utc(); // 当前 UTC 时间
-    if now >= event.start_time {
-        return Err(UniError::CustomError(
-            "Event has already started".to_string(),
-        ));
+    match EventStatus::check(&db, &event.id).await? {
+        EventStatus::Ongoing | EventStatus::Ended => {
+            return Err(UniError::CustomError("Event has not yet begun".to_string()));
+        }
+        EventStatus::NotStarted => {}
     }
 
     let new_event_user = event_users::ActiveModel {
@@ -598,12 +600,13 @@ pub async fn leave_event(user: UserJwtGuard, db: WebDb, id: Path<Uuid>) -> UniRe
         return Err(UniError::CustomError("event not allow leave".to_string()));
     }
 
-    let now = Utc::now().naive_utc(); // 当前 UTC 时间
-    if now >= event.start_time {
-        return Err(UniError::CustomError(
-            "Event has already started".to_string(),
-        ));
+    match EventStatus::check(&db, &event.id).await? {
+        EventStatus::Ongoing | EventStatus::Ended => {
+            return Err(UniError::CustomError("Event has not yet begun".to_string()));
+        }
+        EventStatus::NotStarted => {}
     }
+
     let event_user = event_users::Entity::find_by_id((*id, user.id))
         .one(db.get_ref())
         .await?
@@ -845,9 +848,20 @@ pub async fn get_scoreboard(
     db: WebDb,
     event_id: Path<Uuid>,
 ) -> UniResult<Vec<ScoreboardItem>> {
-    let scoreboard = __get_scoreboard(db, *event_id)
+    let event_id = event_id.into_inner();
+
+    let mut scoreboard = __get_scoreboard(db.clone(), event_id)
         .await
         .map_err(|e| UniError::CustomError(format!("{}", e)))?;
+
+    match EventStatus::check(&db, &event_id).await? {
+        EventStatus::NotStarted => {
+            for sb in &mut scoreboard {
+                sb.challenges = vec![];
+            }
+        }
+        EventStatus::Ongoing | EventStatus::Ended => {}
+    }
 
     UniResponse::ok(scoreboard.into()).into()
 }
@@ -1072,4 +1086,29 @@ pub async fn get_submit_wp_status(
         .ok_or(UniError::NotFound("no wp".into()))?;
 
     UniResponse::ok(wp.created_at.into()).into()
+}
+
+pub enum EventStatus {
+    NotStarted,
+    Ongoing,
+    Ended,
+}
+
+impl EventStatus {
+    pub async fn check(db: &WebDb, event_id: &Uuid) -> Result<Self, UniError> {
+        let event = events::Entity::find_by_id(*event_id)
+            .filter(events::Column::Hidden.eq(false))
+            .one(db.get_ref())
+            .await?
+            .ok_or(UniError::NotFound("event not found".to_string()))?;
+
+        let now = Utc::now().naive_utc(); // 当前 UTC 时间
+        if now < event.start_time {
+            return Ok(Self::NotStarted);
+        } else if now > event.end_time {
+            return Ok(Self::Ended);
+        } else {
+            return Ok(Self::Ongoing);
+        }
+    }
 }

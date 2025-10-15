@@ -1,7 +1,9 @@
 use crate::{
     api::{
         preclude::*,
-        service::{calculate_next_dynamic_score, instances::__destroy_instance},
+        service::{
+            calculate_next_dynamic_score, events::EventStatus, instances::__destroy_instance,
+        },
     },
     entity::{
         challenge_solves, challenges, event_challenge_solves, event_challenges, event_team_members,
@@ -41,11 +43,13 @@ pub async fn submit_flag(
                 .await?
                 .ok_or(UniError::NotFound("no event".into()))?;
 
-            //  guard for end
-            let now = Utc::now().naive_utc();
-            if now >= event.end_time {
-                return Err(UniError::CustomError("Event has already ended".to_string()));
+            match EventStatus::check(&db, &event_id).await? {
+                EventStatus::Ended | EventStatus::NotStarted => {
+                    return Err(UniError::CustomError("Event is no ongoing".to_string()));
+                }
+                EventStatus::Ongoing => {}
             }
+
             match event.r#type {
                 EventType::JeopardySingle => {
                     return jeopardy_event_single_submit_handler(db, docker, sfr, user).await;
