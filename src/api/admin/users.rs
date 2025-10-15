@@ -49,6 +49,7 @@ pub async fn create_user(
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PathUserRequest {
     username: Option<String>,
+    nickname: Option<String>,
     password: Option<String>,
     email: Option<String>,
 }
@@ -94,6 +95,9 @@ pub async fn patch_user(
         m_user.email = Set(e);
     });
 
+    pur.nickname.map(|n| {
+        m_user.nickname = Set(n);
+    });
     m_user.updated_at = Set(Utc::now().naive_utc());
 
     let user = m_user.update(db.get_ref()).await?;

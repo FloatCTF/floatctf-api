@@ -119,6 +119,7 @@ pub async fn patch_me(user: UserJwtGuard, db: WebDb, pmr: Json<PatchMeRequest>) 
     pmr.email.map(|e| {
         m_user.email = Set(e);
     });
+
     if let Some(p) = pmr.password {
         let hashed_password = {
             let salt = SaltString::generate(&mut OsRng);
