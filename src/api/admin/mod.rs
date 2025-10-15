@@ -1,5 +1,6 @@
 mod challenge_sets;
 mod challenges;
+mod database;
 mod event_announcements;
 mod event_challenges;
 mod event_teams;
@@ -10,6 +11,7 @@ mod instances;
 mod settings;
 mod super_admin;
 mod system;
+mod terminal;
 mod users;
 use actix_web::web::{ServiceConfig, scope};
 pub use instances::kill_running_instances;
@@ -17,6 +19,9 @@ pub use instances::kill_running_instances;
 pub fn config(cfg: &mut ServiceConfig) {
     // GET /api/admin/monitor
     cfg.service(system::get_sys_info);
+    // POST /api/admin/database/exec_sql
+    cfg.service(scope("/database").service(database::exec_sql));
+
 
     cfg.service(
         scope("/settings")

@@ -15,6 +15,8 @@ pub enum UniError {
     AuthError,
     #[error("{0}")]
     CustomError(String),
+    #[error("SQL Execution Error: {0}")]
+    SQLError(String),
 }
 
 impl UniError {
@@ -25,6 +27,7 @@ impl UniError {
             UniError::NotFound(_) => 404,
             UniError::AuthError => 401,
             UniError::CustomError(_) => 500,
+            UniError::SQLError(_) => 400,
         }
     }
 
