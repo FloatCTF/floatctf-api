@@ -1,6 +1,7 @@
 mod challenge_sets;
 mod challenges;
 mod database;
+mod docker;
 mod event_announcements;
 mod event_challenges;
 mod event_teams;
