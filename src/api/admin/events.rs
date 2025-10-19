@@ -520,25 +520,40 @@ pub async fn get_report(
                 .await?;
             let event_users_results = {
                 let mut event_users_results = Vec::new();
+                let mut has_writeup = false;
+
                 for (event_user, user) in event_users {
                     if let Some(user) = user {
                         let writeup = event_writeup::Entity::find()
                             .filter(event_writeup::Column::UserId.eq(user.id))
                             .one(db.get_ref())
                             .await?;
-                        let writeup_url = writeup.map(|w| w.file_url).unwrap_or_default();
+
+                        if writeup.is_some() {
+                            has_writeup = true;
+                        }
+
                         let user_result = ReportUser {
                             username: user.username,
                             nickname: user.nickname,
                             points: event_user.points,
-                            writeup_url,
+                            writeup_url: writeup.map(|w| w.file_url).unwrap_or_default(),
                             banned: event_user.banned,
                         };
                         event_users_results.push(user_result);
                     }
                 }
+
+                if has_writeup {
+                    // ✅ 比赛需要 writeup → 剔除没有 writeup 的
+                    event_users_results.retain(|u| !u.writeup_url.is_empty());
+                }
+
+                // ✅ 排序：按分数从高到低
+                event_users_results.sort_by(|a, b| b.points.partial_cmp(&a.points).unwrap());
                 event_users_results
             };
+
             minijinja::context! {
                 event,
                 event_users => event_users_results,
@@ -619,6 +634,7 @@ pub async fn get_report(
     // wp/1.pdf
     zip.finish()
         .map_err(|e| UniError::CustomError(e.to_string()))?;
+
     UniResponse::ok(target_zip.to_string_lossy().to_string().into()).into()
 }
 #[derive(Debug, Serialize, Deserialize)]

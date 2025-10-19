@@ -18,6 +18,9 @@ async fn main() -> std::io::Result<()> {
     // for env var
     dotenv().ok();
 
+    // work_dir
+    let work_dir = env::var("WORK_DIR").unwrap_or("./".to_string());
+    env::set_current_dir(work_dir).unwrap();
     // 日志层
     let log_dir = env::var("LOG_DIR").unwrap_or("./logs".to_string());
     let file_appender = rolling::daily(log_dir, "log");

@@ -55,8 +55,17 @@ pub async fn kill_running_instances(db: WebDb, docker: WebDocker) -> anyhow::Res
         .into_iter()
         .filter_map(|(i, u)| u.map(|user| (i, user)))
     {
-        __destroy_instance(db.clone(), docker.clone(), instance.id, user).await?;
-        tracing::info!("Killed instance {}", instance.id);
+        match __destroy_instance(db.clone(), docker.clone(), instance.id, user).await {
+            Ok(_) => {
+                tracing::info!("Killed instance {}", instance.id);
+            }
+            Err(e) => {
+                let mut m_instance = instance.into_active_model();
+                m_instance.status = Set(InstanceStatus::Failed);
+                let instance = m_instance.update(db.get_ref()).await?;
+                tracing::error!("{}: But {} was killed!", e, instance.id);
+            }
+        }
     }
 
     Ok(())
