@@ -336,6 +336,7 @@ pub async fn get_report(
     let upload_dir = get_setting(&db, "UPLOAD_DIR")
         .await
         .map_err(|e| UniError::CustomError(format!("Failed to get upload dir setting: {}", e)))?;
+
     let target_zip = std::path::Path::new(&upload_dir).join(format!(
         "{}_{}.zip",
         generate_safe_name(&event.title),
@@ -352,7 +353,14 @@ pub async fn get_report(
         .map(|w| w.file_url.clone())
         .collect::<Vec<_>>();
 
-    let zip_file = File::create(&target_zip).map_err(|e| UniError::CustomError(e.to_string()))?;
+    let zip_file = File::create(&target_zip).map_err(|e| {
+        UniError::CustomError(format!(
+            "Failed to create zip file at {}: {}",
+            target_zip.display(),
+            e
+        ))
+    })?;
+
     let mut zip = zip::ZipWriter::new(zip_file);
     let options = FileOptions::<()>::default();
 

@@ -9,6 +9,7 @@ use actix_cors::Cors;
 use actix_web::middleware::Logger;
 use actix_web::{App, HttpServer, web};
 use dotenvy::dotenv;
+use tracing::info;
 use tracing_actix_web::TracingLogger;
 use tracing_appender::rolling;
 use tracing_subscriber::{EnvFilter, fmt::writer::MakeWriterExt};
@@ -21,6 +22,7 @@ async fn main() -> std::io::Result<()> {
     // work_dir
     let work_dir = env::var("WORK_DIR").unwrap_or("./".to_string());
     env::set_current_dir(work_dir).unwrap();
+
     // 日志层
     let log_dir = env::var("LOG_DIR").unwrap_or("./logs".to_string());
     let file_appender = rolling::daily(log_dir, "log");
@@ -34,6 +36,11 @@ async fn main() -> std::io::Result<()> {
         .with_timer(tracing_subscriber::fmt::time::ChronoLocal::rfc_3339())
         .init();
 
+    //
+    info!(
+        "Current working dir = {}",
+        env::current_dir().unwrap().display()
+    );
     // for database
     let db: db::WebDb = web::Data::new(
         db::init_db()
