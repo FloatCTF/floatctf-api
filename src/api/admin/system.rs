@@ -222,34 +222,10 @@ pub async fn get_sys_info(_: SuperAdminJwtGuard) -> UniResult<SystemInformation>
     .into()
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-struct SqlRequest {
-    sql: String,
+#[get("/changelog")]
+pub async fn get_changelog(_: SuperAdminJwtGuard) -> UniResult<String> {
+    let changelog_path =
+        std::env::var("SYSTEM_CHANGELOG_PATH").unwrap_or_else(|_| "./CHANGELOG.md".to_string());
+    let changelog = std::fs::read_to_string(changelog_path).unwrap_or_default();
+    UniResponse::ok(changelog.into()).into()
 }
-// #[post("/sql")]
-// pub async fn sql(
-//     _: SuperAdminJwtGuard,
-//     body: Json<SqlRequest>,
-//     db: WebDb,
-// ) -> UniResult<serde_json::Value> {
-//     let sql = body.into_inner().sql;
-
-//     // 使用 SeaORM 原生查询执行 SQL
-//     match db
-//         .get_ref()
-//         .query_all(Statement::from_string(
-//             sea_orm::DatabaseBackend::Postgres,
-//             sql.to_string(),
-//         ))
-//         .await
-//     {
-//         Ok(rows) => {
-//             let rows: Vec<_> = rows
-//                 .into_iter()
-//                 .map(|row| row.try_get::<String>("", "name").unwrap_or_default())
-//                 .collect();
-//             let a = Json(json!({ "result": rows }));
-//         }
-//         Err(e) => UniError::CustomError(format!("SQL 执行失败: {}", e)).into(),
-//     }
-// }

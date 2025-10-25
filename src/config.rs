@@ -61,6 +61,12 @@ pub async fn init_settings(db: &DbConn) {
             SettingValueType::String,
             "工具目录",
         ),
+        (
+            "IMAGE_DIR",
+            "./images".to_string(),
+            SettingValueType::String,
+            "图片目录",
+        ),
     ];
 
     for (key, value, value_type, description) in defaults {

@@ -18,8 +18,14 @@ use actix_web::web::{ServiceConfig, scope};
 pub use instances::kill_running_instances;
 
 pub fn config(cfg: &mut ServiceConfig) {
-    // GET /api/admin/monitor
-    cfg.service(system::get_sys_info);
+    cfg.service(
+        scope("system")
+            // GET /api/admin/system/monitor
+            .service(system::get_sys_info)
+            // GET /api/admin/system/changelog
+            .service(system::get_changelog),
+    );
+
     // POST /api/admin/database/exec_sql
     cfg.service(scope("/database").service(database::exec_sql));
 

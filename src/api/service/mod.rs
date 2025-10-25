@@ -7,6 +7,7 @@ mod events;
 mod instances;
 mod submit;
 mod super_admin;
+mod uploads;
 mod users;
 mod weapons;
 use crate::config::get_setting;
@@ -22,6 +23,8 @@ pub fn config(cfg: &mut ServiceConfig) {
     // GET /api/weapons
     cfg.service(scope("/weapons").service(weapons::get_weapons));
 
+    // POST /api/uploads/image
+    cfg.service(scope("/uploads").service(uploads::upload_image));
     cfg.service(
         scope("/users")
             // POST /api/users/session
