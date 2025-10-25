@@ -14,11 +14,12 @@ RUN rm -rf /etc/apt/sources.list.d/*
 COPY sources.list /etc/apt/sources.list
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
+    ca-certificates \
     pkg-config \
     libssl-dev \
+    && update-ca-certificates \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
-
 
 
 ENV CARGO_HOME=/usr/local/cargo
@@ -43,7 +44,7 @@ COPY . .
 RUN cargo build --release
 
 # ====== Stage 3: Runtime ======
-FROM debian:bookworm-slim
+FROM rust:1.89.0-slim-bookworm
 
 WORKDIR /app
 
@@ -57,10 +58,12 @@ RUN rm -rf /etc/apt/sources.list.d/*
 COPY sources.list /etc/apt/sources.list
 # 安装运行时依赖
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libssl-dev \
+    && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    libssl-dev \
+    && update-ca-certificates \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
-
 # 拷贝可执行文件
 COPY --from=builder /app/target/release/floatctf /app/floatctf
 
