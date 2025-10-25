@@ -9,6 +9,8 @@ RUN ln -sf /usr/share/zoneinfo/$TZ /etc/localtime \
     && echo $TZ > /etc/timezone
 
 # 安装构建依赖
+RUN rm -rf /var/lib/apt/lists/*
+RUN rm -rf /etc/apt/sources.list.d/*
 COPY sources.list /etc/apt/sources.list
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -48,6 +50,8 @@ ENV TZ=Asia/Shanghai
 RUN ln -sf /usr/share/zoneinfo/$TZ /etc/localtime \
     && echo $TZ > /etc/timezone
 
+RUN rm -rf /var/lib/apt/lists/*
+RUN rm -rf /etc/apt/sources.list.d/*
 COPY sources.list /etc/apt/sources.list
 # 安装运行时依赖
 RUN apt-get update \
