@@ -19,12 +19,14 @@ RUN apt-get update \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# 安装 cargo-chef
-RUN cargo install cargo-chef
+
 
 ENV CARGO_HOME=/usr/local/cargo
 RUN mkdir -p $CARGO_HOME
 COPY rsproxy.conf.toml $CARGO_HOME/config.toml
+
+# 安装 cargo-chef
+RUN cargo install cargo-chef
 
 # 复制 Cargo 配置文件，缓存依赖
 COPY Cargo.toml Cargo.lock ./fcmc ./ 
