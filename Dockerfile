@@ -1,22 +1,62 @@
-FROM rust:1.89.0-slim-bookworm
+# ====== Stage 1: Build environment ======
+FROM rust:1.89.0-slim-bookworm AS chef
 
 WORKDIR /app
-RUN env
 
-RUN ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
-RUN echo "Asia/Shanghai" > /etc/timezone
+# 设置时区
+ENV TZ=Asia/Shanghai
+RUN ln -sf /usr/share/zoneinfo/$TZ /etc/localtime \
+    && echo $TZ > /etc/timezone
 
-RUN rm /etc/apt/sources.list* -rf
+# 安装构建依赖
 COPY sources.list /etc/apt/sources.list
-RUN apt-get clean && apt-get update && apt-get install -y pkg-config libssl-dev docker-compose docker.io 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+    pkg-config \
+    libssl-dev \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# 安装 cargo-chef
+RUN cargo install cargo-chef
 
 ENV CARGO_HOME=/usr/local/cargo
 RUN mkdir -p $CARGO_HOME
 COPY rsproxy.conf.toml $CARGO_HOME/config.toml
 
-COPY . /app
+# 复制 Cargo 配置文件，缓存依赖
+COPY Cargo.toml Cargo.lock ./fcmc ./ 
+RUN cargo chef prepare --recipe-path recipe.json
+RUN rm -rf src
 
+# ====== Stage 2: Build dependencies ======
+FROM chef AS builder
+COPY --from=chef /app/recipe.json recipe.json
+RUN cargo chef cook --release --recipe-path recipe.json
+
+# 复制完整项目并构建应用
+COPY . .
 RUN cargo build --release
 
+# ====== Stage 3: Runtime ======
+FROM debian:bookworm-slim
 
-ENTRYPOINT [ "/app/target/release/floatctf" ]
+WORKDIR /app
+
+# 时区设置
+ENV TZ=Asia/Shanghai
+RUN ln -sf /usr/share/zoneinfo/$TZ /etc/localtime \
+    && echo $TZ > /etc/timezone
+
+COPY sources.list /etc/apt/sources.list
+# 安装运行时依赖
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libssl-dev \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# 拷贝可执行文件
+COPY --from=builder /app/target/release/floatctf /app/floatctf
+
+
+ENTRYPOINT ["/app/floatctf"]
