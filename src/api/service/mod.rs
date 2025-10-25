@@ -8,6 +8,7 @@ mod instances;
 mod submit;
 mod super_admin;
 mod users;
+mod weapons;
 use crate::config::get_setting;
 use actix_web::web::{ServiceConfig, scope};
 pub use events::{__get_scoreboard, __get_trend, ScoreboardItem, TrendItem};
@@ -18,6 +19,8 @@ use sea_orm::DbConn;
 pub fn config(cfg: &mut ServiceConfig) {
     // POST /api/admin/session
     cfg.service(super_admin::super_admin_login);
+    // GET /api/weapons
+    cfg.service(scope("/weapons").service(weapons::get_weapons));
 
     cfg.service(
         scope("/users")

@@ -192,3 +192,15 @@ CREATE TABLE IF NOT EXISTS "challenge_set_items" (
     PRIMARY KEY ("set_id", "challenge_id")
 );
 -- user_logs,training_logs, event_logs, system_logs, admin_logs
+
+CREATE TABLE IF NOT EXISTS "weapons" (
+    "id" UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
+    "name" TEXT NOT NULL,
+    "category" TEXT NOT NULL DEFAULT 'other',
+    "description" TEXT,
+    "has_file" BOOLEAN NOT NULL DEFAULT FALSE,
+    "download_count" BIGINT NOT NULL DEFAULT 0,
+    "file_url" TEXT NOT NULL,
+    "created_at" TIMESTAMP NOT NULL DEFAULT now(),
+    "updated_at" TIMESTAMP NOT NULL DEFAULT now()
+)

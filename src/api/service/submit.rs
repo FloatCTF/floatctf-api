@@ -13,7 +13,7 @@ use crate::{
     },
 };
 use actix_multipart::form::{MultipartForm, tempfile::TempFile, text::Text};
-use std::fs;
+use std::{fs, os::unix::fs::PermissionsExt};
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct SubmitFlagRequest {
@@ -348,6 +348,8 @@ pub async fn submit_writeup(
     // copy 会覆盖旧文件
     std::fs::copy(writeup_file.file.path(), &writeup_file_path)
         .map_err(|e| UniError::InternalError(format!("Failed to copy writeup file: {}", e)))?;
+    std::fs::set_permissions(&writeup_file_path, std::fs::Permissions::from_mode(0o644))
+        .map_err(|e| UniError::InternalError(format!("Failed to set permissions: {}", e)))?;
 
     // 插入或更新数据库
     use sea_orm::sea_query::OnConflict;

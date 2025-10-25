@@ -55,6 +55,12 @@ pub async fn init_settings(db: &DbConn) {
             SettingValueType::String,
             "全局flag前缀",
         ),
+        (
+            "WEAPONS_DIR",
+            "./weapons".to_string(),
+            SettingValueType::String,
+            "工具目录",
+        ),
     ];
 
     for (key, value, value_type, description) in defaults {

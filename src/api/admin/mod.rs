@@ -13,6 +13,7 @@ mod settings;
 mod super_admin;
 mod system;
 mod users;
+mod weapons;
 use actix_web::web::{ServiceConfig, scope};
 pub use instances::kill_running_instances;
 
@@ -32,6 +33,20 @@ pub fn config(cfg: &mut ServiceConfig) {
             .service(settings::delete_setting)
             // PATCH /api/admin/settings/{setting_id}
             .service(settings::patch_setting),
+    );
+
+    cfg.service(
+        scope("weapons")
+            // POST /api/admin/weapons
+            .service(weapons::create_weapon)
+            // DELETE /api/admin/weapons/{weapon_id}
+            .service(weapons::delete_weapon)
+            // PATCH /api/admin/weapons/{weapon_id}
+            .service(weapons::patch_weapon)
+            // GET /api/admin/weapons
+            .service(weapons::get_weapons)
+            // POST /api/admin/weapons/{weapon_id}/upload
+            .service(weapons::upload_weapon),
     );
 
     cfg.service(

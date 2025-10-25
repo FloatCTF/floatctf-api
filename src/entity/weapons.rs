@@ -4,16 +4,20 @@ use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq, Serialize, Deserialize)]
-#[sea_orm(table_name = "super_admin")]
+#[sea_orm(table_name = "weapons")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: Uuid,
-    #[sea_orm(column_type = "Text", unique)]
-    pub username: String,
     #[sea_orm(column_type = "Text")]
-    pub password: String,
+    pub name: String,
     #[sea_orm(column_type = "Text")]
-    pub email: String,
+    pub category: String,
+    #[sea_orm(column_type = "Text", nullable)]
+    pub description: Option<String>,
+    pub has_file: bool,
+    pub download_count: i64,
+    #[sea_orm(column_type = "Text")]
+    pub file_url: String,
     pub created_at: DateTime,
     pub updated_at: DateTime,
 }
