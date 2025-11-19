@@ -60,7 +60,7 @@ pub async fn get_challenge_instance(
         .filter(instances::Column::ChallengeId.eq(challenge_id))
         .filter(instances::Column::Status.eq(InstanceStatus::Running))
         .filter(instances::Column::UserId.eq(user.id))
-        .filter(instances::Column::Ref.eq("Training"))
+        .filter(instances::Column::Ref.eq("JeopardyPractice"))
         .one(db.get_ref())
         .await?;
 

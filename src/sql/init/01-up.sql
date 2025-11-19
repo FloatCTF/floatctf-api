@@ -50,7 +50,7 @@ CREATE TYPE "instance_status" AS ENUM ('pending', 'running', 'completed', 'faile
 CREATE TABLE IF NOT EXISTS "instances" (
     "id" UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
     "status" "instance_status" NOT NULL DEFAULT 'pending',
-    "ref" TEXT NOT NULL DEFAULT 'Training',
+    "ref" TEXT NOT NULL DEFAULT 'JeopardyPractice',
     "flag" TEXT NOT NULL,
     "content" TEXT,
     "challenge_id" UUID NOT NULL REFERENCES "challenges" (id) ON DELETE CASCADE,
@@ -61,7 +61,7 @@ CREATE TABLE IF NOT EXISTS "instances" (
     "destroy_at" TIMESTAMP NOT NULL
 );
 
-CREATE TYPE "event_type" AS ENUM ('jeopardy_single', 'jeopardy_team', 'awd_team');
+CREATE TYPE "event_type" AS ENUM ('jeopardy_practice','jeopardy_single', 'jeopardy_team', 'awd_team');
 
 CREATE TABLE IF NOT EXISTS "events" (
     "id" UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),

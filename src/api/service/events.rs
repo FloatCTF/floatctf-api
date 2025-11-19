@@ -6,6 +6,7 @@ use crate::{
         sea_orm_active_enums::{EventTeamMemberRole, EventType, InstanceStatus},
         users,
     },
+    strategies::event,
 };
 use chrono::NaiveDateTime;
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -141,6 +142,13 @@ pub async fn get_event_challenges(
         .await?
         .ok_or(UniError::NotFound("event not found".to_string()))?;
 
+    // let ctx = event::EventContextBuilder::new()
+    //     .db(db.clone())
+    //     .user(user.clone())
+    //     .event(Some(event.clone()))
+    //     .build()
+    //     .map_err(|e| UniError::CustomError(format!("build event context error: {}", e)))?;
+    // TODO : add stragey
     match EventStatus::check(&db, &event.id).await? {
         EventStatus::NotStarted => {
             return Err(UniError::CustomError("Event is not start".to_string()));
@@ -152,6 +160,7 @@ pub async fn get_event_challenges(
         .one(db.get_ref())
         .await?
         .is_some();
+
     if !joined {
         return Err(UniError::CustomError("not joined".to_string()));
     }
@@ -267,6 +276,7 @@ pub struct EventInstanceResult {
 pub async fn get_event_instances(
     user: UserJwtGuard,
     db: WebDb,
+    docker: WebDocker,
     id: Path<Uuid>,
 ) -> UniResult<Vec<EventInstanceResult>> {
     let user = user.into_inner();
@@ -277,78 +287,37 @@ pub async fn get_event_instances(
         .await?
         .ok_or(UniError::NotFound("event not found".to_string()))?;
 
-    match EventStatus::check(&db, &event.id).await? {
-        EventStatus::NotStarted => {
-            return Err(UniError::CustomError("Event is no ongoing".to_string()));
-        }
-        EventStatus::Ongoing | EventStatus::Ended => {}
-    }
+    let ctx = event::EventContextBuilder::new()
+        .db(db.clone())
+        .docker(docker.clone())
+        .user(user.clone())
+        .event(Some(event))
+        .build()
+        .map_err(|e| UniError::CustomError(format!("build event context error: {}", e)))?;
 
-    match event.r#type {
-        EventType::JeopardySingle => {
-            // 👇 查 instance 并关联 challenge 和 user
-            let data = instances::Entity::find()
-                .filter(instances::Column::Status.eq(InstanceStatus::Running))
-                .filter(instances::Column::UserId.eq(user.id))
-                .filter(instances::Column::Ref.eq("JeopardySingle"))
-                .find_also_related(challenges::Entity) // instance -> challenge
-                .find_also_related(users::Entity) // instance -> user
-                .all(db.get_ref())
-                .await?;
+    let strategy = event::EventStrategyFactory::create(&ctx.event.r#type);
+    let instances = strategy
+        .get_instances(&ctx)
+        .await
+        .map_err(|e| UniError::CustomError(format!("get_instances error: {}", e)))?;
 
-            // 👇 把结果组装成 EventInstance
-            let instances: Vec<EventInstanceResult> = data
-                .into_iter()
-                .map(|(instance, challenge_opt, user_opt)| EventInstanceResult {
-                    instance,
-                    challenge_name: challenge_opt.map(|c| c.name).unwrap_or_default(),
-                    user_nickname: user_opt.map(|u| u.nickname).unwrap_or_default(),
-                })
-                .collect();
+    let instances_result = instances
+        .into_iter()
+        .map(|i| EventInstanceResult {
+            instance: i.instance,
+            challenge_name: i.challenge_name,
+            user_nickname: i.nickname,
+        })
+        .collect::<Vec<_>>();
 
-            UniResponse::ok(instances.into()).into()
-        }
-        EventType::JeopardyTeam => {
-            let team_member = event_team_members::Entity::find()
-                .filter(event_team_members::Column::EventId.eq(*id))
-                .filter(event_team_members::Column::UserId.eq(user.id))
-                .one(db.get_ref())
-                .await?
-                .ok_or(UniError::NotFound("you are not in any team".into()))?;
-
-            let data = event_instances::Entity::find()
-                .filter(event_instances::Column::EventId.eq(*id))
-                .filter(event_instances::Column::TeamId.eq(team_member.team_id))
-                .find_also_related(instances::Entity)
-                .filter(instances::Column::Status.eq(InstanceStatus::Running))
-                .filter(instances::Column::Ref.eq("JeopardyTeam"))
-                .find_also_related(challenges::Entity)
-                .all(db.get_ref())
-                .await?;
-
-            // 👇 把结果组装成 EventInstance
-            let instances: Vec<EventInstanceResult> = data
-                .into_iter()
-                .map(
-                    |(_event_instance, instance, challenge)| EventInstanceResult {
-                        instance: instance.unwrap(),
-                        challenge_name: challenge.map(|c| c.name).unwrap_or_default(),
-                        user_nickname: "".to_string(), // 团队赛没有用户昵称 TODO: 这里应该是团队名称
-                    },
-                )
-                .collect();
-            UniResponse::ok(instances.into()).into()
-        }
-        _ => Err(UniError::CustomError(
-            "event type not supported".to_string(),
-        )),
-    }
+    UniResponse::ok(instances_result.into()).into()
 }
 /// GET /api/events/{event_id}/challenges/{challenge_id}/instance
 #[get("/{event_id}/challenges/{challenge_id}/instance")]
 pub async fn get_event_challenge_instance(
     user: UserJwtGuard,
     db: WebDb,
+    docker: WebDocker,
     id: Path<(Uuid, Uuid)>,
 ) -> UniResult<instances::Model> {
     let user = user.into_inner();
@@ -360,45 +329,21 @@ pub async fn get_event_challenge_instance(
         .await?
         .ok_or(UniError::NotFound("event not found".to_string()))?;
 
-    match event.r#type {
-        EventType::JeopardySingle => {
-            let (_event_instance, instance) = event_instances::Entity::find()
-                .filter(event_instances::Column::EventId.eq(event_id))
-                .filter(event_instances::Column::ChallengeId.eq(challenge_id))
-                .filter(event_instances::Column::UserId.eq(user.id))
-                .find_also_related(instances::Entity)
-                .filter(instances::Column::Status.eq(InstanceStatus::Running))
-                .filter(instances::Column::Ref.eq("JeopardySingle"))
-                .one(db.get_ref())
-                .await?
-                .ok_or(UniError::NotFound("no instance".into()))?;
-            UniResponse::ok(instance).into()
-        }
-        EventType::JeopardyTeam => {
-            let team_member = event_team_members::Entity::find()
-                .filter(event_team_members::Column::EventId.eq(event_id))
-                .filter(event_team_members::Column::UserId.eq(user.id))
-                .one(db.get_ref())
-                .await?
-                .ok_or(UniError::NotFound("you are not in any team".into()))?;
+    let ctx = event::EventContextBuilder::new()
+        .db(db.clone())
+        .docker(docker.clone())
+        .user(user.clone())
+        .event(Some(event))
+        .build()
+        .map_err(|e| UniError::CustomError(format!("build event context error: {}", e)))?;
 
-            let (_event_instance, instance) = event_instances::Entity::find()
-                .filter(event_instances::Column::EventId.eq(event_id))
-                .filter(event_instances::Column::ChallengeId.eq(challenge_id))
-                .filter(event_instances::Column::TeamId.eq(team_member.team_id))
-                .find_also_related(instances::Entity)
-                .filter(instances::Column::Status.eq(InstanceStatus::Running))
-                .filter(instances::Column::Ref.eq("JeopardyTeam"))
-                .one(db.get_ref())
-                .await?
-                .ok_or(UniError::NotFound("no instance".into()))?;
+    let strategy = event::EventStrategyFactory::create(&ctx.event.r#type);
+    let instance = strategy
+        .get_instance_by_challenge_id(&ctx, challenge_id)
+        .await
+        .map_err(|e| UniError::CustomError(format!("get_instance_by_challenge_id error: {}", e)))?;
 
-            UniResponse::ok(instance).into()
-        }
-        _ => Err(UniError::CustomError(
-            "event type not supported".to_string(),
-        )),
-    }
+    UniResponse::ok(instance.into()).into()
 }
 
 #[derive(Debug, Serialize, Deserialize)]

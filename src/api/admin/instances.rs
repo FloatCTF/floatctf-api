@@ -1,6 +1,7 @@
 use crate::{
-    api::{preclude::*, service::__destroy_instance},
+    api::preclude::*,
     entity::{instances, sea_orm_active_enums::InstanceStatus, users},
+    strategies::event,
 };
 
 /// GET /api/admin/instances
@@ -55,7 +56,7 @@ pub async fn kill_running_instances(db: WebDb, docker: WebDocker) -> anyhow::Res
         .into_iter()
         .filter_map(|(i, u)| u.map(|user| (i, user)))
     {
-        match __destroy_instance(db.clone(), docker.clone(), instance.id, user).await {
+        match event::common::destroy_instance(&db, &docker, instance.id, &user).await {
             Ok(_) => {
                 tracing::info!("Killed instance {}", instance.id);
             }

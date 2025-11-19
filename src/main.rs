@@ -3,6 +3,7 @@ mod auth;
 mod config;
 mod db;
 mod entity;
+mod strategies;
 use std::env;
 
 use actix_cors::Cors;

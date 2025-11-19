@@ -13,7 +13,6 @@ mod weapons;
 use crate::config::get_setting;
 use actix_web::web::{ServiceConfig, scope};
 pub use events::{__get_scoreboard, __get_trend, ScoreboardItem, TrendItem};
-pub use instances::__destroy_instance;
 
 use sea_orm::DbConn;
 

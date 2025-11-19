@@ -42,3 +42,4 @@ tracing-actix-web = "0.7.19" # Actix Web 的 TracingLogger middleware
 pnet = "0.35.0"
 sysinfo = "0.37.0"
 minijinja = "2.12.0"
+async-trait = "0.1.89"

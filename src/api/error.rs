@@ -26,7 +26,7 @@ impl UniError {
             UniError::InternalError(_) => 500,
             UniError::NotFound(_) => 404,
             UniError::AuthError => 401,
-            UniError::CustomError(_) => 500,
+            UniError::CustomError(_) => 400,
             UniError::SQLError(_) => 400,
         }
     }

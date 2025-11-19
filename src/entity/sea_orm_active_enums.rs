@@ -26,6 +26,8 @@ pub enum EventType {
     JeopardyTeam,
     #[sea_orm(string_value = "awd_team")]
     AwdTeam,
+    #[sea_orm(string_value = "jeopardy_practice")]
+    JeopardyPractice,
 }
 #[derive(Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize)]
 #[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "instance_status")]
