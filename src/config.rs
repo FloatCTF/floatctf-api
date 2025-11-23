@@ -67,8 +67,19 @@ pub async fn init_settings(db: &DbConn) {
             SettingValueType::String,
             "图片目录",
         ),
+        (
+            "MAIN_URL",
+            "http://localhost:8080".to_string(),
+            SettingValueType::String,
+            "主站地址前缀baseURL",
+        ),
+        (
+            "SMTP_URI",
+            "smtp.example.com:user@example.com:SMTP_PASS".to_string(),
+            SettingValueType::String,
+            "SMTP服务器地址与凭证",
+        ),
     ];
-
     for (key, value, value_type, description) in defaults {
         let e = settings::Entity::insert(settings::ActiveModel {
             key: Set(key.to_string()),

@@ -32,7 +32,7 @@ pub async fn super_admin_login(db: WebDb, slr: Json<SuperAdminLoginRequest>) -> 
             };
 
             if verified {
-                let jwt = gen_jwt_token(super_admin.id, Role::SuperAdmin)
+                let jwt = gen_jwt_token(super_admin.id, Role::SuperAdmin, None)
                     .map_err(|e| UniError::CustomError(e.to_string()))?;
 
                 UniResponse::ok(jwt.into()).into()

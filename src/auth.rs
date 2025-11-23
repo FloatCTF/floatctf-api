@@ -8,6 +8,7 @@ use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, deco
 pub enum Role {
     User,
     SuperAdmin,
+    ResetAccount,
 }
 
 /// Our claims struct, it needs to derive `Serialize` and/or `Deserialize`
@@ -18,12 +19,26 @@ pub struct AuthClaims {
     pub exp: usize,
 }
 
-pub fn gen_jwt_token(id: Uuid, role: Role) -> Result<String, jsonwebtoken::errors::Error> {
+pub fn gen_jwt_token(
+    id: Uuid,
+    role: Role,
+    expire_mins: Option<usize>,
+) -> Result<String, jsonwebtoken::errors::Error> {
     let secret = std::env::var("SECRET").expect("SECRET must be set in .env file!");
-    let expiration = Utc::now()
-        .checked_add_signed(Duration::hours(8))
-        .expect("valid timestamp")
-        .timestamp() as usize;
+
+    // 计算过期时间（分钟优先，默认 8 小时）
+    let expiration = if let Some(mins) = expire_mins {
+        Utc::now()
+            .checked_add_signed(Duration::minutes(mins as i64))
+            .expect("valid timestamp")
+            .timestamp() as usize
+    } else {
+        Utc::now()
+            .checked_add_signed(Duration::hours(8))
+            .expect("valid timestamp")
+            .timestamp() as usize
+    };
+
     let claims = AuthClaims {
         sub: id,
         role,
