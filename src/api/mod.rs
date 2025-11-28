@@ -1,7 +1,7 @@
 pub mod admin;
 pub mod preclude;
 pub mod service;
-
+pub mod util;
 pub use admin::config as admin_config;
 pub use service::config as service_config;
 

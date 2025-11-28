@@ -1,6 +1,6 @@
 use crate::{
     api::preclude::*,
-    auth::{Role, UserJwtGuard, gen_jwt_token},
+    auth::{Role, UserJwtGuard, gen_jwt_token, validate_jwt},
     entity::{prelude::Users, users},
 };
 
@@ -145,97 +145,125 @@ pub async fn patch_me(user: UserJwtGuard, db: WebDb, pmr: Json<PatchMeRequest>) 
     UniResponse::ok_none().into()
 }
 
-// // reset email or username
+// reset email or username
 
-// #[derive(Debug, Serialize, Deserialize)]
-// pub struct ResetPasswordRequest {
-//     pub email: Option<String>,
-//     pub username: Option<String>,
-// }
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ResetPasswordRequest {
+    pub email: Option<String>,
+    pub username: Option<String>,
+}
 
-// // reset password
-// #[post("/reset_password")]
+// reset password
+#[post("/reset_password")]
 
-// pub async fn send_email(db: WebDb, rpr: Json<ResetPasswordRequest>) -> UniResult<()> {
-//     let mut rpr = rpr.into_inner();
-//     // check user exist
-//     if rpr.email.is_none() && rpr.username.is_none() {
-//         return UniError::CustomError("Email or username is required".to_string()).into();
-//     }
+pub async fn send_reset_email(db: WebDb, rpr: Json<ResetPasswordRequest>) -> UniResult<()> {
+    let rpr = rpr.into_inner();
 
-//     let user = if let Some(email) = rpr.email {
-//         Users::find()
-//             .filter(users::Column::Email.eq(email))
-//             .one(db.get_ref())
-//             .await?
-//     } else if let Some(username) = rpr.username {
-//         Users::find()
-//             .filter(users::Column::Username.eq(username))
-//             .one(db.get_ref())
-//             .await?
-//     } else {
-//         return UniError::CustomError("Email or username is required".to_string()).into();
-//     };
+    if rpr.email.is_none() && rpr.username.is_none() {
+        return UniError::CustomError("Email or username is required".to_string()).into();
+    }
+    let email = none_if_empty(rpr.email);
+    let username = none_if_empty(rpr.username);
 
-//     if user.is_none() {
-//         return UniError::CustomError("User not found".to_string()).into();
-//     }
+    let user = match (email, username) {
+        (Some(email), _) => {
+            Users::find()
+                .filter(users::Column::Email.eq(email))
+                .one(db.get_ref())
+                .await?
+        }
+        (_, Some(username)) => {
+            Users::find()
+                .filter(users::Column::Username.eq(username))
+                .one(db.get_ref())
+                .await?
+        }
+        _ => return UniError::CustomError("Email or username required".into()).into(),
+    };
 
-//     let user = user.unwrap();
+    let user = user.ok_or_else(|| UniError::CustomError("User not found".to_string()))?;
 
-//     let main_url = get_setting(db.get_ref(), "MAIN_URL")
-//         .await
-//         .map_err(|e| UniError::CustomError(format!("Failed to get MAIN_URL: {}", e)))?;
-//     let smtp_uri = get_setting(db.get_ref(), "SMTP_URI")
-//         .await
-//         .map_err(|e| UniError::CustomError(format!("Failed to get SMTP_URI: {}", e)))?;
+    let main_url = get_setting(db.get_ref(), "MAIN_URL")
+        .await
+        .map_err(|e| UniError::CustomError(format!("Failed to get MAIN_URL: {}", e)))?;
 
-//     // 解析：username:host:password
-//     let parts: Vec<&str> = smtp_uri.split(':').collect();
-//     if parts.len() != 3 {
-//         return UniError::InternalError("SMTP_URI 格式错误，必须为 user:host:pass".to_string())
-//             .into();
-//     }
+    // generate token
+    let token = gen_jwt_token(user.id, Role::ResetAccount, Some(10))
+        .map_err(|e| UniError::CustomError(e.to_string()))?;
 
-//     let smtp_host = parts[0];
-//     let smtp_user = parts[1];
-//     let smtp_pass = parts[2];
+    // generate reset link
+    let reset_link = format!("{}/reset_password?token={}", main_url, token);
 
-//     // generate token
-//     let token = gen_jwt_token(user.id, Role::User, Some(10))
-//         .map_err(|e| UniError::CustomError(e.to_string()))?;
+    // send email
+    let to = user.email;
 
-//     // generate reset link
-//     let reset_link = format!("https://example.com/reset_password?token={}", token);
+    // 你自己的 ENV 或配置
 
-//     // send email
-//     let to = user.email;
+    // HTML 邮件内容
+    let html_body = format!(
+        r#"
+        <p>您好，</p>
+        <p>请点击下方按钮重置密码（10 分钟内有效）</p>
+        <p><a href="{0}" style="color:#4a90e2;font-weight:bold;">点击这里重置密码</a></p>
+        <p>如果不是您发起的重置请求，请忽略此邮件。</p>
+        "#,
+        reset_link
+    );
+    send_email(&db, &[&to], None, "重置密码", &html_body)
+        .await
+        .map_err(|e| UniError::CustomError(format!("Failed to send email: {}", e)))?;
 
-//     // 你自己的 ENV 或配置
+    UniResponse::ok_none().into()
+}
 
-//     // HTML 邮件内容
-//     let html_body = format!(
-//         r#"
-//         <p>您好，</p>
-//         <p>请点击下方按钮重置密码（10 分钟内有效）</p>
-//         <p><a href="{0}" style="color:#4a90e2;font-weight:bold;">点击这里重置密码</a></p>
-//         <p>如果不是您发起的重置请求，请忽略此邮件。</p>
-//         "#,
-//         reset_link
-//     );
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ResetPasswordOption {
+    pub password: String,
+    pub confirmed_password: String,
+}
+#[derive(Debug, Deserialize)]
+pub struct TokenQuery {
+    pub token: String,
+}
+#[post("/reset")]
+pub async fn reset_password(
+    db: WebDb,
+    token: Query<TokenQuery>,
+    rpo: Json<ResetPasswordOption>,
+) -> UniResult<()> {
+    let rpo = rpo.into_inner();
+    if rpo.password != rpo.confirmed_password {
+        return UniError::CustomError("Passwords do not match".to_string()).into();
+    }
 
-//     let email = Message::builder()
-//         .from(smtp_user.parse()?) // ⚠ 必须与 SMTP 登录邮箱一致
-//         .to(to.parse()?)
-//         .subject("重置密码")
-//         .header(ContentType::TEXT_HTML)
-//         .body(html_body)?;
+    let token = token.token.clone();
+    let claim = validate_jwt(token).map_err(|e| UniError::CustomError(e.to_string()))?;
+    if claim.role != Role::ResetAccount {
+        return UniError::CustomError("Invalid token".to_string()).into();
+    }
 
-//     let creds = Credentials::new(smtp_user.to_string(), smtp_pass.to_string());
+    let user_id = claim.sub;
+    let user = Users::find_by_id(user_id)
+        .one(db.get_ref())
+        .await?
+        .ok_or_else(|| UniError::CustomError("User not found".to_string()))?;
 
-//     let mailer = SmtpTransport::relay(smtp_host)?.credentials(creds).build();
+    let mut m_user = user.into_active_model();
+    let hashed_password = {
+        let salt = SaltString::generate(&mut OsRng);
+        let argon2 = Argon2::default();
 
-//     mailer.send(&email)?;
+        let password_hash = argon2
+            .hash_password(rpo.password.as_bytes(), &salt)
+            .map_err(|e| UniError::CustomError(format!("{}", e.to_string())))?
+            .to_string();
 
-//     UniResponse::ok_none().into()
-// }
+        password_hash
+    };
+
+    m_user.password = Set(hashed_password);
+
+    m_user.update(db.get_ref()).await?;
+
+    UniResponse::ok_none().into()
+}

@@ -9,6 +9,7 @@ pub enum Role {
     User,
     SuperAdmin,
     ResetAccount,
+    AwdJudger,
 }
 
 /// Our claims struct, it needs to derive `Serialize` and/or `Deserialize`

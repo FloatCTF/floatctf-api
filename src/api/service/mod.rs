@@ -33,7 +33,11 @@ pub fn config(cfg: &mut ServiceConfig) {
             // GET /api/users/me
             .service(users::get_me)
             // PATCH /api/users/me
-            .service(users::patch_me),
+            .service(users::patch_me)
+            // POST /api/users/reset_password
+            .service(users::send_reset_email)
+            // POST /api/users/reset?token=token
+            .service(users::reset_password),
     );
 
     cfg.service(
