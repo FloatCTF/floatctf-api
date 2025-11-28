@@ -1,4 +1,7 @@
-use crate::{api::preclude::*, entity::super_admin};
+use crate::{
+    api::{admin::dto::DeleteItemsRequest, preclude::*},
+    entity::super_admin,
+};
 use argon2::{
     Argon2,
     password_hash::{PasswordHasher, SaltString, rand_core::OsRng},
@@ -137,21 +140,19 @@ pub async fn get_super_admin(
     UniResponse::ok(model.into()).into()
 }
 
-/// DELETE /api/admin/super_admin/{super_user_id}
-#[delete("/{id}")]
+/// DELETE /api/admin/super_admin
+#[delete("")]
 pub async fn delete_super_admin(
     _user: SuperAdminJwtGuard,
     db: WebDb,
-    super_user_id: Path<Uuid>,
+    dir: Json<DeleteItemsRequest>,
 ) -> UniResult<u64> {
-    let super_user_id = super_user_id.into_inner();
+    let dir = dir.into_inner();
 
-    let super_admin = super_admin::Entity::find_by_id(super_user_id)
-        .one(db.get_ref())
-        .await?
-        .ok_or_else(|| UniError::NotFound(format!("{} not exist", super_user_id)))?;
-
-    let r = super_admin.delete(db.get_ref()).await?;
+    let r = super_admin::Entity::delete_many()
+        .filter(super_admin::Column::Id.is_in(dir.id_list))
+        .exec(db.get_ref())
+        .await?;
 
     UniResponse::ok(r.rows_affected.into()).into()
 }

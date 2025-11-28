@@ -1,5 +1,5 @@
 use crate::{
-    api::preclude::*,
+    api::{admin::dto::DeleteItemsRequest, preclude::*},
     entity::{challenges, event_challenges, events},
 };
 
@@ -84,61 +84,25 @@ pub async fn add_challenge(
     UniResponse::ok(event_challenges_list.into()).into()
 }
 
-pub type DeleteChallengeRequest = AddChallengeRequest;
 /// DELETE /api/admin/events/{event_id}/challenges
 #[delete("")]
 pub async fn remove_challenge(
     _user: SuperAdminJwtGuard,
     db: WebDb,
     event_id: Path<Uuid>,
-    dcr: Json<DeleteChallengeRequest>,
+    dir: Json<DeleteItemsRequest>,
 ) -> UniResult<u64> {
-    let dcr = dcr.into_inner();
     let event_id = event_id.into_inner();
-    let event = events::Entity::find_by_id(event_id)
-        .one(db.get_ref())
+    let dir = dir.into_inner();
+
+    let deleted_count = event_challenges::Entity::delete_many()
+        .filter(event_challenges::Column::EventId.eq(event_id))
+        .filter(event_challenges::Column::ChallengeId.is_in(dir.id_list))
+        .exec(db.get_ref())
         .await?
-        .ok_or(UniError::NotFound(format!(" {} not exist", event_id)))?;
+        .rows_affected;
 
-    let mut rows_affected = 0;
-
-    if let Some(challenge_id) = dcr.challenge_id {
-        let challenge = challenges::Entity::find_by_id(challenge_id)
-            .one(db.get_ref())
-            .await?
-            .ok_or(UniError::NotFound(format!(" {} not exist", challenge_id)))?;
-
-        let event_challenge = event_challenges::Entity::find()
-            .filter(event_challenges::Column::EventId.eq(event.id))
-            .filter(event_challenges::Column::ChallengeId.eq(challenge.id))
-            .one(db.get_ref())
-            .await?
-            .ok_or(UniError::NotFound(format!(" {} not exist", challenge_id)))?;
-
-        let r = event_challenge.delete(db.get_ref()).await?;
-        rows_affected += r.rows_affected;
-    }
-
-    if let Some(challenge_id_list) = dcr.challenge_id_list {
-        for challenge_id in challenge_id_list {
-            let challenge = challenges::Entity::find_by_id(challenge_id)
-                .one(db.get_ref())
-                .await?
-                .ok_or(UniError::NotFound(format!(" {} not exist", challenge_id)))?;
-
-            let event_challenge = event_challenges::Entity::find()
-                .filter(event_challenges::Column::EventId.eq(event.id))
-                .filter(event_challenges::Column::ChallengeId.eq(challenge.id))
-                .one(db.get_ref())
-                .await?
-                .ok_or(UniError::NotFound(format!(" {} not exist", challenge_id)))?;
-
-            let r = event_challenge.delete(db.get_ref()).await?;
-            rows_affected += r.rows_affected;
-        }
-    }
-
-    UniResponse::ok(rows_affected.into()).into()
+    UniResponse::ok(deleted_count.into()).into()
 }
 
 #[derive(Debug, Serialize, Deserialize)]

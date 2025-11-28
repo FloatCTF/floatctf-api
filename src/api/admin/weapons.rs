@@ -2,7 +2,10 @@ use std::os::unix::fs::PermissionsExt;
 
 use actix_multipart::form::{MultipartForm, tempfile::TempFile, text::Text};
 
-use crate::{api::preclude::*, entity::weapons};
+use crate::{
+    api::{admin::dto::DeleteItemsRequest, preclude::*},
+    entity::weapons,
+};
 
 /// GET /api/admin/weapons
 #[get("")]
@@ -96,17 +99,21 @@ pub async fn patch_weapon(
     UniResponse::ok(weapon.into()).into()
 }
 
-#[delete("/{weapon_id}")]
+#[delete("")]
 pub async fn delete_weapon(
     _user: SuperAdminJwtGuard,
     db: WebDb,
-    weapon_id: Path<Uuid>,
-) -> UniResult<()> {
-    let weapon_id = weapon_id.into_inner();
-    weapons::Entity::delete_by_id(weapon_id)
+    dir: Json<DeleteItemsRequest>,
+) -> UniResult<u64> {
+    let dir = dir.into_inner();
+
+    let deleted_count = weapons::Entity::delete_many()
+        .filter(weapons::Column::Id.is_in(dir.id_list))
         .exec(db.get_ref())
-        .await?;
-    UniResponse::ok_none().into()
+        .await?
+        .rows_affected;
+
+    UniResponse::ok(deleted_count.into()).into()
 }
 
 #[derive(Debug, MultipartForm)]

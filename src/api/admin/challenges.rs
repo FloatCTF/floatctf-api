@@ -1,5 +1,5 @@
 use crate::{
-    api::preclude::*,
+    api::{admin::dto::DeleteItemsRequest, preclude::*},
     auth::SuperAdminJwtGuard,
     config::get_setting,
     db::WebDocker,
@@ -142,31 +142,36 @@ pub async fn get_challenge(
     UniResponse::ok(model.into()).into()
 }
 
-/// DELETE /api/admin/challenges/{challenge_id}
-#[delete("/{challenge_id}")]
+/// DELETE /api/admin/challenges
+#[delete("")]
 pub async fn delete_challenge(
     _user: SuperAdminJwtGuard,
     db: WebDb,
-    challenge_id: Path<Uuid>,
+    dir: Json<DeleteItemsRequest>,
 ) -> UniResult<u64> {
-    let challenge_id = challenge_id.into_inner();
-    let challenge = Challenges::find_by_id(challenge_id)
-        .one(db.get_ref())
-        .await?
-        .ok_or(UniError::NotFound(format!(" {} not exist", challenge_id)))?;
+    let dir = dir.into_inner();
 
-    let del_challenge_path = get_setting(&db, "CHALLENGES_DIR")
+    let mut deleted_count = 0;
+    let challenges_path = get_setting(&db, "CHALLENGES_DIR")
         .await
         .map_err(|e| UniError::CustomError(format!("get setting error: {}", e)))?;
-    let del_challenge_path = std::path::Path::new(&del_challenge_path).join(&challenge.safe_name);
-    if del_challenge_path.exists() {
-        std::fs::remove_dir_all(&del_challenge_path)
-            .map_err(|e| UniError::CustomError(format!("delete challenge dir error: {}", e)))?;
+
+    for challenge_id in dir.id_list {
+        let challenge = Challenges::find_by_id(challenge_id)
+            .one(db.get_ref())
+            .await?
+            .ok_or(UniError::NotFound(format!(" {} not exist", challenge_id)))?;
+
+        let del_challenge_path = std::path::Path::new(&challenges_path).join(&challenge.safe_name);
+        if del_challenge_path.exists() {
+            std::fs::remove_dir_all(&del_challenge_path)
+                .map_err(|e| UniError::CustomError(format!("delete challenge dir error: {}", e)))?;
+        }
+        let r = challenge.delete(db.get_ref()).await?;
+        deleted_count += r.rows_affected;
     }
 
-    let r = challenge.delete(db.get_ref()).await?;
-
-    UniResponse::ok(r.rows_affected.into()).into()
+    UniResponse::ok(deleted_count.into()).into()
 }
 
 #[derive(Debug, MultipartForm)]

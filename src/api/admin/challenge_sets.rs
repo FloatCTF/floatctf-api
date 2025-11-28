@@ -1,5 +1,5 @@
 use crate::{
-    api::preclude::*,
+    api::{admin::dto::DeleteItemsRequest, preclude::*},
     entity::{challenge_set_items, challenge_sets, challenges},
 };
 
@@ -72,18 +72,20 @@ pub async fn patch_challenge_set(
     UniResponse::ok(challenge_set.into()).into()
 }
 
-/// DELETE /api/admin/challenge_sets/{challenge_set_id}
-#[delete("/{challenge_set_id}")]
+/// DELETE /api/admin/challenge_sets
+#[delete("")]
 pub async fn delete_challenge_set(
     _user: SuperAdminJwtGuard,
     db: WebDb,
-    challenge_set_id: Path<Uuid>,
-) -> UniResult<()> {
-    let challenge_set_id = challenge_set_id.into_inner();
-    challenge_sets::Entity::delete_by_id(challenge_set_id)
+    dir: Json<DeleteItemsRequest>,
+) -> UniResult<u64> {
+    let dir = dir.into_inner();
+    let deleted_count = challenge_sets::Entity::delete_many()
+        .filter(challenge_sets::Column::Id.is_in(dir.id_list))
         .exec(db.get_ref())
-        .await?;
-    UniResponse::ok_none().into()
+        .await?
+        .rows_affected;
+    UniResponse::ok(deleted_count.into()).into()
 }
 
 /// GET /api/admin/challenge_sets
@@ -119,20 +121,24 @@ pub async fn get_challenge_set(
     UniResponse::ok(challenges.into()).into()
 }
 
-/// DELETE /api/admin/challenge_sets/{challenge_set_id}/challenges/{challenge_id}
-#[delete("/{challenge_set_id}/challenges/{challenge_id}")]
+/// DELETE /api/admin/challenge_sets/{challenge_set_id}/challenges
+#[delete("/{challenge_set_id}/challenges")]
 pub async fn delete_challenge_from_set(
     _user: SuperAdminJwtGuard,
     db: WebDb,
-    ids: Path<(Uuid, Uuid)>,
-) -> UniResult<()> {
-    let (challenge_set_id, challenge_id) = ids.into_inner();
-    challenge_set_items::Entity::delete_many()
+    challenge_set_id: Path<Uuid>,
+    dir: Json<DeleteItemsRequest>,
+) -> UniResult<u64> {
+    let challenge_set_id = challenge_set_id.into_inner();
+    let dir = dir.into_inner();
+
+    let deleted_count = challenge_set_items::Entity::delete_many()
         .filter(challenge_set_items::Column::SetId.eq(challenge_set_id))
-        .filter(challenge_set_items::Column::ChallengeId.eq(challenge_id))
+        .filter(challenge_set_items::Column::ChallengeId.is_in(dir.id_list))
         .exec(db.get_ref())
-        .await?;
-    UniResponse::ok_none().into()
+        .await?
+        .rows_affected;
+    UniResponse::ok(deleted_count.into()).into()
 }
 
 #[derive(Debug, Serialize, Deserialize)]

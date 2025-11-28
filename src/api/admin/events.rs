@@ -1,6 +1,8 @@
 use crate::{
     api::{
-        admin::{challenges::generate_safe_name, event_teams::TeamMemberResult},
+        admin::{
+            challenges::generate_safe_name, dto::DeleteItemsRequest, event_teams::TeamMemberResult,
+        },
         preclude::*,
         service::{
             __get_scoreboard, __get_trend, ScoreboardItem, TrendItem, calculate_next_dynamic_score,
@@ -164,23 +166,21 @@ pub async fn get_event(
     UniResponse::ok(event.into()).into()
 }
 
-/// DELETE /api/admin/events/{event_id}
-#[delete("/{event_id}")]
+/// DELETE /api/admin/events
+#[delete("")]
 pub async fn delete_event(
     _user: SuperAdminJwtGuard,
     db: WebDb,
-    event_id: Path<Uuid>,
+    dir: Json<DeleteItemsRequest>,
 ) -> UniResult<u64> {
-    let event_id = event_id.into_inner();
-
-    let event = events::Entity::find_by_id(event_id)
-        .one(db.get_ref())
+    let dir = dir.into_inner();
+    let deleted_count = events::Entity::delete_many()
+        .filter(events::Column::Id.is_in(dir.id_list))
+        .exec(db.get_ref())
         .await?
-        .ok_or(UniError::NotFound(format!(" {} not exist", event_id)))?;
+        .rows_affected;
 
-    let r = event.delete(db.get_ref()).await?;
-
-    UniResponse::ok(r.rows_affected.into()).into()
+    UniResponse::ok(deleted_count.into()).into()
 }
 
 #[derive(Debug, Serialize, Deserialize)]

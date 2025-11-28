@@ -1,5 +1,5 @@
 use crate::{
-    api::preclude::*,
+    api::{admin::dto::DeleteItemsRequest, preclude::*},
     entity::{event_users, events, users},
 };
 
@@ -65,36 +65,30 @@ pub async fn add_user(
     UniError::CustomError("user_id or user_id_list is required".to_string()).into()
 }
 
-/// DELETE /api/admin/events/{event_id}/users/{user_id}
-#[delete("/{user_id}")]
+/// DELETE /api/admin/events/{event_id}/users
+#[delete("")]
 pub async fn remove_user(
     _user: SuperAdminJwtGuard,
     db: WebDb,
-    path: Path<(Uuid, Uuid)>,
+    path: Path<Uuid>,
+    dir: Json<DeleteItemsRequest>,
 ) -> UniResult<u64> {
-    let (event_id, user_id) = path.into_inner();
+    let event_id = path.into_inner();
+    let dir = dir.into_inner();
 
     let event = events::Entity::find_by_id(event_id)
         .one(db.get_ref())
         .await?
         .ok_or(UniError::NotFound(format!(" {} not exist", event_id)))?;
 
-    let user = users::Entity::find_by_id(user_id)
-        .one(db.get_ref())
+    let deleted_count = event_users::Entity::delete_many()
+        .filter(event_users::Column::EventId.eq(event.id))
+        .filter(event_users::Column::UserId.is_in(dir.id_list))
+        .exec(db.get_ref())
         .await?
-        .ok_or(UniError::NotFound(format!(" {} not exist", user_id)))?;
+        .rows_affected;
 
-    let event_user = event_users::Entity::find_by_id((event.id, user.id))
-        .one(db.get_ref())
-        .await?
-        .ok_or(UniError::NotFound(format!(
-            " {} not exist in {}",
-            user_id, event_id
-        )))?;
-
-    let r = event_user.delete(db.get_ref()).await?;
-
-    UniResponse::ok(r.rows_affected.into()).into()
+    UniResponse::ok(deleted_count.into()).into()
 }
 
 #[derive(Debug, Serialize, Deserialize)]

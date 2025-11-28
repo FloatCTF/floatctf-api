@@ -1,5 +1,5 @@
 use crate::{
-    api::preclude::*,
+    api::{admin::dto::DeleteItemsRequest, preclude::*},
     entity::{sea_orm_active_enums::SettingValueType, settings},
 };
 
@@ -85,25 +85,29 @@ pub async fn patch_setting(
     UniResponse::ok(setting.into()).into()
 }
 
-/// DELETE /api/admin/settings/{setting_id}
-#[delete("/{setting_id}")]
+/// DELETE /api/admin/settings
+#[delete("")]
 pub async fn delete_setting(
     _user: SuperAdminJwtGuard,
     db: WebDb,
-    setting_id: Path<Uuid>,
-) -> UniResult<()> {
-    let setting_id = setting_id.into_inner();
-    let setting = settings::Entity::find_by_id(setting_id)
-        .one(db.get_ref())
-        .await?;
-    if let Some(setting) = setting {
-        if setting.protected {
-            return Err(UniError::CustomError(format!(
-                "protected setting can not be deleted: {}",
-                setting.key
-            )));
+    dir: Json<DeleteItemsRequest>,
+) -> UniResult<u64> {
+    let dir = dir.into_inner();
+    let mut deleted_count = 0;
+    for setting_id in dir.id_list {
+        let setting = settings::Entity::find_by_id(setting_id)
+            .one(db.get_ref())
+            .await?;
+        if let Some(setting) = setting {
+            if setting.protected {
+                return Err(UniError::CustomError(format!(
+                    "protected setting can not be deleted: {}",
+                    setting.key
+                )));
+            }
+            let r = setting.delete(db.get_ref()).await?;
+            deleted_count += r.rows_affected;
         }
-        setting.delete(db.get_ref()).await?;
     }
-    UniResponse::ok_none().into()
+    UniResponse::ok(deleted_count.into()).into()
 }

@@ -1,5 +1,5 @@
 use crate::{
-    api::preclude::*,
+    api::{admin::dto::DeleteItemsRequest, preclude::*},
     entity::{
         event_team_members, event_teams, event_users, events,
         sea_orm_active_enums::EventTeamMemberRole, users,
@@ -38,20 +38,23 @@ pub async fn add_team(
     UniResponse::ok(event_team.into()).into()
 }
 
-/// DELETE /api/admin/events/{event_id}/teams/{team_id}
-#[delete("/{team_id}")]
-pub async fn remove_team(db: WebDb, path: Path<(Uuid, Uuid)>) -> UniResult<u64> {
-    let (event_id, team_id) = path.into_inner();
-
-    let event_team = event_teams::Entity::find_by_id(team_id)
+/// DELETE /api/admin/events/{event_id}/teams
+#[delete("")]
+pub async fn remove_team(
+    db: WebDb,
+    path: Path<Uuid>,
+    dir: Json<DeleteItemsRequest>,
+) -> UniResult<u64> {
+    let event_id = path.into_inner();
+    let dir = dir.into_inner();
+    let deleted_count = event_teams::Entity::delete_many()
         .filter(event_teams::Column::EventId.eq(event_id))
-        .one(db.get_ref())
+        .filter(event_teams::Column::Id.is_in(dir.id_list))
+        .exec(db.get_ref())
         .await?
-        .ok_or(UniError::NotFound(format!(" {} not exist", event_id)))?;
+        .rows_affected;
 
-    let r = event_team.delete(db.get_ref()).await?;
-
-    UniResponse::ok(r.rows_affected.into()).into()
+    UniResponse::ok(deleted_count.into()).into()
 }
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TeamMemberResult {
@@ -229,26 +232,25 @@ pub async fn add_user_to_team(
     UniResponse::ok(team_user.into()).into()
 }
 
-/// DELETE /api/admin/events/{event_id}/teams/{team_id}/users/{user_id}
-#[delete("/{team_id}/users/{user_id}")]
+/// DELETE /api/admin/events/{event_id}/teams/{team_id}/users
+#[delete("/{team_id}/users")]
 pub async fn remove_user_from_team(
     _user: SuperAdminJwtGuard,
     db: WebDb,
-    path: Path<(Uuid, Uuid, Uuid)>,
+    path: Path<(Uuid, Uuid)>,
+    dir: Json<DeleteItemsRequest>,
 ) -> UniResult<u64> {
-    let (event_id, team_id, user_id) = path.into_inner();
-
-    let event_team_member = event_team_members::Entity::find()
+    let (event_id, team_id) = path.into_inner();
+    let dir = dir.into_inner();
+    let deleted_count = event_team_members::Entity::delete_many()
         .filter(event_team_members::Column::EventId.eq(event_id))
         .filter(event_team_members::Column::TeamId.eq(team_id))
-        .filter(event_team_members::Column::UserId.eq(user_id))
-        .one(db.get_ref())
+        .filter(event_team_members::Column::UserId.is_in(dir.id_list))
+        .exec(db.get_ref())
         .await?
-        .ok_or(UniError::NotFound(format!(" {} not exist", user_id)))?;
+        .rows_affected;
 
-    let r = event_team_member.delete(db.get_ref()).await?;
-
-    UniResponse::ok(r.rows_affected.into()).into()
+    UniResponse::ok(deleted_count.into()).into()
 }
 
 /// POST /api/admin/events/{event_id}/teams/{team_id}/banned

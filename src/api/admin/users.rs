@@ -1,4 +1,7 @@
-use crate::{api::preclude::*, entity::users};
+use crate::{
+    api::{admin::dto::DeleteItemsRequest, preclude::*},
+    entity::users,
+};
 use argon2::{
     Argon2,
     password_hash::{PasswordHasher, SaltString, rand_core::OsRng},
@@ -146,22 +149,20 @@ pub async fn get_user(
     UniResponse::ok(model.into()).into()
 }
 
-/// DELETE /api/admin/users/{id}
-#[delete("/{id}")]
+/// DELETE /api/admin/users
+#[delete("")]
 pub async fn delete_user(
     _user: SuperAdminJwtGuard,
     db: WebDb,
-    user_id: Path<Uuid>,
+    dir: Json<DeleteItemsRequest>,
 ) -> UniResult<u64> {
-    let user_id = user_id.into_inner();
-    let user = users::Entity::find_by_id(user_id)
-        .one(db.get_ref())
+    let dir = dir.into_inner();
+    let deleted_count = users::Entity::delete_many()
+        .filter(users::Column::Id.is_in(dir.id_list))
+        .exec(db.get_ref())
         .await?
-        .ok_or(UniError::NotFound(format!(" {} not exist", user_id)))?;
-
-    let r = user.delete(db.get_ref()).await?;
-
-    UniResponse::ok(r.rows_affected.into()).into()
+        .rows_affected;
+    UniResponse::ok(deleted_count.into()).into()
 }
 
 #[actix_web::test]

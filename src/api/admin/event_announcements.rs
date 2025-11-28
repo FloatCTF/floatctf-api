@@ -1,5 +1,5 @@
 use crate::{
-    api::preclude::*,
+    api::{admin::dto::DeleteItemsRequest, preclude::*},
     entity::{event_announcements, events},
 };
 
@@ -66,20 +66,23 @@ pub async fn patch_event_announcement(
     UniResponse::ok(event_announcement.into()).into()
 }
 
-/// DELETE /api/admin/events/{event_id}/announcements/{announcement_id}
-#[delete("/{announcement_id}")]
-pub async fn remove_event_announcement(db: WebDb, path: Path<(Uuid, Uuid)>) -> UniResult<u64> {
-    let (event_id, announcement_id) = path.into_inner();
+/// DELETE /api/admin/events/{event_id}/announcements
+#[delete("")]
+pub async fn remove_event_announcement(
+    db: WebDb,
+    path: Path<Uuid>,
+    dir: Json<DeleteItemsRequest>,
+) -> UniResult<u64> {
+    let event_id = path.into_inner();
+    let dir = dir.into_inner();
 
-    let event_announcement = event_announcements::Entity::find_by_id(announcement_id)
+    let deleted_count = event_announcements::Entity::delete_many()
         .filter(event_announcements::Column::EventId.eq(event_id))
-        .one(db.get_ref())
-        .await?
-        .ok_or(UniError::NotFound(format!(" {} not exist", event_id)))?;
+        .filter(event_announcements::Column::Id.is_in(dir.id_list))
+        .exec(db.get_ref())
+        .await?;
 
-    let r = event_announcement.delete(db.get_ref()).await?;
-
-    UniResponse::ok(r.rows_affected.into()).into()
+    UniResponse::ok(deleted_count.rows_affected.into()).into()
 }
 
 /// GET /api/admin/events/{event_id}/announcements/{announcement_id}
