@@ -1,5 +1,5 @@
-use sea_orm::{Condition, EntityTrait, QueryFilter, Select};
-
+use sea_orm::{Condition, DatabaseConnection, EntityTrait, QueryFilter, QueryTrait, Select};
+use sea_orm::{DbErr, QuerySelect};
 pub struct FilterMapping {
     pub key: &'static str,
     pub column: Box<dyn Fn(&str) -> Condition>,
@@ -75,4 +75,58 @@ pub fn apply_filters<E: EntityTrait>(
     }
 
     stmt
+}
+use sea_orm::PaginatorTrait;
+
+use crate::api::QueryParams;
+
+pub async fn paginate_query<E: EntityTrait>(
+    stmt: Select<E>,
+    db: &DatabaseConnection,
+    limit: u64,
+    page: u64,
+) -> Result<(Vec<E::Model>, usize), DbErr>
+where
+    E: EntityTrait,
+    E::Model: Send + Sync,
+{
+    if limit == 0 || page == 0 {
+        return Ok((vec![], 0)); // 不分页或参数无效，直接返回空
+    }
+
+    let total_items = stmt.clone().count(db).await? as usize;
+
+    // 计算分页索引
+    let total_pages = (total_items + limit as usize - 1) / limit as usize;
+    let page_index = page
+        .saturating_sub(1)
+        .min(total_pages.saturating_sub(1) as u64);
+
+    // 分页查询
+    let items = stmt.paginate(db, limit).fetch_page(page_index).await?;
+
+    Ok((items, total_items))
+}
+
+pub async fn query_query<E>(
+    db: &DatabaseConnection,
+    mappings: &[FilterMapping],
+    query_params: &QueryParams,
+) -> Result<(Vec<E::Model>, usize), DbErr>
+where
+    E: EntityTrait,
+    E::Model: Send + Sync,
+{
+    let stmt = apply_filters(E::find(), query_params.filter.clone(), &mappings);
+
+    let (items, total_items) =
+        if let (Some(limit), Some(page)) = (query_params.limit, query_params.page) {
+            let d = paginate_query(stmt, db, limit, page).await?;
+            d
+        } else {
+            let items = stmt.all(db).await?;
+            (items.clone(), items.len())
+        };
+
+    Ok((items, total_items))
 }

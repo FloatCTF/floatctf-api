@@ -1,5 +1,8 @@
 use crate::{
-    api::{FilterMapping, admin::dto::DeleteItemsRequest, apply_filters, preclude::*},
+    api::{
+        FilterMapping, admin::dto::DeleteItemsRequest, apply_filters, preclude::*,
+        sea_orm_utils::query_query,
+    },
     entity::users,
 };
 use argon2::{
@@ -117,7 +120,7 @@ pub async fn get_users(
     query_params: Query<QueryParams>,
 ) -> UniResult<Vec<users::Model>> {
     let mut query_params = query_params.0;
-    dbg!(&query_params);
+
     let mappings = [
         FilterMapping {
             key: "id",
@@ -133,25 +136,12 @@ pub async fn get_users(
         },
     ];
 
-    // 构建带 filter 的查询
-    let stmt = apply_filters(
-        users::Entity::find(),
-        query_params.filter.clone(),
-        &mappings,
-    );
+    let (items, total_items) =
+        query_query::<users::Entity>(db.get_ref(), &mappings, &query_params).await?;
 
-    if let (Some(limit), Some(page)) = (query_params.limit, query_params.page) {
-        let paginator = stmt.paginate(db.get_ref(), limit);
-        let items = paginator.fetch_page(page.saturating_sub(1)).await?;
-        query_params.total = Some(paginator.num_items().await? as usize);
+    query_params.total = Some(total_items);
 
-        UniResponse::ok_meta(items.into(), query_params.into()).into()
-    } else {
-        let items = stmt.all(db.get_ref()).await?;
-        query_params.total = Some(items.len());
-
-        UniResponse::ok_meta(items.into(), query_params.into()).into()
-    }
+    UniResponse::ok_meta(items.into(), query_params.into()).into()
 }
 
 /// GET /api/admin/users/{id}
