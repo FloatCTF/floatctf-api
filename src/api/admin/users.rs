@@ -1,11 +1,12 @@
 use crate::{
-    api::{admin::dto::DeleteItemsRequest, preclude::*},
+    api::{FilterMapping, admin::dto::DeleteItemsRequest, apply_filters, preclude::*},
     entity::users,
 };
 use argon2::{
     Argon2,
     password_hash::{PasswordHasher, SaltString, rand_core::OsRng},
 };
+use sea_orm::Condition;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CreateUserRequest {
@@ -116,8 +117,28 @@ pub async fn get_users(
     query_params: Query<QueryParams>,
 ) -> UniResult<Vec<users::Model>> {
     let mut query_params = query_params.0;
+    dbg!(&query_params);
+    let mappings = [
+        FilterMapping {
+            key: "id",
+            column: Box::new(|v| Condition::all().add(users::Column::Id.contains(v))),
+        },
+        FilterMapping {
+            key: "username",
+            column: Box::new(|v| Condition::all().add(users::Column::Username.contains(v))),
+        },
+        FilterMapping {
+            key: "nickname",
+            column: Box::new(|v| Condition::all().add(users::Column::Nickname.contains(v))),
+        },
+    ];
 
-    let stmt = users::Entity::find();
+    // 构建带 filter 的查询
+    let stmt = apply_filters(
+        users::Entity::find(),
+        query_params.filter.clone(),
+        &mappings,
+    );
 
     if let (Some(limit), Some(page)) = (query_params.limit, query_params.page) {
         let paginator = stmt.paginate(db.get_ref(), limit);

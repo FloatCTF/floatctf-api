@@ -6,6 +6,8 @@ pub struct QueryParams {
     pub offset: Option<u64>,
     pub limit: Option<u64>,
     pub page: Option<u64>,
+    pub filter: Option<String>,
+
     // for response
     pub total: Option<usize>,
 }
