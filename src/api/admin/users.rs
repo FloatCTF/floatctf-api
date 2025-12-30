@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use crate::{
     api::{
         FilterMapping, admin::dto::DeleteItemsRequest, apply_filters, preclude::*,
@@ -124,7 +126,10 @@ pub async fn get_users(
     let mappings = [
         FilterMapping {
             key: "id",
-            column: Box::new(|v| Condition::all().add(users::Column::Id.contains(v))),
+            column: Box::new(|v| {
+                Condition::all()
+                    .add(users::Column::Id.eq(Uuid::from_str(&v).unwrap_or(Uuid::nil())))
+            }),
         },
         FilterMapping {
             key: "username",
@@ -133,6 +138,10 @@ pub async fn get_users(
         FilterMapping {
             key: "nickname",
             column: Box::new(|v| Condition::all().add(users::Column::Nickname.contains(v))),
+        },
+        FilterMapping {
+            key: "email",
+            column: Box::new(|v| Condition::all().add(users::Column::Email.contains(v))),
         },
     ];
 

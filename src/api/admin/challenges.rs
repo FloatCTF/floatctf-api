@@ -1,5 +1,5 @@
 use crate::{
-    api::{admin::dto::DeleteItemsRequest, preclude::*},
+    api::{FilterMapping, admin::dto::DeleteItemsRequest, preclude::*, sea_orm_utils::query_query},
     auth::SuperAdminJwtGuard,
     config::get_setting,
     db::WebDocker,
@@ -10,9 +10,10 @@ use base64::Engine;
 use fcmc::ChallengeMeta;
 
 use sea_orm::{
-    ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set, sea_query::OnConflict,
+    ColumnTrait, Condition, DatabaseConnection, EntityTrait, QueryFilter, Set,
+    sea_query::OnConflict,
 };
-use std::io::Read;
+use std::{io::Read, str::FromStr};
 use tempfile::NamedTempFile;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -111,20 +112,40 @@ pub async fn get_challenges(
 ) -> UniResult<Vec<challenges::Model>> {
     let mut query_params = query_params.0;
 
-    let stmt = Challenges::find();
+    let mappings = [
+        FilterMapping {
+            key: "id",
+            column: Box::new(|v| {
+                Condition::all()
+                    .add(challenges::Column::Id.eq(Uuid::from_str(&v).unwrap_or(Uuid::nil())))
+            }),
+        },
+        FilterMapping {
+            key: "name",
+            column: Box::new(|v| Condition::all().add(challenges::Column::Name.contains(v))),
+        },
+        FilterMapping {
+            key: "category",
+            column: Box::new(|v| Condition::all().add(challenges::Column::Category.contains(v))),
+        },
+        FilterMapping {
+            key: "hidden",
+            column: Box::new(|v| {
+                Condition::all()
+                    .add(challenges::Column::Hidden.eq(v.parse::<bool>().unwrap_or(true)))
+            }),
+        },
+        FilterMapping {
+            key: "description",
+            column: Box::new(|v| Condition::all().add(challenges::Column::Description.contains(v))),
+        },
+    ];
+    let (items, total_items) =
+        query_query::<challenges::Entity>(db.get_ref(), &mappings, &query_params).await?;
 
-    if let (Some(limit), Some(page)) = (query_params.limit, query_params.page) {
-        let paginator = stmt.paginate(db.get_ref(), limit);
-        let items = paginator.fetch_page(page.saturating_sub(1)).await?;
-        query_params.total = Some(paginator.num_items().await? as usize);
+    query_params.total = Some(total_items);
 
-        UniResponse::ok_meta(items.into(), query_params.into()).into()
-    } else {
-        let items = stmt.all(db.get_ref()).await?;
-        query_params.total = Some(items.len());
-
-        UniResponse::ok_meta(items.into(), query_params.into()).into()
-    }
+    UniResponse::ok_meta(items.into(), query_params.into()).into()
 }
 
 /// GET /api/admin/challenges/{challenge_id}

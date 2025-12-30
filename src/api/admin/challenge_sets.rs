@@ -1,5 +1,9 @@
+use std::str::FromStr;
+
+use sea_orm::Condition;
+
 use crate::{
-    api::{admin::dto::DeleteItemsRequest, preclude::*},
+    api::{FilterMapping, admin::dto::DeleteItemsRequest, preclude::*, sea_orm_utils::query_query},
     entity::{challenge_set_items, challenge_sets, challenges},
 };
 
@@ -93,9 +97,35 @@ pub async fn delete_challenge_set(
 pub async fn get_challenge_sets(
     _user: SuperAdminJwtGuard,
     db: WebDb,
+    query_params: Query<QueryParams>,
 ) -> UniResult<Vec<challenge_sets::Model>> {
-    let challenge_sets = challenge_sets::Entity::find().all(db.get_ref()).await?;
-    UniResponse::ok(challenge_sets.into()).into()
+    let mut query_params = query_params.0;
+
+    let mappings = [
+        FilterMapping {
+            key: "id",
+            column: Box::new(|v| {
+                Condition::all()
+                    .add(challenge_sets::Column::Id.eq(Uuid::from_str(&v).unwrap_or(Uuid::nil())))
+            }),
+        },
+        FilterMapping {
+            key: "name",
+            column: Box::new(|v| Condition::all().add(challenge_sets::Column::Name.contains(v))),
+        },
+        FilterMapping {
+            key: "description",
+            column: Box::new(|v| {
+                Condition::all().add(challenge_sets::Column::Description.contains(v))
+            }),
+        },
+    ];
+    let (items, total_items) =
+        query_query::<challenge_sets::Entity>(db.get_ref(), &mappings, &query_params).await?;
+
+    dbg!(&total_items);
+    query_params.total = Some(total_items);
+    UniResponse::ok_meta(items.into(), query_params.into()).into()
 }
 
 /// GET /api/admin/challenge_sets/{challenge_set_id}

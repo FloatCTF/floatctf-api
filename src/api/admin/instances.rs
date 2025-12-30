@@ -1,5 +1,9 @@
+use std::str::FromStr;
+
+use sea_orm::{Condition, sea_query::ValueType};
+
 use crate::{
-    api::preclude::*,
+    api::{FilterMapping, preclude::*, sea_orm_utils::query_query},
     entity::{instances, sea_orm_active_enums::InstanceStatus, users},
     strategies::event,
 };
@@ -12,21 +16,55 @@ pub async fn get_instances(
     query_params: Query<QueryParams>,
 ) -> UniResult<Vec<instances::Model>> {
     let mut query_params = query_params.0;
+    // const filterKeys = ["id", "status", "ref", "flag", "challenge_id", "user_id"];
 
-    let stmt = instances::Entity::find();
+    let mappings = [
+        FilterMapping {
+            key: "id",
+            column: Box::new(|v| {
+                Condition::all()
+                    .add(instances::Column::Id.eq(Uuid::from_str(&v).unwrap_or(Uuid::nil())))
+            }),
+        },
+        FilterMapping {
+            key: "status",
+            column: Box::new(|v| {
+                Condition::all().add(
+                    instances::Column::Status
+                        .eq(serde_json::from_str(v).unwrap_or(InstanceStatus::Running)),
+                )
+            }),
+        },
+        FilterMapping {
+            key: "ref",
+            column: Box::new(|v| Condition::all().add(instances::Column::Ref.contains(v))),
+        },
+        FilterMapping {
+            key: "flag",
+            column: Box::new(|v| Condition::all().add(instances::Column::Flag.contains(v))),
+        },
+        FilterMapping {
+            key: "challenge_id",
+            column: Box::new(|v| {
+                Condition::all().add(
+                    instances::Column::ChallengeId.eq(Uuid::from_str(&v).unwrap_or(Uuid::nil())),
+                )
+            }),
+        },
+        FilterMapping {
+            key: "user_id",
+            column: Box::new(|v| {
+                Condition::all()
+                    .add(instances::Column::UserId.eq(Uuid::from_str(&v).unwrap_or(Uuid::nil())))
+            }),
+        },
+    ];
+    let (items, total_items) =
+        query_query::<instances::Entity>(db.get_ref(), &mappings, &query_params).await?;
 
-    if let (Some(limit), Some(page)) = (query_params.limit, query_params.page) {
-        let paginator = stmt.paginate(db.get_ref(), limit);
-        let items = paginator.fetch_page(page.saturating_sub(1)).await?;
-        query_params.total = Some(paginator.num_items().await? as usize);
+    query_params.total = Some(total_items);
 
-        UniResponse::ok_meta(items.into(), query_params.into()).into()
-    } else {
-        let items = stmt.all(db.get_ref()).await?;
-        query_params.total = Some(items.len());
-
-        UniResponse::ok_meta(items.into(), query_params.into()).into()
-    }
+    UniResponse::ok_meta(items.into(), query_params.into()).into()
 }
 
 /// GET /api/admin/instances/{instance_id}

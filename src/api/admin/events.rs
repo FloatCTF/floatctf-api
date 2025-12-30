@@ -1,9 +1,11 @@
 use crate::{
     api::{
+        FilterMapping,
         admin::{
             challenges::generate_safe_name, dto::DeleteItemsRequest, event_teams::TeamMemberResult,
         },
         preclude::*,
+        sea_orm_utils::query_query,
         service::{
             __get_scoreboard, __get_trend, ScoreboardItem, TrendItem, calculate_next_dynamic_score,
         },
@@ -14,8 +16,9 @@ use crate::{
     },
 };
 use chrono::NaiveDateTime;
-use std::fs::File;
+use sea_orm::Condition;
 use std::io::Write;
+use std::{fs::File, str::FromStr};
 use zip::write::FileOptions;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -133,21 +136,49 @@ pub async fn get_events(
     query_params: Query<QueryParams>,
 ) -> UniResult<Vec<events::Model>> {
     let mut query_params = query_params.0;
+    // const filterKeys = ["id", "type", "title", "hidden", "allow_join"];
 
-    let stmt = events::Entity::find();
+    let mappings = [
+        FilterMapping {
+            key: "id",
+            column: Box::new(|v| {
+                Condition::all()
+                    .add(events::Column::Id.eq(Uuid::from_str(&v).unwrap_or(Uuid::nil())))
+            }),
+        },
+        FilterMapping {
+            key: "type",
+            column: Box::new(|v| {
+                Condition::all().add(
+                    events::Column::Type
+                        .eq(serde_json::from_str(v).unwrap_or(EventType::JeopardyPractice)),
+                )
+            }),
+        },
+        FilterMapping {
+            key: "title",
+            column: Box::new(|v| Condition::all().add(events::Column::Title.contains(v))),
+        },
+        FilterMapping {
+            key: "hidden",
+            column: Box::new(|v| {
+                Condition::all().add(events::Column::Hidden.eq(v.parse::<bool>().unwrap_or(true)))
+            }),
+        },
+        FilterMapping {
+            key: "allow_join",
+            column: Box::new(|v| {
+                Condition::all()
+                    .add(events::Column::AllowJoin.eq(v.parse::<bool>().unwrap_or(false)))
+            }),
+        },
+    ];
+    let (items, total_items) =
+        query_query::<events::Entity>(db.get_ref(), &mappings, &query_params).await?;
 
-    if let (Some(limit), Some(page)) = (query_params.limit, query_params.page) {
-        let paginator = stmt.paginate(db.get_ref(), limit);
-        let items = paginator.fetch_page(page.saturating_sub(1)).await?;
-        query_params.total = Some(paginator.num_items().await? as usize);
+    query_params.total = Some(total_items);
 
-        UniResponse::ok_meta(items.into(), query_params.into()).into()
-    } else {
-        let items = stmt.all(db.get_ref()).await?;
-        query_params.total = Some(items.len());
-
-        UniResponse::ok_meta(items.into(), query_params.into()).into()
-    }
+    UniResponse::ok_meta(items.into(), query_params.into()).into()
 }
 
 /// GET /api/admin/events/{event_id}
