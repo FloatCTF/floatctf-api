@@ -186,7 +186,7 @@ pub async fn send_reset_email(db: WebDb, rpr: Json<ResetPasswordRequest>) -> Uni
     let main_url = get_setting(db.get_ref(), "MAIN_URL")
         .await
         .map_err(|e| UniError::CustomError(format!("Failed to get MAIN_URL: {}", e)))?;
-
+    //
     // generate token
     let token = gen_jwt_token(user.id, Role::ResetAccount, Some(10))
         .map_err(|e| UniError::CustomError(e.to_string()))?;

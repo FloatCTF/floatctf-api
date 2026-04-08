@@ -52,6 +52,13 @@ pub async fn get_instances(
             }),
         },
         FilterMapping {
+            key: "gamebox_id",
+            column: Box::new(|v| {
+                Condition::all()
+                    .add(instances::Column::GameboxId.eq(Uuid::from_str(&v).unwrap_or(Uuid::nil())))
+            }),
+        },
+        FilterMapping {
             key: "user_id",
             column: Box::new(|v| {
                 Condition::all()

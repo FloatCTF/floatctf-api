@@ -19,10 +19,13 @@ impl EventStrategy for JeopardyPractice {
             .await?
             .ok_or(anyhow!("no instance"))?;
 
-        let challenge = challenges::Entity::find_by_id(instance.challenge_id)
-            .one(db)
-            .await?
-            .ok_or(anyhow!("no challenge"))?;
+        let challenge = challenges::Entity::find_by_id(instance.challenge_id.ok_or(anyhow!(
+            "instance has no challenge_id: {}",
+            instance.id.to_string()
+        ))?)
+        .one(db)
+        .await?
+        .ok_or(anyhow!("no challenge"))?;
 
         if sfr.flag != instance.flag {
             return Err(anyhow!("flag is not correct"));
@@ -126,7 +129,7 @@ impl EventStrategy for JeopardyPractice {
             None,
         )
         .await
-        .map_err(|e| UniError::InternalError(e.to_string()))?;
+        .map_err(|e| anyhow!(e.to_string()))?;
 
         Ok(res_instance)
     }

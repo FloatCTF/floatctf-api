@@ -40,10 +40,13 @@ impl EventStrategy for JeopardyTeamStrategy {
             .await?
             .ok_or(anyhow!("no instance"))?;
 
-        let challenge = challenges::Entity::find_by_id(instance.challenge_id)
-            .one(db)
-            .await?
-            .ok_or(anyhow!("no challenge"))?;
+        let challenge = challenges::Entity::find_by_id(instance.challenge_id.ok_or(anyhow!(
+            "Instance has no challenge_id: {}",
+            instance.id.to_string()
+        ))?)
+        .one(db)
+        .await?
+        .ok_or(anyhow!("no challenge"))?;
 
         // check flag
         if sfr.flag != instance.flag {
@@ -139,14 +142,14 @@ impl EventStrategy for JeopardyTeamStrategy {
             .filter(
                 event_instances::Column::EventId
                     .eq(ctx.event.id)
-                    .and(event_instances::Column::ChallengeId.eq(challenge_id))
                     .and(event_instances::Column::TeamId.eq(team_member.team_id)),
             )
             .find_also_related(instances::Entity)
             .filter(
                 instances::Column::Status
                     .eq(InstanceStatus::Running)
-                    .and(instances::Column::Ref.eq("JeopardyTeam")),
+                    .and(instances::Column::Ref.eq("JeopardyTeam"))
+                    .and(instances::Column::ChallengeId.eq(challenge_id)),
             )
             .one(ctx.db.get_ref())
             .await?
@@ -171,10 +174,14 @@ impl EventStrategy for JeopardyTeamStrategy {
         let data = event_instances::Entity::find()
             .filter(event_instances::Column::EventId.eq(ctx.event.id))
             .filter(event_instances::Column::TeamId.eq(team_member.team_id))
+            // 联结 instances 表
             .find_also_related(instances::Entity)
             .filter(instances::Column::Status.eq(InstanceStatus::Running))
             .filter(instances::Column::Ref.eq("JeopardyTeam"))
-            .find_also_related(challenges::Entity)
+            // 注意：如果 Challenge 是 Instance 的关联表，
+            // 需要确保 instances::Entity 的 Relation 里有 Challenge
+            .join(JoinType::LeftJoin, instances::Relation::Challenges.def())
+            .select_also(challenges::Entity)
             .all(db)
             .await?;
 
@@ -257,11 +264,14 @@ impl EventStrategy for JeopardyTeamStrategy {
             .filter(
                 event_instances::Column::EventId
                     .eq(event_id)
-                    .and(event_instances::Column::ChallengeId.eq(challenge_id))
                     .and(event_instances::Column::TeamId.eq(team_id)),
             )
             .find_also_related(instances::Entity)
-            .filter(instances::Column::Status.eq(InstanceStatus::Running))
+            .filter(
+                instances::Column::Status
+                    .eq(InstanceStatus::Running)
+                    .and(instances::Column::ChallengeId.eq(challenge_id)),
+            )
             .one(db)
             .await?;
 
@@ -293,7 +303,6 @@ impl EventStrategy for JeopardyTeamStrategy {
 
         let new_event_instance = event_instances::ActiveModel {
             event_id: Set(event_id),
-            challenge_id: Set(challenge_id),
             user_id: Set(user.id),
             instance_id: Set(res_instance.id),
             team_id: Set(Some(team_id)),

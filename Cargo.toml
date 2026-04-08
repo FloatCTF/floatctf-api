@@ -44,3 +44,10 @@ sysinfo = "0.37.0"
 minijinja = "2.12.0"
 async-trait = "0.1.89"
 lettre = "0.11.19"
+
+[profile.dev]
+opt-level = 0      # 0: 不优化，编译最快（默认）
+debug = true
+                   # 1: 基础优化，平衡速度
+                   # 2: 显著优化
+                   # 3: 最高级别优化（类似 Release）

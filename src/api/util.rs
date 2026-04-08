@@ -14,7 +14,7 @@ pub async fn send_email(
     let smtp_uri = get_setting(db.get_ref(), "SMTP_URI")
         .await
         .map_err(|e| anyhow!("Failed to get SMTP_URI: {}", e))?;
-
+    // smtp.163.com:user@163.com:password
     // 解析成三部分
     let parts: Vec<&str> = smtp_uri.split(':').collect();
     if parts.len() != 3 {

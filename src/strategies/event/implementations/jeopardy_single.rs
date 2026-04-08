@@ -26,7 +26,10 @@ impl EventStrategy for JeopardySingleStrategy {
             .await?
             .ok_or(anyhow!("no instance"))?;
 
-        let challenge = challenges::Entity::find_by_id(instance.challenge_id)
+        let challenge =
+            challenges::Entity::find_by_id(instance.challenge_id.ok_or(UniError::NotFound(
+                format!("instance has no challeng_id: {}", instance.id.to_string()),
+            ))?)
             .one(db)
             .await?
             .ok_or(anyhow!("no challenge"))?;
@@ -113,14 +116,14 @@ impl EventStrategy for JeopardySingleStrategy {
             .filter(
                 event_instances::Column::EventId
                     .eq(ctx.event.id)
-                    .and(event_instances::Column::ChallengeId.eq(challenge_id))
                     .and(event_instances::Column::UserId.eq(ctx.user.id)),
             )
             .find_also_related(instances::Entity)
             .filter(
                 instances::Column::Status
                     .eq(InstanceStatus::Running)
-                    .and(instances::Column::Ref.eq("JeopardySingle")),
+                    .and(instances::Column::Ref.eq("JeopardySingle"))
+                    .and(instances::Column::ChallengeId.eq(challenge_id)),
             )
             .one(ctx.db.get_ref())
             .await?
@@ -201,11 +204,14 @@ impl EventStrategy for JeopardySingleStrategy {
             .filter(
                 event_instances::Column::EventId
                     .eq(event_id)
-                    .and(event_instances::Column::ChallengeId.eq(challenge_id))
                     .and(event_instances::Column::UserId.eq(ctx.user.id)),
             )
             .find_also_related(instances::Entity)
-            .filter(instances::Column::Status.eq(InstanceStatus::Running))
+            .filter(
+                instances::Column::Status
+                    .eq(InstanceStatus::Running)
+                    .and(instances::Column::ChallengeId.eq(challenge_id)),
+            )
             .one(db)
             .await?
         {
@@ -238,7 +244,6 @@ impl EventStrategy for JeopardySingleStrategy {
         // 写入 event_instances 记录
         let new_event_instance = event_instances::ActiveModel {
             event_id: Set(event_id),
-            challenge_id: Set(challenge_id),
             user_id: Set(ctx.user.id),
             instance_id: Set(res_instance.id),
             team_id: Set(None),

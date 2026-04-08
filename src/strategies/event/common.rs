@@ -77,8 +77,8 @@ pub async fn launch_instance(
         status: Set(InstanceStatus::Running),
         flag: Set(flag),
         content: Set(content.into()),
-        challenge_id: Set(challenge.id),
         user_id: Set(user_id),
+        challenge_id: Set(challenge_id.into()),
         r#ref: Set(r#ref),
         destroy_at: Set(destroy_at.clone()),
         identifier: Set(identifier),
@@ -146,7 +146,7 @@ pub async fn destroy_instance(
 
         //  no docker
         if cm.docker.is_some() {
-            cm.stop_and_remove(docker.get_ref(), &instance_identifier)
+            fcmc::stop_and_remove(docker.get_ref(), &instance_identifier)
                 .await
                 .map_err(|e| anyhow!("destroy the instance: {}", e))?;
         }

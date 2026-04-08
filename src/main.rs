@@ -22,7 +22,7 @@ async fn main() -> std::io::Result<()> {
 
     // work_dir
     let work_dir = env::var("WORK_DIR").unwrap_or("./".to_string());
-    env::set_current_dir(work_dir).unwrap();
+    env::set_current_dir(&work_dir).unwrap();
 
     // 日志层
     let log_dir = env::var("LOG_DIR").unwrap_or("./logs".to_string());
@@ -37,11 +37,10 @@ async fn main() -> std::io::Result<()> {
         .with_timer(tracing_subscriber::fmt::time::ChronoLocal::rfc_3339())
         .init();
 
+    let version = env!("CARGO_PKG_VERSION");
     //
-    info!(
-        "Current working dir = {}",
-        env::current_dir().unwrap().display()
-    );
+    info!("Current working dir = {}, version = {}", work_dir, version);
+
     // for database
     let db: db::WebDb = web::Data::new(
         db::init_db()
