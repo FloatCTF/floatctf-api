@@ -3,8 +3,10 @@ mod auth;
 mod config;
 mod db;
 mod entity;
+mod scheduler;
 mod strategies;
 use std::env;
+use std::sync::Arc;
 
 use actix_cors::Cors;
 use actix_web::middleware::Logger;
@@ -14,6 +16,8 @@ use tracing::info;
 use tracing_actix_web::TracingLogger;
 use tracing_appender::rolling;
 use tracing_subscriber::{EnvFilter, fmt::writer::MakeWriterExt};
+
+use crate::scheduler::TaskScheduler;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -48,17 +52,28 @@ async fn main() -> std::io::Result<()> {
             .expect("DATABASE_URL must be set in .env file!"),
     );
 
-    // for settings
-    config::init_settings(&db).await;
-
     // for docker
     let docker: db::WebDocker =
         web::Data::new(db::init_docker().await.expect("no docker installed!"));
 
-    // for running instances
-    api::admin::kill_running_instances(db.clone(), docker.clone())
+    // for settings
+    config::init_settings(&db).await;
+
+    let mut task_scheduler = TaskScheduler::new(db.clone(), docker.clone());
+    task_scheduler
+        .init_startup_handlers()
         .await
-        .expect("kill running instances failed!");
+        .expect("init startup handlers failed!");
+    let task_scheduler_arc = Arc::new(task_scheduler);
+    task_scheduler_arc
+        .init_and_recover()
+        .await
+        .expect("init task scheduler failed!");
+
+    let sc_clone = task_scheduler_arc.clone();
+    actix_web::rt::spawn(async move {
+        sc_clone.start_polling().await;
+    });
 
     // for server
     let ip = env::var("SERVER_LISTEN_IP").unwrap_or("127.0.0.1".to_string());

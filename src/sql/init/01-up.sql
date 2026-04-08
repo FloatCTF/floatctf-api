@@ -28,10 +28,14 @@ CREATE TABLE IF NOT EXISTS "weapons" (
 CREATE TABLE IF NOT EXISTS "scheduled_tasks" (
     "id" UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     "group_id" UUID,                         -- 比赛ID或靶机ID，用于一键销毁
+    "task_name" VARCHAR(200) NOT NULL,   -- 任务名称，如 "第3轮-Flag刷新-选手A"
+    "description" TEXT,
     "task_key" VARCHAR(100) NOT NULL,        -- 路由键：GAME_START, LAB_CLOSE, CHECK...
     "trigger_type" VARCHAR(50) NOT NULL,     -- 触发类型：startup, once, cron
     "status" VARCHAR(50) NOT NULL DEFAULT 'pending', -- pending, running, completed, failed, paused
 
+    "is_enabled" BOOLEAN NOT NULL DEFAULT true,  -- 默认开启
+    "is_protected" BOOLEAN NOT NULL DEFAULT true,
     "cron_expr" VARCHAR(100),                -- 例如：*/10 * * * *
     "execute_at" TIMESTAMPTZ,                -- 计划执行时间
     "expires_at" TIMESTAMPTZ,                -- 过期时间：过了这个点就不再补执行
@@ -269,4 +273,5 @@ CREATE TABLE IF NOT EXISTS "event_instances" (
     PRIMARY KEY ("event_id", "instance_id")
 );
 
--- user_logs,training_logs, event_logs, system_logs, admin_logs
+-- event_logs
+-- logs JSONB

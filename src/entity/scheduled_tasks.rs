@@ -22,6 +22,11 @@ pub struct Model {
     pub last_run_at: Option<DateTimeWithTimeZone>,
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: DateTimeWithTimeZone,
+    pub task_name: String,
+    #[sea_orm(column_type = "Text", nullable)]
+    pub description: Option<String>,
+    pub enabled: bool,
+    pub protected: bool,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
