@@ -11,7 +11,7 @@ pub struct Model {
     pub event_id: Option<Uuid>,
     pub challenge_id: Uuid,
     pub user_id: Uuid,
-    pub created_at: DateTime,
+    pub created_at: DateTimeWithTimeZone,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

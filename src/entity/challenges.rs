@@ -21,8 +21,8 @@ pub struct Model {
     pub hidden: bool,
     #[sea_orm(column_type = "Text")]
     pub toml_str: String,
-    pub created_at: DateTime,
-    pub updated_at: DateTime,
+    pub created_at: DateTimeWithTimeZone,
+    pub updated_at: DateTimeWithTimeZone,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

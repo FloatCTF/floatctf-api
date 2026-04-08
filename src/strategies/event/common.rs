@@ -72,7 +72,7 @@ pub async fn launch_instance(
         .await?
         .parse::<i64>()?;
 
-    let destroy_at = Utc::now().naive_utc() + chrono::Duration::minutes(delay);
+    let destroy_at = Utc::now() + chrono::Duration::minutes(delay);
     let new_instance = instances::ActiveModel {
         status: Set(InstanceStatus::Running),
         flag: Set(flag),
@@ -80,7 +80,7 @@ pub async fn launch_instance(
         user_id: Set(user_id),
         challenge_id: Set(challenge_id.into()),
         r#ref: Set(r#ref),
-        destroy_at: Set(destroy_at.clone()),
+        destroy_at: Set(destroy_at.clone().into()),
         identifier: Set(identifier),
         ..Default::default()
     };
@@ -98,7 +98,7 @@ pub async fn launch_instance(
         .unwrap();
 
     actix_web::rt::spawn(async move {
-        let now = Utc::now().naive_utc();
+        let now = Utc::now();
         let delay = (destroy_at - now).to_std();
         match delay {
             Ok(d) => {
@@ -141,7 +141,7 @@ pub async fn destroy_instance(
         let instance_identifier = instance.identifier.clone();
         let mut m_instance = instance.into_active_model();
         m_instance.status = Set(InstanceStatus::Completed);
-        m_instance.updated_at = Set(Utc::now().naive_utc());
+        m_instance.updated_at = Set(Utc::now().into());
         m_instance.update(db.get_ref()).await?;
 
         //  no docker
@@ -202,13 +202,13 @@ pub fn virtual_practice_event() -> events::Model {
         title: Set("Virtual Practice Event".into()),
         description: Set(Some("Virtual Practice Event".into())),
         hidden: Set(true),
-        start_time: Set(Utc::now().naive_utc()),
-        end_time: Set(Utc::now().naive_utc() + chrono::Duration::days(365)),
+        start_time: Set(Utc::now().into()),
+        end_time: Set((Utc::now() + chrono::Duration::days(365)).into()),
         rules: Set("".into()),
         allow_join: Set(true),
         flag_prefix: Set(None), // use config settings
-        created_at: Set(Utc::now().naive_utc()),
-        updated_at: Set(Utc::now().naive_utc()),
+        created_at: Set(Utc::now().into()),
+        updated_at: Set(Utc::now().into()),
         ..Default::default()
     };
     let e = new_event

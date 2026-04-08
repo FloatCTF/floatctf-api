@@ -103,7 +103,7 @@ pub struct EventInstanceResult {
 // 额外默认方法实现
 pub trait EventStrategyExt: EventStrategy {
     fn get_event_status(&self, ctx: &EventContext) -> EventStatus {
-        let now = Utc::now().naive_utc();
+        let now = Utc::now();
         if now < ctx.event.start_time {
             EventStatus::NotStarted
         } else if now > ctx.event.end_time {

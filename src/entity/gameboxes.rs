@@ -29,8 +29,8 @@ pub struct Model {
     pub down_point: f64,
     #[sea_orm(column_type = "Double")]
     pub first_bouns: f64,
-    pub created_at: DateTime,
-    pub updated_at: DateTime,
+    pub created_at: DateTimeWithTimeZone,
+    pub updated_at: DateTimeWithTimeZone,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

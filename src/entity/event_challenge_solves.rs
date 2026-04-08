@@ -17,7 +17,7 @@ pub struct Model {
     pub obtained_points: f64,
     #[sea_orm(column_type = "Double")]
     pub bonus_points: f64,
-    pub created_at: DateTime,
+    pub created_at: DateTimeWithTimeZone,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

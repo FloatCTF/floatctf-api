@@ -107,7 +107,7 @@ pub async fn patch_user(
     pur.nickname.map(|n| {
         m_user.nickname = Set(n);
     });
-    m_user.updated_at = Set(Utc::now().naive_utc());
+    m_user.updated_at = Set(Utc::now().into());
 
     let user = m_user.update(db.get_ref()).await?;
 

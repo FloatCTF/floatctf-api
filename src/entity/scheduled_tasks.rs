@@ -4,16 +4,22 @@ use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq, Serialize, Deserialize)]
-#[sea_orm(table_name = "super_admin")]
+#[sea_orm(table_name = "scheduled_tasks")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: Uuid,
-    #[sea_orm(column_type = "Text", unique)]
-    pub username: String,
-    #[sea_orm(column_type = "Text")]
-    pub password: String,
-    #[sea_orm(column_type = "Text")]
-    pub email: String,
+    pub group_id: Option<Uuid>,
+    pub task_key: String,
+    pub trigger_type: String,
+    pub status: String,
+    pub cron_expr: Option<String>,
+    pub execute_at: Option<DateTimeWithTimeZone>,
+    pub expires_at: Option<DateTimeWithTimeZone>,
+    #[sea_orm(column_type = "JsonBinary", nullable)]
+    pub payload: Option<Json>,
+    #[sea_orm(column_type = "Text", nullable)]
+    pub error_msg: Option<String>,
+    pub last_run_at: Option<DateTimeWithTimeZone>,
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: DateTimeWithTimeZone,
 }

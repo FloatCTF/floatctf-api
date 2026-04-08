@@ -46,3 +46,11 @@ CREATE INDEX "idx_event_team_challenge" ON "event_instances" (
     "team_id",
     "challenge_id"
 );
+
+-- 2. 调度器专用的极速轮询索引 (极其重要)
+CREATE INDEX idx_scheduled_tasks_poll
+ON "scheduled_tasks" ("status", "execute_at")
+WHERE "status" = 'pending';
+
+-- 3. 业务组关联索引
+CREATE INDEX idx_scheduled_tasks_group ON "scheduled_tasks" ("group_id");

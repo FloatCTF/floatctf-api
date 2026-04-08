@@ -13,7 +13,7 @@ pub struct Model {
     #[sea_orm(column_type = "Double")]
     pub points: f64,
     pub banned: bool,
-    pub joined_at: DateTime,
+    pub joined_at: DateTimeWithTimeZone,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

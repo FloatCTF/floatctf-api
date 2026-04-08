@@ -17,6 +17,7 @@ pub use super::event_writeup::Entity as EventWriteup;
 pub use super::events::Entity as Events;
 pub use super::gameboxes::Entity as Gameboxes;
 pub use super::instances::Entity as Instances;
+pub use super::scheduled_tasks::Entity as ScheduledTasks;
 pub use super::settings::Entity as Settings;
 pub use super::super_admin::Entity as SuperAdmin;
 pub use super::users::Entity as Users;

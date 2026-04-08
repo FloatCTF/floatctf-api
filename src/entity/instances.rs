@@ -20,9 +20,9 @@ pub struct Model {
     pub user_id: Uuid,
     #[sea_orm(column_type = "Text")]
     pub identifier: String,
-    pub created_at: DateTime,
-    pub updated_at: DateTime,
-    pub destroy_at: DateTime,
+    pub created_at: DateTimeWithTimeZone,
+    pub updated_at: DateTimeWithTimeZone,
+    pub destroy_at: DateTimeWithTimeZone,
     pub gamebox_id: Option<Uuid>,
 }
 

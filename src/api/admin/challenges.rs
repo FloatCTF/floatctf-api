@@ -96,7 +96,7 @@ pub async fn patch_challenge(
     });
 
     pcr.toml_str.map(|t| m_challenge.toml_str = Set(t));
-    m_challenge.updated_at = Set(Utc::now().naive_utc());
+    m_challenge.updated_at = Set(Utc::now().into());
 
     let challenge = m_challenge.update(db.get_ref()).await?;
 

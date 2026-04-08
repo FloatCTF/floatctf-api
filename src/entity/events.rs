@@ -15,15 +15,15 @@ pub struct Model {
     #[sea_orm(column_type = "Text", nullable)]
     pub description: Option<String>,
     pub hidden: bool,
-    pub start_time: DateTime,
+    pub start_time: DateTimeWithTimeZone,
     #[sea_orm(column_type = "Text")]
     pub rules: String,
     pub allow_join: bool,
     #[sea_orm(column_type = "Text", nullable)]
     pub flag_prefix: Option<String>,
-    pub end_time: DateTime,
-    pub created_at: DateTime,
-    pub updated_at: DateTime,
+    pub end_time: DateTimeWithTimeZone,
+    pub created_at: DateTimeWithTimeZone,
+    pub updated_at: DateTimeWithTimeZone,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

@@ -13,7 +13,7 @@ pub struct Model {
     pub team_id: Option<Uuid>,
     #[sea_orm(column_type = "Text")]
     pub file_url: String,
-    pub created_at: DateTime,
+    pub created_at: DateTimeWithTimeZone,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

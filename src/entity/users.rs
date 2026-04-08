@@ -16,8 +16,8 @@ pub struct Model {
     pub password: String,
     #[sea_orm(column_type = "Text", unique)]
     pub email: String,
-    pub created_at: DateTime,
-    pub updated_at: DateTime,
+    pub created_at: DateTimeWithTimeZone,
+    pub updated_at: DateTimeWithTimeZone,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

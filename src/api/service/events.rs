@@ -8,7 +8,7 @@ use crate::{
     },
     strategies::event,
 };
-use chrono::NaiveDateTime;
+use chrono::{DateTime, FixedOffset};
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -815,7 +815,7 @@ pub async fn get_scoreboard(
 pub struct TrendPoint {
     pub name: String,
     pub score: f64, // total score
-    pub time: NaiveDateTime,
+    pub time: DateTime<FixedOffset>,
 }
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TrendItem {
@@ -1022,7 +1022,7 @@ pub async fn get_submit_wp_status(
     _user: UserJwtGuard,
     db: WebDb,
     event_id: Path<Uuid>,
-) -> UniResult<NaiveDateTime> {
+) -> UniResult<DateTime<FixedOffset>> {
     let wp = event_writeup::Entity::find()
         .filter(event_writeup::Column::EventId.eq(*event_id))
         .order_by_desc(event_writeup::Column::CreatedAt)
@@ -1047,7 +1047,7 @@ impl EventStatus {
             .await?
             .ok_or(UniError::NotFound("event not found".to_string()))?;
 
-        let now = Utc::now().naive_utc(); // 当前 UTC 时间
+        let now = Utc::now(); // 当前 UTC 时间
         if now < event.start_time {
             return Ok(Self::NotStarted);
         } else if now > event.end_time {

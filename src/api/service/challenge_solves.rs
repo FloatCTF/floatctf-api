@@ -3,7 +3,7 @@ use crate::{
     entity::{challenge_solves, users},
 };
 
-use chrono::NaiveDateTime;
+use chrono::{DateTime, FixedOffset};
 use std::collections::HashMap;
 
 /// GET /api/challenge_solves
@@ -38,7 +38,7 @@ pub struct TopUser {
     no: usize,
     nickname: String,
     solved_count: u64,
-    solved_last_at: NaiveDateTime,
+    solved_last_at: DateTime<FixedOffset>,
 }
 
 /// GET /api/challenge_solves/top15users
@@ -50,7 +50,8 @@ pub async fn get_top_15_users(_user: UserJwtGuard, db: WebDb) -> UniResult<Vec<T
         .await?;
 
     // 2. 在内存里统计
-    let mut stats: HashMap<Uuid, (u64, NaiveDateTime)> = HashMap::new();
+    let mut stats: HashMap<Uuid, (u64, DateTime<FixedOffset>)> = HashMap::new();
+
     for s in solves {
         stats
             .entry(s.user_id)

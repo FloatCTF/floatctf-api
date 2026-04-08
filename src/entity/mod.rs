@@ -19,6 +19,7 @@ pub mod event_writeup;
 pub mod events;
 pub mod gameboxes;
 pub mod instances;
+pub mod scheduled_tasks;
 pub mod sea_orm_active_enums;
 pub mod settings;
 pub mod super_admin;

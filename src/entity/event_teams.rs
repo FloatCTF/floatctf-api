@@ -15,8 +15,8 @@ pub struct Model {
     pub description: Option<String>,
     #[sea_orm(column_type = "Double")]
     pub points: f64,
-    pub created_at: DateTime,
-    pub updated_at: DateTime,
+    pub created_at: DateTimeWithTimeZone,
+    pub updated_at: DateTimeWithTimeZone,
     pub banned: bool,
 }
 

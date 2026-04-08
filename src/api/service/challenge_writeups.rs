@@ -56,7 +56,7 @@ pub async fn create_challenge_writeup(
         Some(wp) => {
             let mut active = wp.into_active_model();
             active.content = Set(ccw.content);
-            active.created_at = Set(chrono::Utc::now().naive_utc());
+            active.created_at = Set(chrono::Utc::now().into());
             active.update(db.get_ref()).await?
         }
         None => {

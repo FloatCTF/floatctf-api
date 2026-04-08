@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS "settings" (
     "type" "setting_value_type" NOT NULL DEFAULT 'string',
     "description" TEXT NOT NULL,
     "protected" BOOLEAN NOT NULL DEFAULT TRUE,
-    "updated_at" TIMESTAMP NOT NULL DEFAULT now()
+    "updated_at" TIMESTAMPZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS "weapons" (
@@ -20,9 +20,30 @@ CREATE TABLE IF NOT EXISTS "weapons" (
     "has_file" BOOLEAN NOT NULL DEFAULT FALSE,
     "download_count" BIGINT NOT NULL DEFAULT 0,
     "file_url" TEXT NOT NULL,
-    "created_at" TIMESTAMP NOT NULL DEFAULT now(),
-    "updated_at" TIMESTAMP NOT NULL DEFAULT now()
+    "created_at" TIMESTAMPZ NOT NULL DEFAULT now(),
+    "updated_at" TIMESTAMPZ NOT NULL DEFAULT now()
 )
+
+-- 1. 核心任务表
+CREATE TABLE IF NOT EXISTS "scheduled_tasks" (
+    "id" UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    "group_id" UUID,                         -- 比赛ID或靶机ID，用于一键销毁
+    "task_key" VARCHAR(100) NOT NULL,        -- 路由键：GAME_START, LAB_CLOSE, CHECK...
+    "trigger_type" VARCHAR(50) NOT NULL,     -- 触发类型：startup, once, cron
+    "status" VARCHAR(50) NOT NULL DEFAULT 'pending', -- pending, running, completed, failed, paused
+
+    "cron_expr" VARCHAR(100),                -- 例如：*/10 * * * *
+    "execute_at" TIMESTAMPTZ,                -- 计划执行时间
+    "expires_at" TIMESTAMPTZ,                -- 过期时间：过了这个点就不再补执行
+
+    "payload" JSONB,                         -- 强类型的业务参数
+    "error_msg" TEXT,
+    "last_run_at" TIMESTAMPTZ,
+
+    "created_at" TIMESTAMPTZ NOT NULL DEFAULT now(),
+    "updated_at" TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 
 
 
@@ -33,8 +54,8 @@ CREATE TABLE IF NOT EXISTS "users" (
     "nickname" TEXT NOT NULL UNIQUE,
     "password" TEXT NOT NULL,
     "email" TEXT NOT NULL,
-    "created_at" TIMESTAMP NOT NULL DEFAULT now(),
-    "updated_at" TIMESTAMP NOT NULL DEFAULT now()
+    "created_at" TIMESTAMPZ NOT NULL DEFAULT now(),
+    "updated_at" TIMESTAMPZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS "super_admin" (
@@ -42,8 +63,8 @@ CREATE TABLE IF NOT EXISTS "super_admin" (
     "username" TEXT NOT NULL UNIQUE,
     "password" TEXT NOT NULL,
     "email" TEXT NOT NULL,
-    "created_at" TIMESTAMP NOT NULL DEFAULT now(),
-    "updated_at" TIMESTAMP NOT NULL DEFAULT now()
+    "created_at" TIMESTAMPZ NOT NULL DEFAULT now(),
+    "updated_at" TIMESTAMPZ NOT NULL DEFAULT now()
 );
 
 
@@ -59,8 +80,8 @@ CREATE TABLE IF NOT EXISTS "challenges" (
     "attachment" TEXT NULL,
     "hidden" BOOLEAN NOT NULL DEFAULT TRUE,
     "toml_str" TEXT NOT NULL,
-    "created_at" TIMESTAMP NOT NULL DEFAULT now(),
-    "updated_at" TIMESTAMP NOT NULL DEFAULT now()
+    "created_at" TIMESTAMPZ NOT NULL DEFAULT now(),
+    "updated_at" TIMESTAMPZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS "challenge_solves" (
@@ -68,7 +89,7 @@ CREATE TABLE IF NOT EXISTS "challenge_solves" (
     "event_id" UUID NULL REFERENCES "events" ("id") ON DELETE CASCADE,
     "challenge_id" UUID NOT NULL REFERENCES "challenges" ("id") ON DELETE CASCADE,
     "user_id" UUID NOT NULL REFERENCES "users" ("id") ON DELETE CASCADE,
-    "created_at" TIMESTAMP NOT NULL DEFAULT now()
+    "created_at" TIMESTAMPZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS "challenge_writeup" (
@@ -76,14 +97,14 @@ CREATE TABLE IF NOT EXISTS "challenge_writeup" (
     "challenge_id" UUID NOT NULL REFERENCES "challenges" ("id") ON DELETE CASCADE,
     "user_id" UUID NOT NULL REFERENCES "users" ("id") ON DELETE CASCADE,
     "content" TEXT NOT NULL,
-    "created_at" TIMESTAMP NOT NULL DEFAULT now()
+    "created_at" TIMESTAMPZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS "challenge_sets" (
     "id" UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
     "name" TEXT NOT NULL,
     "description" TEXT,
-    "created_at" TIMESTAMP NOT NULL DEFAULT now()
+    "created_at" TIMESTAMPZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS "challenge_set_items" (
@@ -111,8 +132,8 @@ CREATE TABLE IF NOT EXISTS "gameboxes" (
     "fix_point" DOUBLE PRECISION NOT NULL DEFAULT 0.0,
     "down_point" DOUBLE PRECISION NOT NULL DEFAULT 0.0,
     "first_bouns" DOUBLE PRECISION NOT NULL DEFAULT 0.2,
-    "created_at" TIMESTAMP NOT NULL DEFAULT now(),
-    "updated_at" TIMESTAMP NOT NULL DEFAULT now()
+    "created_at" TIMESTAMPZ NOT NULL DEFAULT now(),
+    "updated_at" TIMESTAMPZ NOT NULL DEFAULT now()
 );
 
 
@@ -131,9 +152,9 @@ CREATE TABLE IF NOT EXISTS "instances" (
     "gamebox_id" UUID REFERENCES "gameboxes" (id) ON DELETE CASCADE,
     "user_id" UUID NOT NULL REFERENCES "users" (id) ON DELETE CASCADE,
     "identifier" TEXT NOT NULL,
-    "created_at" TIMESTAMP NOT NULL DEFAULT now(),
-    "updated_at" TIMESTAMP NOT NULL DEFAULT now(),
-    "destroy_at" TIMESTAMP NOT NULL
+    "created_at" TIMESTAMPZ NOT NULL DEFAULT now(),
+    "updated_at" TIMESTAMPZ NOT NULL DEFAULT now(),
+    "destroy_at" TIMESTAMPZ NOT NULL
 );
 
 
@@ -148,13 +169,13 @@ CREATE TABLE IF NOT EXISTS "events" (
     "title" TEXT NOT NULL,
     "description" TEXT,
     "hidden" BOOLEAN NOT NULL DEFAULT TRUE,
-    "start_time" TIMESTAMP NOT NULL,
+    "start_time" TIMESTAMPZ NOT NULL,
     "rules" TEXT NOT NULL DEFAULT 'do not cheat',
     "allow_join" BOOLEAN NOT NULL DEFAULT FALSE,
     "flag_prefix" TEXT NULL DEFAULT 'flag',
-    "end_time" TIMESTAMP NOT NULL,
-    "created_at" TIMESTAMP NOT NULL DEFAULT now(),
-    "updated_at" TIMESTAMP NOT NULL DEFAULT now()
+    "end_time" TIMESTAMPZ NOT NULL,
+    "created_at" TIMESTAMPZ NOT NULL DEFAULT now(),
+    "updated_at" TIMESTAMPZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS "event_users" (
@@ -162,7 +183,7 @@ CREATE TABLE IF NOT EXISTS "event_users" (
     "user_id" UUID NOT NULL REFERENCES "users" ("id") ON DELETE CASCADE,
     "points" DOUBLE PRECISION NOT NULL DEFAULT 0,
     "banned" BOOLEAN NOT NULL DEFAULT false,
-    "joined_at" TIMESTAMP NOT NULL DEFAULT now(),
+    "joined_at" TIMESTAMPZ NOT NULL DEFAULT now(),
     PRIMARY KEY ("event_id", "user_id")
 );
 
@@ -172,8 +193,8 @@ CREATE TABLE IF NOT EXISTS "event_teams" (
     "name" TEXT NOT NULL,
     "description" TEXT,
     "points" DOUBLE PRECISION NOT NULL DEFAULT 0,
-    "created_at" TIMESTAMP NOT NULL DEFAULT now(),
-    "updated_at" TIMESTAMP NOT NULL DEFAULT now(),
+    "created_at" TIMESTAMPZ NOT NULL DEFAULT now(),
+    "updated_at" TIMESTAMPZ NOT NULL DEFAULT now(),
     "banned" BOOLEAN NOT NULL DEFAULT false,
     UNIQUE ("event_id", "name")
 );
@@ -183,7 +204,7 @@ CREATE TABLE IF NOT EXISTS "event_team_members" (
     "team_id" UUID NOT NULL REFERENCES "event_teams" ("id") ON DELETE CASCADE,
     "user_id" UUID NOT NULL REFERENCES "users" ("id") ON DELETE CASCADE,
     "role" "event_team_member_role" NOT NULL DEFAULT 'member',
-    "joined_at" TIMESTAMP NOT NULL DEFAULT now(),
+    "joined_at" TIMESTAMPZ NOT NULL DEFAULT now(),
     PRIMARY KEY (
         "event_id",
         "team_id",
@@ -196,7 +217,7 @@ CREATE TABLE IF NOT EXISTS "event_announcements" (
     "event_id" UUID NOT NULL REFERENCES "events" ("id") ON DELETE CASCADE,
     "title" TEXT NOT NULL,
     "content" TEXT NOT NULL,
-    "created_at" TIMESTAMP NOT NULL DEFAULT now()
+    "created_at" TIMESTAMPZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS "event_writeup" (
@@ -204,7 +225,7 @@ CREATE TABLE IF NOT EXISTS "event_writeup" (
     "user_id" UUID NOT NULL REFERENCES "users" ("id") ON DELETE CASCADE,
     "team_id" UUID NULL REFERENCES "event_teams" ("id") ON DELETE CASCADE,
     "file_url" TEXT NOT NULL,
-    "created_at" TIMESTAMP NOT NULL DEFAULT now(),
+    "created_at" TIMESTAMPZ NOT NULL DEFAULT now(),
     CONSTRAINT event_writeup_pkey PRIMARY KEY ("event_id", "user_id")
 );
 
@@ -223,7 +244,7 @@ CREATE TABLE IF NOT EXISTS "event_challenge_solves" (
     "team_id" UUID NULL REFERENCES "event_teams" ("id") ON DELETE CASCADE,
     "obtained_points" DOUBLE PRECISION NOT NULL DEFAULT 0,
     "bonus_points" DOUBLE PRECISION NOT NULL DEFAULT 0,
-    "created_at" TIMESTAMP NOT NULL DEFAULT now(),
+    "created_at" TIMESTAMPZ NOT NULL DEFAULT now(),
     PRIMARY KEY (
         "event_id",
         "challenge_id",

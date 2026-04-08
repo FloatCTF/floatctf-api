@@ -15,7 +15,7 @@ use crate::{
         event_users, event_writeup, events, sea_orm_active_enums::EventType, users,
     },
 };
-use chrono::NaiveDateTime;
+use chrono::{DateTime, FixedOffset};
 use sea_orm::Condition;
 use std::io::Write;
 use std::{fs::File, str::FromStr};
@@ -29,8 +29,8 @@ pub struct CreateEventRequest {
     pub hidden: bool,
     pub allow_join: bool,
     pub rules: String,
-    pub start_time: NaiveDateTime,
-    pub end_time: NaiveDateTime,
+    pub start_time: DateTime<FixedOffset>,
+    pub end_time: DateTime<FixedOffset>,
 }
 
 /// POST /api/admin/events
@@ -68,8 +68,8 @@ pub struct PatchEventRequest {
     pub allow_join: Option<bool>,
     pub rules: Option<String>,
     pub flag_prefix: Option<String>,
-    pub start_time: Option<NaiveDateTime>,
-    pub end_time: Option<NaiveDateTime>,
+    pub start_time: Option<DateTime<FixedOffset>>,
+    pub end_time: Option<DateTime<FixedOffset>>,
 }
 
 /// PATCH /api/admin/events/{event_id}
@@ -227,7 +227,7 @@ pub struct DataEventChallengeSolve {
     pub user_nickname: String,
     pub challenge_name: String,
     pub challenge_category: String,
-    pub created_at: NaiveDateTime,
+    pub created_at: DateTime<FixedOffset>,
     pub bonus_points: f64,
 }
 
