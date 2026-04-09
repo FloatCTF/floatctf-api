@@ -32,6 +32,7 @@ impl TaskHandler for CleanRunningInstancesHandler {
     }
     async fn run(&self, task: scheduled_tasks::Model) -> anyhow::Result<()> {
         info!("[CLEAN_INSTANCES] CleanRunningInstancesHandler");
+
         info!("[CLEAN_INSTANCES] task is running : {:?}", &task);
 
         let instances_users = instances::Entity::find()

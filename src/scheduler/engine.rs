@@ -56,12 +56,13 @@ impl TaskScheduler {
     async fn fetch_and_run(&self) -> Result<()> {
         // 这里的 SQL 变化：NOW() + INTERVAL '5 seconds'
         // 提前把未来 5 秒内要执行的任务全部锁住并取出来
+        // 只取出is_enabled=true的任务
         let sql = r#"
                 UPDATE scheduled_tasks
                 SET status = 'running', updated_at = NOW()
                 WHERE id IN (
                     SELECT id FROM scheduled_tasks
-                    WHERE status = 'pending'
+                    WHERE status = 'pending' AND enabled = true
                       AND execute_at <= NOW() + INTERVAL '5 seconds'
                     ORDER BY execute_at ASC
                     FOR UPDATE SKIP LOCKED LIMIT 20
@@ -88,6 +89,11 @@ impl TaskScheduler {
     }
 
     async fn dispatch_with_precision(&self, task: scheduled_tasks::Model) {
+        if !task.enabled {
+            warn!("[{}] task is disabled : {:?}", task.task_key, task);
+            return;
+        }
+
         let task_key = task.task_key.clone();
 
         // --- 精准睡眠阶段 ---

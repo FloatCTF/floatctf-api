@@ -286,15 +286,36 @@ CREATE TABLE IF NOT EXISTS "event_logs" (
     -- 2. 建议增加一个简单的 category 或 action 字段 (TEXT)
     -- 虽然 details 里有，但把 'login', 'capture_flag', 'container_start' 放在外面，
     -- 这样你在 SeaORM 里做 filter 会快几个数量级。
+    "type" "event_type" NOT NULL DEFAULT 'jeopardy_single',
+    "level" VARCHAR(20) NOT NULL DEFAULT 'info',
     "action" VARCHAR(50) NOT NULL,
 
-    "type" "event_type" NOT NULL DEFAULT 'jeopardy_single',
-    -- info warn
-    "level" VARCHAR(20) NOT NULL DEFAULT 'info',
+    -- ipaddress
     "details" JSONB NOT NULL DEFAULT '{}',
     "created_at" TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- 3. 索引是关键，否则比赛日志一多，后台查不动
-CREATE INDEX idx_event_logs_event_id ON "event_logs" ("event_id");
-CREATE INDEX idx_event_logs_action ON "event_logs" ("action");
+
+CREATE TABLE IF NOT EXISTS "logs" (
+    "id" UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+
+    -- 1. 身份与位置
+    "user_id" UUID REFERENCES "users" ("id") ON DELETE SET NULL,
+    "superadmin_id" UUID REFERENCES "super_admin" ("id") ON DELETE SET NULL, -- 哪个超管干的
+    "ip_address" INET, -- 必须记录 IP，防撞库、防恶意操作
+
+    -- 2. 分类审计 (核心索引字段)
+    -- category: 'AUTH', 'SYSTEM', 'SERVICE', 'ADMIN_ACTION', 'WEAPONS'
+    "category" VARCHAR(30) NOT NULL,
+    -- action: 动作描述，如 'delete_file', 'start_container', 'update_password'
+    "action" VARCHAR(50) NOT NULL,
+
+    -- 3. 级别与内容
+    -- level: 'debug', 'info', 'warn', 'error', 'fatal'
+    "level" VARCHAR(10) NOT NULL DEFAULT 'info',
+    "message" TEXT NOT NULL, -- 人类可读的简述：如 "管理员 A 删除了用户 B"
+    "details" JSONB NOT NULL DEFAULT '{}', -- 具体的差异化数据
+
+    -- 4. 时间
+    "created_at" TIMESTAMPTZ NOT NULL DEFAULT now()
+);

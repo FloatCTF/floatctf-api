@@ -8,7 +8,7 @@ INSERT INTO
         "updated_at"
     )
 VALUES (
-        'e9c27136-f30c-4619-8377-756b1148192d',
+        '00000000-0000-0000-0000-000000000000',
         'sysadmin',
         '$argon2id$v=19$m=19456,t=2,p=1$3THt36/y60+8SreEtA+T5A$xp4mvnbi0niUfEux7u24ZdTnv4t5QnH8ZhA/uF+GDe8',
         'sysadmin@system.com',

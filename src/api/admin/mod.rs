@@ -10,13 +10,13 @@ mod event_users;
 mod event_writeups;
 mod events;
 mod instances;
+mod scheduled_tasks;
 mod settings;
 mod super_admin;
 mod system;
 mod users;
 mod weapons;
 use actix_web::web::{ServiceConfig, scope};
-pub use instances::kill_running_instances;
 
 pub fn config(cfg: &mut ServiceConfig) {
     cfg.service(
@@ -206,5 +206,19 @@ pub fn config(cfg: &mut ServiceConfig) {
             )
             // GET /api/admin/events/{event_id}/writeups
             .service(scope("/{event_id}/writeups").service(event_writeups::get_all_event_writeups)),
+    );
+
+    cfg.service(
+        scope("/scheduled_tasks")
+            // POST /api/admin/scheduled_tasks
+            .service(scheduled_tasks::create_scheduled_task)
+            // DELETE /api/admin/scheduled_tasks
+            .service(scheduled_tasks::delete_scheduled_task)
+            // PATCH /api/admin/scheduled_tasks/{task_id}
+            .service(scheduled_tasks::patch_scheduled_task)
+            // GET /api/admin/scheduled_tasks
+            .service(scheduled_tasks::get_scheduled_tasks)
+            // GET /api/admin/scheduled_tasks/{task_id}
+            .service(scheduled_tasks::get_scheduled_task),
     );
 }

@@ -89,30 +89,3 @@ pub async fn get_instance(
 
     UniResponse::ok(model.into()).into()
 }
-
-pub async fn kill_running_instances(db: WebDb, docker: WebDocker) -> anyhow::Result<()> {
-    let instances_users = instances::Entity::find()
-        .filter(instances::Column::Status.eq(InstanceStatus::Running))
-        .find_also_related(users::Entity)
-        .all(db.get_ref())
-        .await?;
-
-    for (instance, user) in instances_users
-        .into_iter()
-        .filter_map(|(i, u)| u.map(|user| (i, user)))
-    {
-        match event::common::destroy_instance(&db, &docker, instance.id, &user).await {
-            Ok(_) => {
-                tracing::info!("Killed instance {}", instance.id);
-            }
-            Err(e) => {
-                let mut m_instance = instance.into_active_model();
-                m_instance.status = Set(InstanceStatus::Failed);
-                let instance = m_instance.update(db.get_ref()).await?;
-                tracing::error!("{}: But {} was killed!", e, instance.id);
-            }
-        }
-    }
-
-    Ok(())
-}

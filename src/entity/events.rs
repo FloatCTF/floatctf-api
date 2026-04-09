@@ -40,6 +40,8 @@ pub enum Relation {
     EventGameboxes,
     #[sea_orm(has_many = "super::event_instances::Entity")]
     EventInstances,
+    #[sea_orm(has_many = "super::event_logs::Entity")]
+    EventLogs,
     #[sea_orm(has_many = "super::event_team_members::Entity")]
     EventTeamMembers,
     #[sea_orm(has_many = "super::event_teams::Entity")]
@@ -83,6 +85,12 @@ impl Related<super::event_gameboxes::Entity> for Entity {
 impl Related<super::event_instances::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::EventInstances.def()
+    }
+}
+
+impl Related<super::event_logs::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::EventLogs.def()
     }
 }
 
