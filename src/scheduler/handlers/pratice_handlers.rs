@@ -107,6 +107,7 @@ impl TaskHandler for CheckPraticeEventHandler {
             "[CHECK_PRATICE_EVENT] Inserting pratice_event: {:?}",
             pratice_event
         );
+
         Ok(())
     }
 }

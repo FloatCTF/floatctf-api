@@ -279,10 +279,10 @@ CREATE TABLE IF NOT EXISTS "event_instances" (
 CREATE TABLE IF NOT EXISTS "event_logs" (
     "id" UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
 
-    "event_id" UUID REFERENCES "events" ("id") ON DELETE CASCADE,
+    "event_id" UUID NOT NULL REFERENCES "events" ("id") ON DELETE CASCADE,
     "user_id" UUID REFERENCES "users" ("id") ON DELETE SET NULL,
     "team_id" UUID REFERENCES "event_teams" ("id") ON DELETE SET NULL,
-
+    "ip_address" VARCHAR(45), -- 必须记录 IP，防撞库、防恶意操作
     -- 2. 建议增加一个简单的 category 或 action 字段 (TEXT)
     -- 虽然 details 里有，但把 'login', 'capture_flag', 'container_start' 放在外面，
     -- 这样你在 SeaORM 里做 filter 会快几个数量级。
@@ -302,7 +302,7 @@ CREATE TABLE IF NOT EXISTS "logs" (
     -- 1. 身份与位置
     "user_id" UUID REFERENCES "users" ("id") ON DELETE SET NULL,
     "superadmin_id" UUID REFERENCES "super_admin" ("id") ON DELETE SET NULL, -- 哪个超管干的
-    "ip_address" INET, -- 必须记录 IP，防撞库、防恶意操作
+    "ip_address" VARCHAR(45), -- 必须记录 IP，防撞库、防恶意操作
 
     -- 2. 分类审计 (核心索引字段)
     -- category: 'AUTH', 'SYSTEM', 'SERVICE', 'ADMIN_ACTION', 'WEAPONS'

@@ -66,3 +66,5 @@ CREATE INDEX idx_sys_logs_category_action ON "logs" ("category", "action");
 CREATE INDEX idx_sys_logs_user_op ON "logs" ("user_id", "superadmin");
 -- JSONB 索引：支持搜索 details 里的具体内容
 CREATE INDEX idx_sys_logs_details ON "logs" USING GIN ("details");
+
+CREATE INDEX idx_event_logs_ip_address ON "event_logs" ("ip_address");

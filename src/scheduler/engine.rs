@@ -1,5 +1,6 @@
 use crate::db::{WebDb, WebDocker};
 use crate::entity::scheduled_tasks;
+use crate::log::LogService;
 use crate::scheduler::handlers;
 use anyhow::{Result, anyhow};
 use async_trait::async_trait;
@@ -9,6 +10,7 @@ use sea_orm::{
     ActiveModelTrait, ActiveValue, ColumnTrait, ConnectionTrait, EntityTrait, IntoActiveModel,
     QueryFilter, Statement,
 };
+use serde_json::json;
 use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -26,14 +28,16 @@ pub trait TaskHandler: Send + Sync {
 pub struct TaskScheduler {
     db: WebDb,
     docker: WebDocker,
+    logger: LogService,
     handlers: HashMap<String, Arc<dyn TaskHandler>>,
 }
 
 impl TaskScheduler {
-    pub fn new(db: WebDb, docker: WebDocker) -> Self {
+    pub fn new(db: WebDb, docker: WebDocker, logger: LogService) -> Self {
         Self {
             db,
             docker,
+            logger,
             handlers: HashMap::new(),
         }
     }
@@ -138,6 +142,18 @@ impl TaskScheduler {
             active_item.status = ActiveValue::Set("failed".to_string());
             active_item.error_msg = ActiveValue::Set(Some(e.to_string()));
             error!("❌ 任务执行出错: {}", e);
+            self.logger
+                .add_log(
+                    "ERROR",
+                    "TASK",
+                    "EXECUTE",
+                    format!("{} 执行失败", task.task_name).as_str(),
+                    json!({"task": task.task_name, "error": e.to_string()}),
+                    None,
+                    None,
+                    None,
+                )
+                .await;
         } else {
             // ✨ 核心逻辑：区分触发类型
             match task.trigger_type.as_str() {
@@ -194,6 +210,18 @@ impl TaskScheduler {
                     active_item.status = ActiveValue::Set("completed".to_string());
                 }
             }
+            self.logger
+                .add_log(
+                    "INFO",
+                    "TASK",
+                    "EXECUTE",
+                    format!("{} 执行成功", task.task_name).as_str(),
+                    json!(None::<String>),
+                    None,
+                    None,
+                    None,
+                )
+                .await;
         }
 
         if let Err(e) = active_item.update(self.db.get_ref()).await {
@@ -232,6 +260,7 @@ impl TaskScheduler {
         Self {
             db: self.db.clone(),
             docker: self.docker.clone(),
+            logger: self.logger.clone(),
             handlers: self.handlers.clone(),
         }
     }

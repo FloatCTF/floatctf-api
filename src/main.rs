@@ -3,20 +3,22 @@ mod auth;
 mod config;
 mod db;
 mod entity;
+mod log;
 mod scheduler;
 mod strategies;
-use std::env;
-use std::sync::Arc;
 
 use actix_cors::Cors;
 use actix_web::middleware::Logger;
 use actix_web::{App, HttpServer, web};
 use dotenvy::dotenv;
+use std::env;
+use std::sync::Arc;
 use tracing::info;
 use tracing_actix_web::TracingLogger;
 use tracing_appender::rolling;
 use tracing_subscriber::{EnvFilter, fmt::writer::MakeWriterExt};
 
+use crate::log::LogService;
 use crate::scheduler::TaskScheduler;
 
 #[actix_web::main]
@@ -59,7 +61,12 @@ async fn main() -> std::io::Result<()> {
     // for settings
     config::init_settings(&db).await;
 
-    let mut task_scheduler = TaskScheduler::new(db.clone(), docker.clone());
+    // log service
+    let log_service = LogService::new(db.clone());
+
+    // task scheduler
+    let mut task_scheduler = TaskScheduler::new(db.clone(), docker.clone(), log_service.clone());
+
     task_scheduler
         .init_startup_handlers()
         .await
@@ -98,6 +105,7 @@ async fn main() -> std::io::Result<()> {
             .wrap(cors)
             .app_data(db.clone())
             .app_data(docker.clone())
+            .app_data(web::Data::new(log_service.clone()))
             .service(
                 web::scope("/api")
                     .configure(api::service_config)

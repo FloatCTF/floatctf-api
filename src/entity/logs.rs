@@ -10,7 +10,6 @@ pub struct Model {
     pub id: Uuid,
     pub user_id: Option<Uuid>,
     pub superadmin_id: Option<Uuid>,
-    #[sea_orm(column_type = "custom(\"inet\")", nullable)]
     pub ip_address: Option<String>,
     pub category: String,
     pub action: String,
