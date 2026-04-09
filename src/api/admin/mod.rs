@@ -5,11 +5,13 @@ mod docker;
 mod dto;
 mod event_announcements;
 mod event_challenges;
+mod event_logs;
 mod event_teams;
 mod event_users;
 mod event_writeups;
 mod events;
 mod instances;
+mod logs;
 mod scheduled_tasks;
 mod settings;
 mod super_admin;
@@ -205,7 +207,9 @@ pub fn config(cfg: &mut ServiceConfig) {
                     .service(event_announcements::list_event_announcements),
             )
             // GET /api/admin/events/{event_id}/writeups
-            .service(scope("/{event_id}/writeups").service(event_writeups::get_all_event_writeups)),
+            .service(scope("/{event_id}/writeups").service(event_writeups::get_all_event_writeups))
+            // GET /api/admin/events/{event_id}/logs
+            .service(scope("/{event_id}/logs").service(event_logs::get_event_logs)),
     );
 
     cfg.service(
@@ -220,5 +224,13 @@ pub fn config(cfg: &mut ServiceConfig) {
             .service(scheduled_tasks::get_scheduled_tasks)
             // GET /api/admin/scheduled_tasks/{task_id}
             .service(scheduled_tasks::get_scheduled_task),
+    );
+
+    cfg.service(
+        scope("/logs")
+            // GET /api/admin/logs
+            .service(logs::get_logs)
+            // GET /api/admin/logs/{log_id}
+            .service(logs::get_log),
     );
 }

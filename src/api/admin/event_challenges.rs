@@ -1,7 +1,27 @@
+use std::str::FromStr;
+
+use sea_orm::Condition;
+
 use crate::{
-    api::{admin::dto::DeleteItemsRequest, preclude::*},
+    api::{
+        FilterMapping, admin::dto::DeleteItemsRequest, apply_filters, preclude::*,
+        sea_orm_utils::paginate_query,
+    },
     entity::{challenges, event_challenges, events},
 };
+
+/// 从 filter 字符串中提取指定 key 的值（简单 key:value 格式，空格分隔）
+fn extract_filter_value<'a>(filter: &'a str, target_key: &str) -> Option<&'a str> {
+    for token in filter.split_whitespace() {
+        if let Some(pos) = token.find(':') {
+            let key = &token[..pos];
+            if key == target_key {
+                return Some(&token[pos + 1..]);
+            }
+        }
+    }
+    None
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AddChallengeRequest {
@@ -117,36 +137,98 @@ pub async fn get_challenges(
     _user: SuperAdminJwtGuard,
     db: WebDb,
     event_id: Path<Uuid>,
+    query_params: Query<QueryParams>,
 ) -> UniResult<Vec<EventChallengeResult>> {
     let event_id = event_id.into_inner();
+    let mut query_params = query_params.0;
 
     let event = events::Entity::find_by_id(event_id)
         .one(db.get_ref())
         .await?
         .ok_or(UniError::NotFound(format!(" {} not exist", event_id)))?;
 
-    let stmt = event
-        .find_related(event_challenges::Entity)
-        .find_also_related(challenges::Entity);
-    // .filter(challenges::Column::Hidden.eq(false)); 并不需要， 比赛题目可以是隐藏的 再说 这是 admin api
+    // 1. 如果 name/category 筛选存在，先查 challenges 表拿到匹配的 challenge ID 列表
+    let challenge_ids_constraint = if let Some(ref filter_str) = query_params.filter {
+        let name_val = extract_filter_value(filter_str, "name");
+        let category_val = extract_filter_value(filter_str, "category");
 
-    let event_challenges = stmt.all(db.get_ref()).await?;
-
-    let result = event_challenges
-        .into_iter()
-        .filter_map(|(event_challenge, challenge)| {
-            if let Some(challenge) = challenge {
-                Some(EventChallengeResult {
-                    event_challenge,
-                    challenge,
-                })
-            } else {
-                None
+        if name_val.is_some() || category_val.is_some() {
+            let mut q = challenges::Entity::find();
+            if let Some(name) = name_val {
+                q = q.filter(challenges::Column::Name.contains(name));
             }
-        })
-        .collect::<Vec<_>>();
+            if let Some(cat) = category_val {
+                q = q.filter(challenges::Column::Category.contains(cat));
+            }
+            let ids: Vec<Uuid> = q
+                .all(db.get_ref())
+                .await?
+                .into_iter()
+                .map(|c| c.id)
+                .collect();
+            Some(ids)
+        } else {
+            None
+        }
+    } else {
+        None
+    };
 
-    UniResponse::ok(result.into()).into()
+    // 2. 在 event_challenges 上做 challenge_id / hidden 过滤 + 分页
+    let mappings = [
+        FilterMapping {
+            key: "challenge_id",
+            column: Box::new(|v| {
+                Condition::all().add(
+                    event_challenges::Column::ChallengeId
+                        .eq(Uuid::from_str(&v).unwrap_or(Uuid::nil())),
+                )
+            }),
+        },
+        FilterMapping {
+            key: "hidden",
+            column: Box::new(|v| {
+                Condition::all()
+                    .add(event_challenges::Column::Hidden.eq(v.parse::<bool>().unwrap_or(false)))
+            }),
+        },
+    ];
+
+    let mut stmt = event.find_related(event_challenges::Entity);
+
+    // 应用 name/category 筛选产生的 challenge ID 约束
+    if let Some(ids) = challenge_ids_constraint {
+        stmt = stmt.filter(event_challenges::Column::ChallengeId.is_in(ids));
+    }
+
+    let stmt = apply_filters(stmt, query_params.filter.clone(), &mappings);
+
+    let (items, total_items) =
+        if let (Some(limit), Some(page)) = (query_params.limit, query_params.page) {
+            paginate_query(stmt, db.get_ref(), limit, page).await?
+        } else {
+            let items = stmt.all(db.get_ref()).await?;
+            (items.clone(), items.len())
+        };
+
+    let mut result = Vec::with_capacity(items.len());
+    for ec in items {
+        let challenge = challenges::Entity::find_by_id(ec.challenge_id)
+            .one(db.get_ref())
+            .await?
+            .ok_or(UniError::NotFound(format!(
+                "challenge {} not exist",
+                ec.challenge_id
+            )))?;
+        result.push(EventChallengeResult {
+            event_challenge: ec,
+            challenge,
+        });
+    }
+
+    query_params.total = Some(total_items);
+
+    UniResponse::ok_meta(result.into(), query_params.into()).into()
 }
 
 pub type HiddenChallengeRequest = AddChallengeRequest;
