@@ -1,3 +1,3 @@
 mod pratice_handlers;
 
-pub use pratice_handlers::CleanRunningInstancesHandler;
+pub use pratice_handlers::{CheckPraticeEventHandler, CleanRunningInstancesHandler};

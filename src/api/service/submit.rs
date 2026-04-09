@@ -44,6 +44,7 @@ pub async fn submit_flag(
         .user(user)
         .event(event)
         .build()
+        .await
         .map_err(|e| UniError::CustomError(format!("build event context error: {}", e)))?;
 
     // 2st chose strategy

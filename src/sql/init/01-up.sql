@@ -275,3 +275,26 @@ CREATE TABLE IF NOT EXISTS "event_instances" (
 
 -- event_logs
 -- logs JSONB
+-- Set(Uuid::nil()
+CREATE TABLE IF NOT EXISTS "event_logs" (
+    "id" UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+
+    "event_id" UUID REFERENCES "events" ("id") ON DELETE CASCADE,
+    "user_id" UUID REFERENCES "users" ("id") ON DELETE SET NULL,
+    "team_id" UUID REFERENCES "event_teams" ("id") ON DELETE SET NULL,
+
+    -- 2. 建议增加一个简单的 category 或 action 字段 (TEXT)
+    -- 虽然 details 里有，但把 'login', 'capture_flag', 'container_start' 放在外面，
+    -- 这样你在 SeaORM 里做 filter 会快几个数量级。
+    "action" VARCHAR(50) NOT NULL,
+
+    "type" "event_type" NOT NULL DEFAULT 'jeopardy_single',
+    -- info warn
+    "level" VARCHAR(20) NOT NULL DEFAULT 'info',
+    "details" JSONB NOT NULL DEFAULT '{}',
+    "created_at" TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 3. 索引是关键，否则比赛日志一多，后台查不动
+CREATE INDEX idx_event_logs_event_id ON "event_logs" ("event_id");
+CREATE INDEX idx_event_logs_action ON "event_logs" ("action");

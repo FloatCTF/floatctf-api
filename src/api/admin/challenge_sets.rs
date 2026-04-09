@@ -123,7 +123,6 @@ pub async fn get_challenge_sets(
     let (items, total_items) =
         query_query::<challenge_sets::Entity>(db.get_ref(), &mappings, &query_params).await?;
 
-    dbg!(&total_items);
     query_params.total = Some(total_items);
     UniResponse::ok_meta(items.into(), query_params.into()).into()
 }

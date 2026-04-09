@@ -194,25 +194,3 @@ pub async fn gen_flag(db: &WebDb, flag_prefix: Option<String>) -> String {
 
     format!("{}{{{}}}", prefix, unique_value)
 }
-
-pub fn virtual_practice_event() -> events::Model {
-    let new_event = events::ActiveModel {
-        id: Set(Uuid::nil()),
-        r#type: Set(EventType::JeopardyPractice),
-        title: Set("Virtual Practice Event".into()),
-        description: Set(Some("Virtual Practice Event".into())),
-        hidden: Set(true),
-        start_time: Set(Utc::now().into()),
-        end_time: Set((Utc::now() + chrono::Duration::days(365)).into()),
-        rules: Set("".into()),
-        allow_join: Set(true),
-        flag_prefix: Set(None), // use config settings
-        created_at: Set(Utc::now().into()),
-        updated_at: Set(Utc::now().into()),
-        ..Default::default()
-    };
-    let e = new_event
-        .try_into_model()
-        .expect("?????????????????? impossible !!!!!!!!!!!!!!!!!!!!");
-    e
-}

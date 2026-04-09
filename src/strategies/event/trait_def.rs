@@ -73,12 +73,17 @@ impl EventContextBuilder {
     }
 
     /// 构造 EventContext
-    pub fn build(self) -> Result<EventContext> {
+    pub async fn build(self) -> Result<EventContext> {
         Ok(EventContext {
-            db: self.db.context("db is required")?,
+            db: self.db.clone().context("db is required")?,
             docker: self.docker.context("docker is required")?,
             user: self.user.context("user is required")?,
-            event: self.event.unwrap_or(common::virtual_practice_event()),
+            event: self.event.unwrap_or(
+                events::Entity::find_by_id(Uuid::nil())
+                    .one(self.db.context("db is required")?.get_ref())
+                    .await?
+                    .ok_or_else(|| anyhow!("Practice Event not found"))?,
+            ),
             team: self.team,
         })
     }

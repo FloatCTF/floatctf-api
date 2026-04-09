@@ -1223,7 +1223,7 @@ dependencies = [
 
 [[package]]
 name = "floatctf"
-version = "0.1.2"
+version = "0.1.4"
 dependencies = [
  "actix-cors",
  "actix-multipart",

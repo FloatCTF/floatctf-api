@@ -233,18 +233,24 @@ impl TaskScheduler {
     pub async fn init_startup_handlers(&mut self) -> Result<()> {
         let startup_tasks: Vec<(&str, &str, Arc<dyn TaskHandler>)> = vec![
             (
-                "88861fa7-231c-4426-b8aa-b237e536157e",
+                "00000000-0000-0000-0000-000000000000",
+                "检查练习event",
+                Arc::new(handlers::CheckPraticeEventHandler {
+                    db: self.db.clone(),
+                }),
+            ),
+            (
+                "00000000-0000-0000-0000-000000000001",
                 "实例清理",
                 Arc::new(handlers::CleanRunningInstancesHandler {
                     db: self.db.clone(),
                     docker: self.docker.clone(),
                 }),
-            ),
-            // (
-            //     "另一个-UUID",
-            //     "Flag刷新",
-            //     Arc::new(handlers::FlagRefreshHandler {}),
-            // ),
+            ), // (
+               //     "另一个-UUID",
+               //     "Flag刷新",
+               //     Arc::new(handlers::FlagRefreshHandler {}),
+               // ),
         ];
 
         for (id_str, name, handler) in startup_tasks {

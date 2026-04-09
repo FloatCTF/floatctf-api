@@ -99,6 +99,7 @@ pub async fn launch_instance(
         .user(user.clone())
         .event(event)
         .build()
+        .await
         .map_err(|e| UniError::CustomError(format!("build event context error: {}", e)))?;
 
     let strategy = event::EventStrategyFactory::create(&ctx.event.r#type);
