@@ -4,24 +4,14 @@ use sea_orm::Condition;
 
 use crate::{
     api::{
-        FilterMapping, admin::dto::DeleteItemsRequest, apply_filters, preclude::*,
-        sea_orm_utils::paginate_query,
+        FilterMapping,
+        admin::dto::DeleteItemsRequest,
+        apply_filters,
+        preclude::*,
+        sea_orm_utils::{CrossFilterMapping, paginate_query, resolve_cross_filters},
     },
     entity::{challenges, event_challenges, events},
 };
-
-/// 从 filter 字符串中提取指定 key 的值（简单 key:value 格式，空格分隔）
-fn extract_filter_value<'a>(filter: &'a str, target_key: &str) -> Option<&'a str> {
-    for token in filter.split_whitespace() {
-        if let Some(pos) = token.find(':') {
-            let key = &token[..pos];
-            if key == target_key {
-                return Some(&token[pos + 1..]);
-            }
-        }
-    }
-    None
-}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AddChallengeRequest {
@@ -132,6 +122,12 @@ pub struct EventChallengeResult {
 }
 
 /// GET /api/admin/events/{event_id}/challenges
+///
+/// 注意：不能直接用 query_query<E>，因为它返回 Vec<E::Model> 只支持单表。
+/// 这里返回的是 EventChallengeResult（event_challenges + challenges 两表 join 的复合结构），
+/// 所以只能在 event_challenges 上做过滤 + 分页，再逐条取关联的 challenge。
+/// name/category 属于 challenges 表的列，通过 resolve_cross_filters 预查出匹配的
+/// challenge ID 列表，再作为 is_in 约束加到主查询上。
 #[get("")]
 pub async fn get_challenges(
     _user: SuperAdminJwtGuard,
@@ -147,34 +143,27 @@ pub async fn get_challenges(
         .await?
         .ok_or(UniError::NotFound(format!(" {} not exist", event_id)))?;
 
-    // 1. 如果 name/category 筛选存在，先查 challenges 表拿到匹配的 challenge ID 列表
-    let challenge_ids_constraint = if let Some(ref filter_str) = query_params.filter {
-        let name_val = extract_filter_value(filter_str, "name");
-        let category_val = extract_filter_value(filter_str, "category");
+    // 跨表过滤：name / category 属于 challenges 表，通过 resolve_cross_filters 预查 ID
+    let cross_ids = resolve_cross_filters::<challenges::Entity>(
+        db.get_ref(),
+        &query_params.filter,
+        &[
+            CrossFilterMapping {
+                key: "name",
+                column: Box::new(|v| Condition::all().add(challenges::Column::Name.contains(v))),
+            },
+            CrossFilterMapping {
+                key: "category",
+                column: Box::new(|v| {
+                    Condition::all().add(challenges::Column::Category.contains(v))
+                }),
+            },
+        ],
+        |m| m.id,
+    )
+    .await?;
 
-        if name_val.is_some() || category_val.is_some() {
-            let mut q = challenges::Entity::find();
-            if let Some(name) = name_val {
-                q = q.filter(challenges::Column::Name.contains(name));
-            }
-            if let Some(cat) = category_val {
-                q = q.filter(challenges::Column::Category.contains(cat));
-            }
-            let ids: Vec<Uuid> = q
-                .all(db.get_ref())
-                .await?
-                .into_iter()
-                .map(|c| c.id)
-                .collect();
-            Some(ids)
-        } else {
-            None
-        }
-    } else {
-        None
-    };
-
-    // 2. 在 event_challenges 上做 challenge_id / hidden 过滤 + 分页
+    // 主表 event_challenges 字段通过 FilterMapping 过滤
     let mappings = [
         FilterMapping {
             key: "challenge_id",
@@ -196,8 +185,8 @@ pub async fn get_challenges(
 
     let mut stmt = event.find_related(event_challenges::Entity);
 
-    // 应用 name/category 筛选产生的 challenge ID 约束
-    if let Some(ids) = challenge_ids_constraint {
+    // 将跨表过滤结果作为 is_in 约束
+    if let Some(ids) = cross_ids {
         stmt = stmt.filter(event_challenges::Column::ChallengeId.is_in(ids));
     }
 
