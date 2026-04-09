@@ -1,5 +1,12 @@
+use std::str::FromStr;
+
+use sea_orm::Condition;
+
 use crate::{
-    api::{admin::dto::DeleteItemsRequest, preclude::*},
+    api::{
+        FilterMapping, admin::dto::DeleteItemsRequest, apply_filters, preclude::*,
+        sea_orm_utils::paginate_query,
+    },
     entity::{
         event_team_members, event_teams, event_users, events,
         sea_orm_active_enums::EventTeamMemberRole, users,
@@ -76,20 +83,57 @@ pub async fn get_teams(
     _user: SuperAdminJwtGuard,
     db: WebDb,
     event_id: Path<Uuid>,
+    query_params: Query<QueryParams>,
 ) -> UniResult<Vec<TeamResult>> {
     let event_id = event_id.into_inner();
+    let mut query_params = query_params.0;
 
     let event = events::Entity::find_by_id(event_id)
         .one(db.get_ref())
         .await?
         .ok_or(UniError::NotFound(format!(" {} not exist", event_id)))?;
 
-    let teams = event
-        .find_related(event_teams::Entity)
-        .all(db.get_ref())
-        .await?;
-    let mut result = Vec::new();
-    for team in teams {
+    let mappings = [
+        FilterMapping {
+            key: "id",
+            column: Box::new(|v| {
+                Condition::all()
+                    .add(event_teams::Column::Id.eq(Uuid::from_str(&v).unwrap_or(Uuid::nil())))
+            }),
+        },
+        FilterMapping {
+            key: "name",
+            column: Box::new(|v| Condition::all().add(event_teams::Column::Name.contains(v))),
+        },
+        FilterMapping {
+            key: "points",
+            column: Box::new(|v| {
+                Condition::all()
+                    .add(event_teams::Column::Points.eq(v.parse::<f64>().unwrap_or(0.0)))
+            }),
+        },
+        FilterMapping {
+            key: "banned",
+            column: Box::new(|v| {
+                Condition::all()
+                    .add(event_teams::Column::Banned.eq(v.parse::<bool>().unwrap_or(false)))
+            }),
+        },
+    ];
+
+    let stmt = event.find_related(event_teams::Entity);
+    let stmt = apply_filters(stmt, query_params.filter.clone(), &mappings);
+
+    let (items, total_items) =
+        if let (Some(limit), Some(page)) = (query_params.limit, query_params.page) {
+            paginate_query(stmt, db.get_ref(), limit, page).await?
+        } else {
+            let items = stmt.all(db.get_ref()).await?;
+            (items.clone(), items.len())
+        };
+
+    let mut result = Vec::with_capacity(items.len());
+    for team in items {
         let members = team
             .find_related(event_team_members::Entity)
             .find_also_related(users::Entity)
@@ -127,7 +171,9 @@ pub async fn get_teams(
         });
     }
 
-    UniResponse::ok(result.into()).into()
+    query_params.total = Some(total_items);
+
+    UniResponse::ok_meta(result.into(), query_params.into()).into()
 }
 
 #[derive(Debug, Serialize, Deserialize)]

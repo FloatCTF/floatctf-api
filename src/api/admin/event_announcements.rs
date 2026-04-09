@@ -1,5 +1,12 @@
+use std::str::FromStr;
+
+use sea_orm::Condition;
+
 use crate::{
-    api::{admin::dto::DeleteItemsRequest, preclude::*},
+    api::{
+        FilterMapping, admin::dto::DeleteItemsRequest, apply_filters, preclude::*,
+        sea_orm_utils::paginate_query,
+    },
     entity::{event_announcements, events},
 };
 
@@ -105,14 +112,50 @@ pub async fn get_event_announcement(
 /// GET /api/admin/events/{event_id}/announcements
 #[get("")]
 pub async fn list_event_announcements(
+    _user: SuperAdminJwtGuard,
     db: WebDb,
     event_id: Path<Uuid>,
+    query_params: Query<QueryParams>,
 ) -> UniResult<Vec<event_announcements::Model>> {
     let event_id = event_id.into_inner();
-    let event_announcements = event_announcements::Entity::find()
-        .filter(event_announcements::Column::EventId.eq(event_id))
-        .all(db.get_ref())
-        .await?;
+    let mut query_params = query_params.0;
 
-    UniResponse::ok(event_announcements.into()).into()
+    let mappings = [
+        FilterMapping {
+            key: "id",
+            column: Box::new(|v| {
+                Condition::all().add(
+                    event_announcements::Column::Id.eq(Uuid::from_str(&v).unwrap_or(Uuid::nil())),
+                )
+            }),
+        },
+        FilterMapping {
+            key: "title",
+            column: Box::new(|v| {
+                Condition::all().add(event_announcements::Column::Title.contains(v))
+            }),
+        },
+        FilterMapping {
+            key: "content",
+            column: Box::new(|v| {
+                Condition::all().add(event_announcements::Column::Content.contains(v))
+            }),
+        },
+    ];
+
+    let stmt = event_announcements::Entity::find()
+        .filter(event_announcements::Column::EventId.eq(event_id));
+    let stmt = apply_filters(stmt, query_params.filter.clone(), &mappings);
+
+    let (items, total_items) =
+        if let (Some(limit), Some(page)) = (query_params.limit, query_params.page) {
+            paginate_query(stmt, db.get_ref(), limit, page).await?
+        } else {
+            let items = stmt.all(db.get_ref()).await?;
+            (items.clone(), items.len())
+        };
+
+    query_params.total = Some(total_items);
+
+    UniResponse::ok_meta(items.into(), query_params.into()).into()
 }

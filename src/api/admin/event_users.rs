@@ -1,5 +1,15 @@
+use std::str::FromStr;
+
+use sea_orm::Condition;
+
 use crate::{
-    api::{admin::dto::DeleteItemsRequest, preclude::*},
+    api::{
+        FilterMapping,
+        admin::dto::DeleteItemsRequest,
+        apply_filters,
+        preclude::*,
+        sea_orm_utils::{CrossFilterMapping, paginate_query, resolve_cross_filters},
+    },
     entity::{event_users, events, users},
 };
 
@@ -103,33 +113,90 @@ pub async fn get_users(
     _user: SuperAdminJwtGuard,
     db: WebDb,
     event_id: Path<Uuid>,
+    query_params: Query<QueryParams>,
 ) -> UniResult<Vec<EventUserResult>> {
     let event_id = event_id.into_inner();
+    let mut query_params = query_params.0;
 
     let event = events::Entity::find_by_id(event_id)
         .one(db.get_ref())
         .await?
         .ok_or(UniError::NotFound(format!(" {} not exist", event_id)))?;
 
-    let event_users = event_users::Entity::find()
-        .filter(event_users::Column::EventId.eq(event.id))
-        .all(db.get_ref())
-        .await?;
+    // 跨表过滤：username / nickname 属于 users 表
+    let cross_ids = resolve_cross_filters::<users::Entity>(
+        db.get_ref(),
+        &query_params.filter,
+        &[
+            CrossFilterMapping {
+                key: "username",
+                column: Box::new(|v| Condition::all().add(users::Column::Username.contains(v))),
+            },
+            CrossFilterMapping {
+                key: "nickname",
+                column: Box::new(|v| Condition::all().add(users::Column::Nickname.contains(v))),
+            },
+        ],
+        |m| m.id,
+    )
+    .await?;
 
-    let mut users = Vec::new();
-    for event_user in event_users {
-        let user = users::Entity::find_by_id(event_user.user_id)
-            .one(db.get_ref())
-            .await?
-            .ok_or(UniError::NotFound(format!(
-                " {} not exist",
-                event_user.user_id
-            )))?;
+    // event_users 本表字段过滤
+    let mappings = [
+        FilterMapping {
+            key: "user_id",
+            column: Box::new(|v| {
+                Condition::all()
+                    .add(event_users::Column::UserId.eq(Uuid::from_str(&v).unwrap_or(Uuid::nil())))
+            }),
+        },
+        FilterMapping {
+            key: "points",
+            column: Box::new(|v| {
+                Condition::all()
+                    .add(event_users::Column::Points.eq(v.parse::<f64>().unwrap_or(0.0)))
+            }),
+        },
+        FilterMapping {
+            key: "banned",
+            column: Box::new(|v| {
+                Condition::all()
+                    .add(event_users::Column::Banned.eq(v.parse::<bool>().unwrap_or(false)))
+            }),
+        },
+    ];
 
-        users.push(EventUserResult { user, event_user });
+    let mut stmt = event_users::Entity::find().filter(event_users::Column::EventId.eq(event.id));
+
+    if let Some(ids) = cross_ids {
+        stmt = stmt.filter(event_users::Column::UserId.is_in(ids));
     }
 
-    UniResponse::ok(users.into()).into()
+    let stmt = apply_filters(stmt, query_params.filter.clone(), &mappings);
+
+    let (items, total_items) =
+        if let (Some(limit), Some(page)) = (query_params.limit, query_params.page) {
+            paginate_query(stmt, db.get_ref(), limit, page).await?
+        } else {
+            let items = stmt.all(db.get_ref()).await?;
+            (items.clone(), items.len())
+        };
+
+    let mut result = Vec::with_capacity(items.len());
+    for eu in items {
+        let user = users::Entity::find_by_id(eu.user_id)
+            .one(db.get_ref())
+            .await?
+            .ok_or(UniError::NotFound(format!(" {} not exist", eu.user_id)))?;
+        result.push(EventUserResult {
+            user,
+            event_user: eu,
+        });
+    }
+
+    query_params.total = Some(total_items);
+
+    UniResponse::ok_meta(result.into(), query_params.into()).into()
 }
 
 /// POST /api/admin/events/{event_id}/users/{user_id}/banned
