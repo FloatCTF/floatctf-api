@@ -5,13 +5,14 @@ use sea_orm::Condition;
 use crate::{
     api::{FilterMapping, apply_filters, prelude::*, sea_orm_utils::paginate_query},
     entity::{event_logs, sea_orm_active_enums::EventType},
+    prelude::*,
 };
 
 /// GET /api/admin/events/{event_id}/logs
 #[get("")]
 pub async fn get_event_logs(
     _user: SuperAdminJwtGuard,
-    db: WebDb,
+    ctx: ReqCtx,
     event_id: Path<Uuid>,
     query_params: Query<QueryParams>,
 ) -> UniResult<Vec<event_logs::Model>> {
@@ -68,9 +69,9 @@ pub async fn get_event_logs(
 
     let (items, total_items) =
         if let (Some(limit), Some(page)) = (query_params.limit, query_params.page) {
-            paginate_query(stmt, db.get_ref(), limit, page).await?
+            paginate_query(stmt, ctx.db.get_ref(), limit, page).await?
         } else {
-            let items = stmt.all(db.get_ref()).await?;
+            let items = stmt.all(ctx.db.get_ref()).await?;
             (items.clone(), items.len())
         };
 

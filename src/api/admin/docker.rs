@@ -7,6 +7,7 @@ use crate::{
     auth::SuperAdminJwtGuard,
     db::WebDocker,
     entity::{instances, sea_orm_active_enums::InstanceStatus},
+    prelude::*,
 };
 // /**
 //  *  容器名称
@@ -29,14 +30,10 @@ pub struct FloatDockerContainer {
     pub uptime: String,
 }
 #[get("/containers")]
-pub async fn get_containers(
-    _user: SuperAdminJwtGuard,
-    db: WebDb,
-    docker: WebDocker,
-) -> UniResult<()> {
+pub async fn get_containers(_user: SuperAdminJwtGuard, ctx: ReqCtx) -> UniResult<()> {
     let instances = instances::Entity::find()
         .filter(instances::Column::Status.eq(InstanceStatus::Running))
-        .all(db.get_ref())
+        .all(ctx.db.get_ref())
         .await
         .unwrap()
         .into_iter()
@@ -47,7 +44,7 @@ pub async fn get_containers(
     f.insert("name", instances);
 
     let lc = ListContainersOptionsBuilder::new().filters(&f).build();
-    let c = docker.list_containers(Some(lc)).await.unwrap();
+    let c = ctx.docker.list_containers(Some(lc)).await.unwrap();
     UniResponse::ok_none().into()
 }
 pub struct FloatDockerImage {}

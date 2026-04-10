@@ -2,7 +2,7 @@ use std::os::unix::fs::PermissionsExt;
 
 use actix_multipart::form::{MultipartForm, tempfile::TempFile};
 
-use crate::api::prelude::*;
+use crate::{api::prelude::*, prelude::*};
 use chrono::Utc;
 use uuid::Uuid;
 
@@ -28,10 +28,10 @@ pub struct ImageForm {
 #[post("/image")]
 pub async fn upload_image(
     _user: UserJwtGuard,
-    db: WebDb,
+    ctx: ReqCtx,
     MultipartForm(form): MultipartForm<ImageForm>,
 ) -> UniResult<String> {
-    let image_dir = get_setting(&db, "IMAGE_DIR")
+    let image_dir = get_setting(ctx.db.get_ref(), "IMAGE_DIR")
         .await
         .map_err(|e| UniError::CustomError(format!("{}", e.to_string())))?;
 

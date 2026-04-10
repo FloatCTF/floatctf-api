@@ -3,6 +3,7 @@ use std::str::FromStr;
 use crate::{
     api::{FilterMapping, admin::dto::DeleteItemsRequest, prelude::*, sea_orm_utils::query_query},
     entity::users,
+    prelude::*,
 };
 use argon2::{
     Argon2,
@@ -22,7 +23,7 @@ pub struct CreateUserRequest {
 #[post("")]
 pub async fn create_user(
     _user: SuperAdminJwtGuard,
-    db: WebDb,
+    ctx: ReqCtx,
     cur: Json<CreateUserRequest>,
 ) -> UniResult<users::Model> {
     let cur = cur.into_inner();
@@ -47,7 +48,7 @@ pub async fn create_user(
         ..Default::default()
     };
 
-    let user = new_user.insert(db.get_ref()).await?;
+    let user = new_user.insert(ctx.db.get_ref()).await?;
 
     UniResponse::ok(user.into()).into()
 }
@@ -64,14 +65,14 @@ pub struct PathUserRequest {
 #[patch("/{user_id}")]
 pub async fn patch_user(
     _user: SuperAdminJwtGuard,
-    db: WebDb,
+    ctx: ReqCtx,
     pur: Json<PathUserRequest>,
     user_id: Path<Uuid>,
 ) -> UniResult<users::Model> {
     let pur = pur.into_inner();
     let user_id = user_id.into_inner();
     let user = users::Entity::find_by_id(user_id)
-        .one(db.get_ref())
+        .one(ctx.db.get_ref())
         .await?
         .ok_or(UniError::NotFound(format!(" {} not exist", user_id)))?;
 
@@ -106,7 +107,7 @@ pub async fn patch_user(
     });
     m_user.updated_at = Set(Utc::now().into());
 
-    let user = m_user.update(db.get_ref()).await?;
+    let user = m_user.update(ctx.db.get_ref()).await?;
 
     UniResponse::ok(user.into()).into()
 }
@@ -115,7 +116,7 @@ pub async fn patch_user(
 #[get("")]
 pub async fn get_users(
     _user: SuperAdminJwtGuard,
-    db: WebDb,
+    ctx: ReqCtx,
     query_params: Query<QueryParams>,
 ) -> UniResult<Vec<users::Model>> {
     let mut query_params = query_params.0;
@@ -143,7 +144,7 @@ pub async fn get_users(
     ];
 
     let (items, total_items) =
-        query_query::<users::Entity>(db.get_ref(), &mappings, &query_params).await?;
+        query_query::<users::Entity>(ctx.db.get_ref(), &mappings, &query_params).await?;
 
     query_params.total = Some(total_items);
 
@@ -154,12 +155,12 @@ pub async fn get_users(
 #[get("/{id}")]
 pub async fn get_user(
     _user: SuperAdminJwtGuard,
-    db: WebDb,
+    ctx: ReqCtx,
     user_id: Path<Uuid>,
 ) -> UniResult<users::Model> {
     let user_id = user_id.into_inner();
     let model = users::Entity::find_by_id(user_id)
-        .one(db.get_ref())
+        .one(ctx.db.get_ref())
         .await?
         .ok_or(UniError::NotFound(format!(" {} not exist", user_id)))?;
 
@@ -170,13 +171,13 @@ pub async fn get_user(
 #[delete("")]
 pub async fn delete_user(
     _user: SuperAdminJwtGuard,
-    db: WebDb,
+    ctx: ReqCtx,
     dir: Json<DeleteItemsRequest>,
 ) -> UniResult<u64> {
     let dir = dir.into_inner();
     let deleted_count = users::Entity::delete_many()
         .filter(users::Column::Id.is_in(dir.id_list))
-        .exec(db.get_ref())
+        .exec(ctx.db.get_ref())
         .await?
         .rows_affected;
     UniResponse::ok(deleted_count.into()).into()

@@ -1,6 +1,7 @@
 use crate::{
     api::{FilterMapping, admin::dto::DeleteItemsRequest, prelude::*, sea_orm_utils::query_query},
     entity::scheduled_tasks,
+    prelude::*,
 };
 use sea_orm::Condition;
 use std::str::FromStr;
@@ -27,7 +28,7 @@ pub struct CreateScheduledTaskRequest {
 #[post("")]
 pub async fn create_scheduled_task(
     _user: SuperAdminJwtGuard,
-    db: WebDb,
+    ctx: ReqCtx,
     ctr: Json<CreateScheduledTaskRequest>,
 ) -> UniResult<scheduled_tasks::Model> {
     let ctr = ctr.into_inner();
@@ -51,7 +52,7 @@ pub async fn create_scheduled_task(
         ..Default::default()
     };
 
-    let task = new_task.insert(db.get_ref()).await?;
+    let task = new_task.insert(ctx.db.get_ref()).await?;
     UniResponse::ok(task.into()).into()
 }
 
@@ -76,7 +77,7 @@ pub struct PatchScheduledTaskRequest {
 #[patch("/{task_id}")]
 pub async fn patch_scheduled_task(
     _user: SuperAdminJwtGuard,
-    db: WebDb,
+    ctx: ReqCtx,
     task_id: Path<Uuid>,
     ptr: Json<PatchScheduledTaskRequest>,
 ) -> UniResult<scheduled_tasks::Model> {
@@ -84,7 +85,7 @@ pub async fn patch_scheduled_task(
     let ptr = ptr.into_inner();
 
     let task = scheduled_tasks::Entity::find_by_id(task_id)
-        .one(db.get_ref())
+        .one(ctx.db.get_ref())
         .await?
         .ok_or(UniError::NotFound(format!(" {} not exist", task_id)))?;
 
@@ -132,7 +133,7 @@ pub async fn patch_scheduled_task(
 
     m_task.updated_at = Set(Utc::now().into());
 
-    let task = m_task.update(db.get_ref()).await?;
+    let task = m_task.update(ctx.db.get_ref()).await?;
     UniResponse::ok(task.into()).into()
 }
 
@@ -140,7 +141,7 @@ pub async fn patch_scheduled_task(
 #[get("")]
 pub async fn get_scheduled_tasks(
     _user: SuperAdminJwtGuard,
-    db: WebDb,
+    ctx: ReqCtx,
     query_params: Query<QueryParams>,
 ) -> UniResult<Vec<scheduled_tasks::Model>> {
     let mut query_params = query_params.0;
@@ -194,7 +195,7 @@ pub async fn get_scheduled_tasks(
     ];
 
     let (items, total_items) =
-        query_query::<scheduled_tasks::Entity>(db.get_ref(), &mappings, &query_params).await?;
+        query_query::<scheduled_tasks::Entity>(ctx.db.get_ref(), &mappings, &query_params).await?;
 
     query_params.total = Some(total_items);
 
@@ -205,12 +206,12 @@ pub async fn get_scheduled_tasks(
 #[get("/{task_id}")]
 pub async fn get_scheduled_task(
     _user: SuperAdminJwtGuard,
-    db: WebDb,
+    ctx: ReqCtx,
     task_id: Path<Uuid>,
 ) -> UniResult<scheduled_tasks::Model> {
     let task_id = task_id.into_inner();
     let model = scheduled_tasks::Entity::find_by_id(task_id)
-        .one(db.get_ref())
+        .one(ctx.db.get_ref())
         .await?
         .ok_or(UniError::NotFound(format!(" {} not exist", task_id)))?;
 
@@ -221,14 +222,14 @@ pub async fn get_scheduled_task(
 #[delete("")]
 pub async fn delete_scheduled_task(
     _user: SuperAdminJwtGuard,
-    db: WebDb,
+    ctx: ReqCtx,
     dir: Json<DeleteItemsRequest>,
 ) -> UniResult<u64> {
     let dir = dir.into_inner();
     let mut deleted_count = 0;
     for task_id in dir.id_list {
         let task = scheduled_tasks::Entity::find_by_id(task_id)
-            .one(db.get_ref())
+            .one(ctx.db.get_ref())
             .await?;
         if let Some(task) = task {
             if task.protected {
@@ -237,7 +238,7 @@ pub async fn delete_scheduled_task(
                     task.task_name
                 )));
             }
-            let r = task.delete(db.get_ref()).await?;
+            let r = task.delete(ctx.db.get_ref()).await?;
             deleted_count += r.rows_affected;
         }
     }

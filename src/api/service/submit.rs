@@ -1,6 +1,7 @@
 use crate::{
     api::prelude::*,
     entity::{event_teams, event_writeup, events},
+    prelude::*,
     strategies::event,
 };
 use actix_multipart::form::{MultipartForm, tempfile::TempFile, text::Text};
@@ -19,8 +20,7 @@ pub struct SubmitFlagRequest {
 #[post("/flag")]
 pub async fn submit_flag(
     user: UserJwtGuard,
-    db: WebDb,
-    docker: WebDocker,
+    ctx: ReqCtx,
     sfr: Json<SubmitFlagRequest>,
 ) -> UniResult<()> {
     let user = user.into_inner();
@@ -30,17 +30,17 @@ pub async fn submit_flag(
     // prepare event
     let event = match sfr.event_id {
         Some(event_id) => events::Entity::find_by_id(event_id)
-            .one(db.get_ref())
+            .one(ctx.db.get_ref())
             .await?
             .ok_or(UniError::NotFound("no event".into()))?
             .into(),
         None => None,
     };
 
-    // 1st prepare ctx
-    let ctx = event::EventContextBuilder::new()
-        .db(db)
-        .docker(docker)
+    // 1st prepare event_ctx
+    let event_ctx = event::EventContextBuilder::new()
+        .db(ctx.db)
+        .docker(ctx.docker)
         .user(user)
         .event(event)
         .build()
@@ -48,12 +48,12 @@ pub async fn submit_flag(
         .map_err(|e| UniError::CustomError(format!("build event context error: {}", e)))?;
 
     // 2st chose strategy
-    let strategy = event::EventStrategyFactory::create(&ctx.event.r#type);
+    let strategy = event::EventStrategyFactory::create(&event_ctx.event.r#type);
 
     // 3st call function
     strategy
         .submit(
-            &ctx,
+            &event_ctx,
             event::SubmitFlagRequest {
                 instance_id: sfr.instance_id,
                 flag: sfr.flag,
@@ -78,10 +78,10 @@ pub struct WriteupForm {
 #[post("writeup")]
 pub async fn submit_writeup(
     user: UserJwtGuard,
-    db: WebDb,
+    ctx: ReqCtx,
     MultipartForm(form): MultipartForm<WriteupForm>,
 ) -> UniResult<()> {
-    let upload_dir = get_setting(&db, "UPLOAD_DIR")
+    let upload_dir = get_setting(ctx.db.get_ref(), "UPLOAD_DIR")
         .await
         .map_err(|e| UniError::CustomError(format!("get upload dir error: {}", e)))?;
     // if not exists, create it
@@ -98,7 +98,7 @@ pub async fn submit_writeup(
     let writeup_file_name = {
         if let Some(team_id) = team_id.clone() {
             let team = event_teams::Entity::find_by_id(team_id)
-                .one(db.get_ref())
+                .one(ctx.db.get_ref())
                 .await?
                 .ok_or(UniError::NotFound("no team".into()))?;
             format!("{}_{}_{}.pdf", event_id, team.name, user.nickname)
@@ -137,7 +137,7 @@ pub async fn submit_writeup(
         ])
         .to_owned(),
     )
-    .exec(db.get_ref())
+    .exec(ctx.db.get_ref())
     .await?;
 
     UniResponse::ok_none().into()

@@ -2,13 +2,14 @@ use crate::{
     api::prelude::*,
     auth::UserJwtGuard,
     entity::{challenge_writeup, challenges, users},
+    prelude::*,
 };
 
-/// GET /api/challenges/{challenge_id}/my_writeup
+/// GET /api/challenges/{challenge_id}/my_writeups
 #[get("/{challenge_id}/my_writeup")]
 pub async fn get_challenge_writeup(
     user: UserJwtGuard,
-    db: WebDb,
+    ctx: ReqCtx,
     challenge_id: Path<Uuid>,
 ) -> UniResult<challenge_writeup::Model> {
     let user = user.into_inner();
@@ -17,7 +18,7 @@ pub async fn get_challenge_writeup(
     let writeup = challenge_writeup::Entity::find()
         .filter(challenge_writeup::Column::ChallengeId.eq(challenge_id))
         .filter(challenge_writeup::Column::UserId.eq(user.id))
-        .one(db.get_ref())
+        .one(ctx.db.get_ref())
         .await?;
 
     match writeup {
@@ -37,7 +38,7 @@ pub struct CreateChallengeWriteup {
 #[post("/{challenge_id}/my_writeup")]
 pub async fn create_challenge_writeup(
     user: UserJwtGuard,
-    db: WebDb,
+    ctx: ReqCtx,
     challenge_id: Path<Uuid>,
     ccw: Json<CreateChallengeWriteup>,
 ) -> UniResult<challenge_writeup::Model> {
@@ -49,7 +50,7 @@ pub async fn create_challenge_writeup(
     let existing = challenge_writeup::Entity::find()
         .filter(challenge_writeup::Column::ChallengeId.eq(challenge_id))
         .filter(challenge_writeup::Column::UserId.eq(user.id))
-        .one(db.get_ref())
+        .one(ctx.db.get_ref())
         .await?;
 
     let wp = match existing {
@@ -57,7 +58,7 @@ pub async fn create_challenge_writeup(
             let mut active = wp.into_active_model();
             active.content = Set(ccw.content);
             active.created_at = Set(chrono::Utc::now().into());
-            active.update(db.get_ref()).await?
+            active.update(ctx.db.get_ref()).await?
         }
         None => {
             let active = challenge_writeup::ActiveModel {
@@ -66,7 +67,7 @@ pub async fn create_challenge_writeup(
                 content: Set(ccw.content),
                 ..Default::default()
             };
-            active.insert(db.get_ref()).await?
+            active.insert(ctx.db.get_ref()).await?
         }
     };
 
@@ -85,7 +86,7 @@ pub struct ChallengeWriteupResult {
 #[get("/{challenge_id}/writeups")]
 pub async fn get_challenge_writeups(
     _user: UserJwtGuard,
-    db: WebDb,
+    ctx: ReqCtx,
     challenge_id: Path<Uuid>,
 ) -> UniResult<Vec<ChallengeWriteupResult>> {
     let challenge_id = challenge_id.into_inner();
@@ -93,14 +94,14 @@ pub async fn get_challenge_writeups(
     let writeups = challenge_writeup::Entity::find()
         .filter(challenge_writeup::Column::ChallengeId.eq(challenge_id))
         .find_also_related(challenges::Entity)
-        .all(db.get_ref())
+        .all(ctx.db.get_ref())
         .await?;
 
     let mut results = Vec::new();
 
     for (writeup, challenge) in writeups {
         let user = users::Entity::find_by_id(writeup.user_id)
-            .one(db.get_ref())
+            .one(ctx.db.get_ref())
             .await?
             .ok_or(UniError::NotFound(format!(
                 "User {} not found",
@@ -127,14 +128,14 @@ pub async fn get_challenge_writeups(
 #[get("/{writeup_id}")]
 pub async fn get_writeup(
     _user: UserJwtGuard,
-    db: WebDb,
+    ctx: ReqCtx,
     writeup_id: Path<Uuid>,
 ) -> UniResult<ChallengeWriteupResult> {
     let writeup_id = writeup_id.into_inner();
 
     let writeup = challenge_writeup::Entity::find_by_id(writeup_id)
         .find_also_related(challenges::Entity)
-        .one(db.get_ref())
+        .one(ctx.db.get_ref())
         .await?
         .ok_or(UniError::NotFound(format!(
             "Writeup {} not found",
@@ -144,7 +145,7 @@ pub async fn get_writeup(
     let (writeup, challenge) = writeup;
 
     let user = users::Entity::find_by_id(writeup.user_id)
-        .one(db.get_ref())
+        .one(ctx.db.get_ref())
         .await?
         .ok_or(UniError::NotFound(format!(
             "User {} not found",
@@ -168,18 +169,18 @@ pub async fn get_writeup(
 #[get("")]
 pub async fn get_writeups(
     _user: UserJwtGuard,
-    db: WebDb,
+    ctx: ReqCtx,
 ) -> UniResult<Vec<ChallengeWriteupResult>> {
     let writeups = challenge_writeup::Entity::find()
         .find_also_related(challenges::Entity)
-        .all(db.get_ref())
+        .all(ctx.db.get_ref())
         .await?;
 
     let mut results = Vec::new();
 
     for (writeup, challenge) in writeups {
         let user = users::Entity::find_by_id(writeup.user_id)
-            .one(db.get_ref())
+            .one(ctx.db.get_ref())
             .await?
             .ok_or(UniError::NotFound(format!(
                 "User {} not found",

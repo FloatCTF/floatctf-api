@@ -83,12 +83,7 @@ pub struct CreateUserRequest {
 
 /// POST /api/users
 #[post("")]
-pub async fn create_user(
-    db: WebDb,
-    log: WebLog,
-    request: HttpRequest,
-    cur: Json<CreateUserRequest>,
-) -> UniResult<String> {
+pub async fn create_user(ctx: ReqCtx, cur: Json<CreateUserRequest>) -> UniResult<String> {
     let cur = cur.into_inner();
 
     let hashed_password = {
@@ -111,18 +106,19 @@ pub async fn create_user(
         ..Default::default()
     };
 
-    let user = new_user.insert(db.get_ref()).await?;
-    log.add_log(
-        "INFO",
-        "AUTH",
-        "REGISTER",
-        format!("{} 注册成功", user.username).as_str(),
-        json!({}),
-        user.id.into(),
-        None,
-        Some(&request),
-    )
-    .await;
+    let user = new_user.insert(ctx.db.get_ref()).await?;
+    ctx.log
+        .add_log(
+            "INFO",
+            "AUTH",
+            "REGISTER",
+            format!("{} 注册成功", user.username).as_str(),
+            json!({}),
+            user.id.into(),
+            None,
+            Some(&ctx.req),
+        )
+        .await;
     UniResponse::ok(
         "User created successfully, please login "
             .to_string()
@@ -148,7 +144,7 @@ pub struct PatchMeRequest {
 
 /// PATCH /api/users/me
 #[patch("/me")]
-pub async fn patch_me(user: UserJwtGuard, db: WebDb, pmr: Json<PatchMeRequest>) -> UniResult<()> {
+pub async fn patch_me(user: UserJwtGuard, ctx: ReqCtx, pmr: Json<PatchMeRequest>) -> UniResult<()> {
     let pmr = pmr.into_inner();
     let user = user.into_inner();
 
@@ -176,7 +172,7 @@ pub async fn patch_me(user: UserJwtGuard, db: WebDb, pmr: Json<PatchMeRequest>) 
         m_user.password = Set(hashed_password);
     }
 
-    m_user.update(db.get_ref()).await?;
+    m_user.update(ctx.db.get_ref()).await?;
 
     UniResponse::ok_none().into()
 }
@@ -192,7 +188,7 @@ pub struct ResetPasswordRequest {
 // reset password
 #[post("/reset_password")]
 
-pub async fn send_reset_email(db: WebDb, rpr: Json<ResetPasswordRequest>) -> UniResult<()> {
+pub async fn send_reset_email(ctx: ReqCtx, rpr: Json<ResetPasswordRequest>) -> UniResult<()> {
     let rpr = rpr.into_inner();
 
     if rpr.email.is_none() && rpr.username.is_none() {
@@ -205,13 +201,13 @@ pub async fn send_reset_email(db: WebDb, rpr: Json<ResetPasswordRequest>) -> Uni
         (Some(email), _) => {
             Users::find()
                 .filter(users::Column::Email.eq(email))
-                .one(db.get_ref())
+                .one(ctx.db.get_ref())
                 .await?
         }
         (_, Some(username)) => {
             Users::find()
                 .filter(users::Column::Username.eq(username))
-                .one(db.get_ref())
+                .one(ctx.db.get_ref())
                 .await?
         }
         _ => return UniError::CustomError("Email or username required".into()).into(),
@@ -219,7 +215,7 @@ pub async fn send_reset_email(db: WebDb, rpr: Json<ResetPasswordRequest>) -> Uni
 
     let user = user.ok_or_else(|| UniError::CustomError("User not found".to_string()))?;
 
-    let main_url = get_setting(db.get_ref(), "MAIN_URL")
+    let main_url = get_setting(ctx.db.get_ref(), "MAIN_URL")
         .await
         .map_err(|e| UniError::CustomError(format!("Failed to get MAIN_URL: {}", e)))?;
     //
@@ -245,7 +241,7 @@ pub async fn send_reset_email(db: WebDb, rpr: Json<ResetPasswordRequest>) -> Uni
         "#,
         reset_link
     );
-    send_email(&db, &[&to], None, "重置密码", &html_body)
+    send_email(&ctx.db, &[&to], None, "重置密码", &html_body)
         .await
         .map_err(|e| UniError::CustomError(format!("Failed to send email: {}", e)))?;
 
@@ -263,7 +259,7 @@ pub struct TokenQuery {
 }
 #[post("/reset")]
 pub async fn reset_password(
-    db: WebDb,
+    ctx: ReqCtx,
     token: Query<TokenQuery>,
     rpo: Json<ResetPasswordOption>,
 ) -> UniResult<()> {
@@ -280,7 +276,7 @@ pub async fn reset_password(
 
     let user_id = claim.sub;
     let user = Users::find_by_id(user_id)
-        .one(db.get_ref())
+        .one(ctx.db.get_ref())
         .await?
         .ok_or_else(|| UniError::CustomError("User not found".to_string()))?;
 
@@ -299,7 +295,8 @@ pub async fn reset_password(
 
     m_user.password = Set(hashed_password);
 
-    m_user.update(db.get_ref()).await?;
+    m_user.update(ctx.db.get_ref()).await?;
 
     UniResponse::ok_none().into()
 }
+

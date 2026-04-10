@@ -5,13 +5,14 @@ use sea_orm::Condition;
 use crate::{
     api::{FilterMapping, prelude::*, sea_orm_utils::query_query},
     entity::logs,
+    prelude::*,
 };
 
 /// GET /api/admin/logs
 #[get("")]
 pub async fn get_logs(
     _user: SuperAdminJwtGuard,
-    db: WebDb,
+    ctx: ReqCtx,
     query_params: Query<QueryParams>,
 ) -> UniResult<Vec<logs::Model>> {
     let mut query_params = query_params.0;
@@ -55,7 +56,7 @@ pub async fn get_logs(
         },
     ];
     let (items, total_items) =
-        query_query::<logs::Entity>(db.get_ref(), &mappings, &query_params).await?;
+        query_query::<logs::Entity>(ctx.db.get_ref(), &mappings, &query_params).await?;
 
     query_params.total = Some(total_items);
 
@@ -66,12 +67,12 @@ pub async fn get_logs(
 #[get("/{log_id}")]
 pub async fn get_log(
     _user: SuperAdminJwtGuard,
-    db: WebDb,
+    ctx: ReqCtx,
     log_id: Path<Uuid>,
 ) -> UniResult<logs::Model> {
     let log_id = log_id.into_inner();
     let model = logs::Entity::find_by_id(log_id)
-        .one(db.get_ref())
+        .one(ctx.db.get_ref())
         .await?
         .ok_or(UniError::NotFound(format!(" {} not exist", log_id)))?;
 

@@ -5,13 +5,14 @@ use sea_orm::Condition;
 use crate::{
     api::{FilterMapping, prelude::*, sea_orm_utils::query_query},
     entity::{instances, sea_orm_active_enums::InstanceStatus},
+    prelude::*,
 };
 
 /// GET /api/admin/instances
 #[get("")]
 pub async fn get_instances(
     _user: SuperAdminJwtGuard,
-    db: WebDb,
+    ctx: ReqCtx,
     query_params: Query<QueryParams>,
 ) -> UniResult<Vec<instances::Model>> {
     let mut query_params = query_params.0;
@@ -66,7 +67,7 @@ pub async fn get_instances(
         },
     ];
     let (items, total_items) =
-        query_query::<instances::Entity>(db.get_ref(), &mappings, &query_params).await?;
+        query_query::<instances::Entity>(ctx.db.get_ref(), &mappings, &query_params).await?;
 
     query_params.total = Some(total_items);
 
@@ -77,12 +78,12 @@ pub async fn get_instances(
 #[get("/{instance_id}")]
 pub async fn get_instance(
     _user: SuperAdminJwtGuard,
-    db: WebDb,
+    ctx: ReqCtx,
     instance_id: Path<Uuid>,
 ) -> UniResult<instances::Model> {
     let instance_id = instance_id.into_inner();
     let model = instances::Entity::find_by_id(instance_id)
-        .one(db.get_ref())
+        .one(ctx.db.get_ref())
         .await?
         .ok_or(UniError::NotFound(format!(" {} not exist", instance_id)))?;
 

@@ -4,6 +4,7 @@ use crate::{
     config::get_setting,
     db::WebDocker,
     entity::{challenges, prelude::Challenges},
+    prelude::*,
 };
 use actix_multipart::form::{MultipartForm, tempfile::TempFile, text::Text};
 use base64::Engine;
@@ -29,7 +30,7 @@ pub struct CreateChallengeRequest {
 #[post("")]
 pub async fn create_challenge(
     _user: SuperAdminJwtGuard,
-    db: WebDb,
+    ctx: ReqCtx,
     ccr: Json<CreateChallengeRequest>,
 ) -> UniResult<challenges::Model> {
     let ccr = ccr.into_inner();
@@ -44,7 +45,7 @@ pub async fn create_challenge(
         ..Default::default()
     };
 
-    let challenge = new_challenge.insert(db.get_ref()).await?;
+    let challenge = new_challenge.insert(ctx.db.get_ref()).await?;
 
     UniResponse::ok(challenge.into()).into()
 }
@@ -62,14 +63,14 @@ pub struct PatchChallengeRequest {
 #[patch("/{challenge_id}")]
 pub async fn patch_challenge(
     _user: SuperAdminJwtGuard,
-    db: WebDb,
+    ctx: ReqCtx,
     pcr: Json<PatchChallengeRequest>,
     challenge_id: Path<Uuid>,
 ) -> UniResult<challenges::Model> {
     let pcr = pcr.into_inner();
     let challenge_id = challenge_id.into_inner();
     let challenge = Challenges::find_by_id(challenge_id)
-        .one(db.get_ref())
+        .one(ctx.db.get_ref())
         .await?
         .ok_or(UniError::NotFound(format!(" {} not exist", challenge_id)))?;
 
@@ -98,7 +99,7 @@ pub async fn patch_challenge(
     pcr.toml_str.map(|t| m_challenge.toml_str = Set(t));
     m_challenge.updated_at = Set(Utc::now().into());
 
-    let challenge = m_challenge.update(db.get_ref()).await?;
+    let challenge = m_challenge.update(ctx.db.get_ref()).await?;
 
     UniResponse::ok(challenge.into()).into()
 }
@@ -107,7 +108,7 @@ pub async fn patch_challenge(
 #[get("")]
 pub async fn get_challenges(
     _user: SuperAdminJwtGuard,
-    db: WebDb,
+    ctx: ReqCtx,
     query_params: Query<QueryParams>,
 ) -> UniResult<Vec<challenges::Model>> {
     let mut query_params = query_params.0;
@@ -141,7 +142,7 @@ pub async fn get_challenges(
         },
     ];
     let (items, total_items) =
-        query_query::<challenges::Entity>(db.get_ref(), &mappings, &query_params).await?;
+        query_query::<challenges::Entity>(ctx.db.get_ref(), &mappings, &query_params).await?;
 
     query_params.total = Some(total_items);
 
@@ -152,11 +153,11 @@ pub async fn get_challenges(
 #[get("/{challenge_id}")]
 pub async fn get_challenge(
     _user: SuperAdminJwtGuard,
-    db: WebDb,
+    ctx: ReqCtx,
     id: Path<Uuid>,
 ) -> UniResult<challenges::Model> {
     let model = Challenges::find_by_id(*id)
-        .one(db.get_ref())
+        .one(ctx.db.get_ref())
         .await?
         .ok_or(UniError::NotFound(format!(" {} not exist", id)))?;
 
@@ -167,19 +168,19 @@ pub async fn get_challenge(
 #[delete("")]
 pub async fn delete_challenge(
     _user: SuperAdminJwtGuard,
-    db: WebDb,
+    ctx: ReqCtx,
     dir: Json<DeleteItemsRequest>,
 ) -> UniResult<u64> {
     let dir = dir.into_inner();
 
     let mut deleted_count = 0;
-    let challenges_path = get_setting(&db, "CHALLENGES_DIR")
+    let challenges_path = get_setting(&ctx.db, "CHALLENGES_DIR")
         .await
         .map_err(|e| UniError::CustomError(format!("get setting error: {}", e)))?;
 
     for challenge_id in dir.id_list {
         let challenge = Challenges::find_by_id(challenge_id)
-            .one(db.get_ref())
+            .one(ctx.db.get_ref())
             .await?
             .ok_or(UniError::NotFound(format!(" {} not exist", challenge_id)))?;
 
@@ -188,7 +189,7 @@ pub async fn delete_challenge(
             std::fs::remove_dir_all(&del_challenge_path)
                 .map_err(|e| UniError::CustomError(format!("delete challenge dir error: {}", e)))?;
         }
-        let r = challenge.delete(db.get_ref()).await?;
+        let r = challenge.delete(ctx.db.get_ref()).await?;
         deleted_count += r.rows_affected;
     }
 
@@ -207,7 +208,7 @@ struct UploadForm {
 #[post("/import")]
 pub async fn web_import_challenge(
     _user: SuperAdminJwtGuard,
-    db: WebDb,
+    ctx: ReqCtx,
     MultipartForm(form): MultipartForm<UploadForm>,
 ) -> UniResult<Vec<challenges::Model>> {
     let mut will_insert_toml_strs = Vec::new();
@@ -225,7 +226,7 @@ pub async fn web_import_challenge(
     }
 
     if let Some(challenge_zip) = form.challenge_zip {
-        let toml_str = import_challenge_zip(&db, challenge_zip.file)
+        let toml_str = import_challenge_zip(&ctx.db, challenge_zip.file)
             .await
             .map_err(|e| UniError::CustomError(format!("import challenge zip error: {}", e)))?;
 
@@ -233,7 +234,7 @@ pub async fn web_import_challenge(
     }
 
     if let Some(challenge_list_zip) = form.challenge_list_zip {
-        let toml_strs = import_challenge_list_zip(&db, challenge_list_zip.file)
+        let toml_strs = import_challenge_list_zip(&ctx.db, challenge_list_zip.file)
             .await
             .map_err(|e| {
                 UniError::CustomError(format!("import challenge list zip error: {}", e))
@@ -243,7 +244,7 @@ pub async fn web_import_challenge(
     }
 
     for toml_str in will_insert_toml_strs {
-        let challenge = import_challenge(db.get_ref(), toml_str)
+        let challenge = import_challenge(ctx.db.get_ref(), toml_str)
             .await
             .map_err(|e| UniError::CustomError(format!("import challenge error: {}", e)))?;
 
@@ -362,15 +363,14 @@ pub struct ChallengeCheckRequest {
 #[post("/check")]
 pub async fn check_challenges(
     _user: SuperAdminJwtGuard,
-    db: WebDb,
-    docker: WebDocker,
+    ctx: ReqCtx,
     ccr: Json<ChallengeCheckRequest>,
 ) -> UniResult<Vec<ChallengeCheckResult>> {
     let ccr = ccr.into_inner();
     let mut challenge_check_results = Vec::new();
     // check docker image
     // check challenge attachment
-    let challenge_dir = get_setting(&db, "CHALLENGES_DIR")
+    let challenge_dir = get_setting(&ctx.db, "CHALLENGES_DIR")
         .await
         .map_err(|e| UniError::CustomError(format!("get setting error: {}", e)))?;
 
@@ -378,10 +378,10 @@ pub async fn check_challenges(
         if ccr.challenge_id_list.is_some() {
             Challenges::find()
                 .filter(challenges::Column::Id.is_in(ccr.challenge_id_list.unwrap()))
-                .all(db.get_ref())
+                .all(ctx.db.get_ref())
                 .await?
         } else {
-            Challenges::find().all(db.get_ref()).await?
+            Challenges::find().all(ctx.db.get_ref()).await?
         }
     };
 
@@ -395,7 +395,7 @@ pub async fn check_challenges(
             .map_err(|e| UniError::CustomError(format!("parse challenge meta error: {}", e)))?;
 
         let docker_image_ok = match &cm.docker {
-            Some(d) => docker.inspect_image(&d.image_tag).await.is_ok(),
+            Some(d) => ctx.docker.inspect_image(&d.image_tag).await.is_ok(),
             None => true, // 非docker 题目 默认为true
         };
 
@@ -445,8 +445,7 @@ pub struct BuildChallengeResult {
 #[post("/build")]
 pub async fn build_challenge(
     _user: SuperAdminJwtGuard,
-    db: WebDb,
-    docker: WebDocker,
+    ctx: ReqCtx,
     bcr: Json<BuildChallengeRequest>,
 ) -> UniResult<Vec<BuildChallengeResult>> {
     let bcr = bcr.into_inner();
@@ -461,7 +460,7 @@ pub async fn build_challenge(
 
     for challenge_id in challenge_id_list {
         let challenge = Challenges::find_by_id(challenge_id)
-            .one(db.get_ref())
+            .one(ctx.db.get_ref())
             .await?
             .ok_or(UniError::NotFound(format!(" {} not exist", challenge_id)))?;
 
@@ -472,7 +471,7 @@ pub async fn build_challenge(
             continue;
         }
 
-        let challenges_dir = get_setting(&db, "CHALLENGES_DIR")
+        let challenges_dir = get_setting(&ctx.db, "CHALLENGES_DIR")
             .await
             .map_err(|e| UniError::CustomError(format!("get setting error: {}", e)))?;
 
@@ -480,7 +479,7 @@ pub async fn build_challenge(
             .join(&challenge.safe_name)
             .join("src");
 
-        let build_result = cm.build_image(&docker, &context_path).await;
+        let build_result = cm.build_image(&ctx.docker, &context_path).await;
 
         res.push(BuildChallengeResult {
             challenge_name: challenge.name,

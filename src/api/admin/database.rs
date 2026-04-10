@@ -3,7 +3,7 @@ use base64::Engine;
 use sea_orm::sqlx::{self, Column, Row, TypeInfo, postgres::PgRow};
 use serde_json::{Value, json};
 
-use crate::{api::prelude::*, auth::SuperAdminJwtGuard};
+use crate::{api::prelude::*, auth::SuperAdminJwtGuard, prelude::*};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SqlStatement {
@@ -21,7 +21,7 @@ pub struct SqlResult {
 
 #[post("/exec_sql")]
 async fn exec_sql(
-    db: WebDb,
+    ctx: ReqCtx,
     _user: SuperAdminJwtGuard,
     ss: Json<SqlStatement>,
 ) -> UniResult<SqlResult> {
@@ -40,7 +40,7 @@ async fn exec_sql(
         "select" | "show" | "describe" | "explain" | "with" => {
             // fetch_all 查询
             match sqlx::query(&sql)
-                .fetch_all(db.get_postgres_connection_pool())
+                .fetch_all(ctx.db.get_postgres_connection_pool())
                 .await
             {
                 Ok(rows) => {
@@ -61,7 +61,7 @@ async fn exec_sql(
             }
         }
         _ => match sqlx::query(&sql)
-            .execute(db.get_postgres_connection_pool())
+            .execute(ctx.db.get_postgres_connection_pool())
             .await
         {
             Ok(res) => {

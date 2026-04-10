@@ -6,6 +6,7 @@ use crate::{
         sea_orm_active_enums::{EventTeamMemberRole, EventType},
         users,
     },
+    prelude::*,
     strategies::event,
 };
 use chrono::{DateTime, FixedOffset};
@@ -30,13 +31,13 @@ pub struct EventInfo {
 
 /// GET /api/events
 #[get("")]
-pub async fn get_events(user: UserJwtGuard, db: WebDb) -> UniResult<Vec<EventInfo>> {
+pub async fn get_events(user: UserJwtGuard, ctx: ReqCtx) -> UniResult<Vec<EventInfo>> {
     let user = user.into_inner();
 
     let events_with_users = events::Entity::find()
         .filter(events::Column::Hidden.eq(false))
         .find_with_related(event_users::Entity)
-        .all(db.get_ref())
+        .all(ctx.db.get_ref())
         .await?;
 
     let mut result = Vec::new();
@@ -56,17 +57,17 @@ pub async fn get_events(user: UserJwtGuard, db: WebDb) -> UniResult<Vec<EventInf
 
 /// GET /api/events/{event_id}
 #[get("/{event_id}")]
-pub async fn get_event(user: UserJwtGuard, db: WebDb, id: Path<Uuid>) -> UniResult<EventInfo> {
+pub async fn get_event(user: UserJwtGuard, ctx: ReqCtx, id: Path<Uuid>) -> UniResult<EventInfo> {
     let user = user.into_inner();
 
     let event = events::Entity::find_by_id(*id)
         .filter(events::Column::Hidden.eq(false))
-        .one(db.get_ref())
+        .one(ctx.db.get_ref())
         .await?
         .ok_or(UniError::NotFound("event not found".to_string()))?;
 
     let joined = event_users::Entity::find_by_id((*id, user.id))
-        .one(db.get_ref())
+        .one(ctx.db.get_ref())
         .await?
         .is_some();
 
@@ -74,7 +75,7 @@ pub async fn get_event(user: UserJwtGuard, db: WebDb, id: Path<Uuid>) -> UniResu
         .filter(event_team_members::Column::EventId.eq(*id))
         .filter(event_team_members::Column::UserId.eq(user.id))
         .find_also_related(event_teams::Entity)
-        .one(db.get_ref())
+        .one(ctx.db.get_ref())
         .await?;
 
     let team = event_member.map(|(_, team)| team).flatten();
@@ -84,7 +85,7 @@ pub async fn get_event(user: UserJwtGuard, db: WebDb, id: Path<Uuid>) -> UniResu
                 .filter(event_team_members::Column::EventId.eq(*id))
                 .filter(event_team_members::Column::TeamId.eq(team.id))
                 .find_also_related(users::Entity)
-                .all(db.get_ref())
+                .all(ctx.db.get_ref())
                 .await?;
             let members = members
                 .into_iter()
@@ -129,7 +130,7 @@ pub struct EventChallengeResult {
 #[get("/{event_id}/challenges")]
 pub async fn get_event_challenges(
     user: UserJwtGuard,
-    db: WebDb,
+    ctx: ReqCtx,
     id: Path<Uuid>,
 ) -> UniResult<Vec<EventChallengeResult>> {
     let user = user.into_inner();
@@ -138,18 +139,11 @@ pub async fn get_event_challenges(
     // team 化
     let event = events::Entity::find_by_id(*id)
         .filter(events::Column::Hidden.eq(false))
-        .one(db.get_ref())
+        .one(ctx.db.get_ref())
         .await?
         .ok_or(UniError::NotFound("event not found".to_string()))?;
 
-    // let ctx = event::EventContextBuilder::new()
-    //     .db(db.clone())
-    //     .user(user.clone())
-    //     .event(Some(event.clone()))
-    //     .build()
-    //     .map_err(|e| UniError::CustomError(format!("build event context error: {}", e)))?;
-    // TODO : add stragey
-    match EventStatus::check(&db, &event.id).await? {
+    match EventStatus::check(&ctx.db, &event.id).await? {
         EventStatus::NotStarted => {
             return Err(UniError::CustomError("Event is not start".to_string()));
         }
@@ -157,7 +151,7 @@ pub async fn get_event_challenges(
     }
 
     let joined = event_users::Entity::find_by_id((*id, user.id))
-        .one(db.get_ref())
+        .one(ctx.db.get_ref())
         .await?
         .is_some();
 
@@ -170,7 +164,7 @@ pub async fn get_event_challenges(
         .filter(event_challenges::Column::Hidden.eq(false))
         .find_also_related(challenges::Entity); // join 关联挑战表
 
-    let c_ec = stmt.all(db.get_ref()).await?;
+    let c_ec = stmt.all(ctx.db.get_ref()).await?;
 
     let mut result = Vec::new();
     for (event_challenge, challenge) in c_ec {
@@ -178,7 +172,7 @@ pub async fn get_event_challenges(
             let solved_count = event_challenge_solves::Entity::find()
                 .filter(event_challenge_solves::Column::EventId.eq(*id))
                 .filter(event_challenge_solves::Column::ChallengeId.eq(c.id))
-                .count(db.get_ref())
+                .count(ctx.db.get_ref())
                 .await?;
 
             let (solved, solved_no) = {
@@ -186,7 +180,7 @@ pub async fn get_event_challenges(
                     EventType::JeopardySingle => {
                         let user_solve =
                             event_challenge_solves::Entity::find_by_id((*id, c.id, user.id))
-                                .one(db.get_ref())
+                                .one(ctx.db.get_ref())
                                 .await?;
 
                         let mut solved_no = 0;
@@ -198,7 +192,7 @@ pub async fn get_event_challenges(
                                 .filter(event_challenge_solves::Column::EventId.eq(*id))
                                 .filter(event_challenge_solves::Column::ChallengeId.eq(c.id))
                                 .filter(event_challenge_solves::Column::CreatedAt.lt(us.created_at))
-                                .count(db.get_ref())
+                                .count(ctx.db.get_ref())
                                 .await?;
 
                             solved_no = before_count + 1;
@@ -209,7 +203,7 @@ pub async fn get_event_challenges(
                         let team_member = event_team_members::Entity::find()
                             .filter(event_team_members::Column::EventId.eq(*id))
                             .filter(event_team_members::Column::UserId.eq(user.id))
-                            .one(db.get_ref())
+                            .one(ctx.db.get_ref())
                             .await?
                             .ok_or(UniError::NotFound("you are not in any team".into()))?;
 
@@ -217,7 +211,7 @@ pub async fn get_event_challenges(
                             .filter(event_challenge_solves::Column::EventId.eq(*id))
                             .filter(event_challenge_solves::Column::ChallengeId.eq(c.id))
                             .filter(event_challenge_solves::Column::TeamId.eq(team_member.team_id))
-                            .one(db.get_ref())
+                            .one(ctx.db.get_ref())
                             .await?;
 
                         let mut solved_no = 0;
@@ -229,7 +223,7 @@ pub async fn get_event_challenges(
                                 .filter(event_challenge_solves::Column::EventId.eq(*id))
                                 .filter(event_challenge_solves::Column::ChallengeId.eq(c.id))
                                 .filter(event_challenge_solves::Column::CreatedAt.lt(ts.created_at))
-                                .count(db.get_ref())
+                                .count(ctx.db.get_ref())
                                 .await?;
 
                             solved_no = before_count + 1;
@@ -246,7 +240,7 @@ pub async fn get_event_challenges(
             // 查用户是否解出 & 解题记录
 
             let current_points =
-                calculate_next_dynamic_score(&db, event_challenge.points, solved_count)
+                calculate_next_dynamic_score(&ctx.db, event_challenge.points, solved_count)
                     .await
                     .map_err(|e| {
                         UniError::CustomError(format!("calculate_next_dynamic_score error: {}", e))
@@ -275,30 +269,29 @@ pub struct EventInstanceResult {
 #[get("/{event_id}/instances")]
 pub async fn get_event_instances(
     user: UserJwtGuard,
-    db: WebDb,
-    docker: WebDocker,
+    ctx: ReqCtx,
     id: Path<Uuid>,
 ) -> UniResult<Vec<EventInstanceResult>> {
     let user = user.into_inner();
 
     let event = events::Entity::find_by_id(*id)
         .filter(events::Column::Hidden.eq(false))
-        .one(db.get_ref())
+        .one(ctx.db.get_ref())
         .await?
         .ok_or(UniError::NotFound("event not found".to_string()))?;
 
-    let ctx = event::EventContextBuilder::new()
-        .db(db.clone())
-        .docker(docker.clone())
+    let event_ctx = event::EventContextBuilder::new()
+        .db(ctx.db.clone())
+        .docker(ctx.docker.clone())
         .user(user.clone())
         .event(Some(event))
         .build()
         .await
         .map_err(|e| UniError::CustomError(format!("build event context error: {}", e)))?;
 
-    let strategy = event::EventStrategyFactory::create(&ctx.event.r#type);
+    let strategy = event::EventStrategyFactory::create(&event_ctx.event.r#type);
     let instances = strategy
-        .get_instances(&ctx)
+        .get_instances(&event_ctx)
         .await
         .map_err(|e| UniError::CustomError(format!("get_instances error: {}", e)))?;
 
@@ -317,8 +310,7 @@ pub async fn get_event_instances(
 #[get("/{event_id}/challenges/{challenge_id}/instance")]
 pub async fn get_event_challenge_instance(
     user: UserJwtGuard,
-    db: WebDb,
-    docker: WebDocker,
+    ctx: ReqCtx,
     id: Path<(Uuid, Uuid)>,
 ) -> UniResult<instances::Model> {
     let user = user.into_inner();
@@ -326,22 +318,22 @@ pub async fn get_event_challenge_instance(
 
     let event = events::Entity::find_by_id(event_id)
         .filter(events::Column::Hidden.eq(false))
-        .one(db.get_ref())
+        .one(ctx.db.get_ref())
         .await?
         .ok_or(UniError::NotFound("event not found".to_string()))?;
 
-    let ctx = event::EventContextBuilder::new()
-        .db(db.clone())
-        .docker(docker.clone())
+    let event_ctx = event::EventContextBuilder::new()
+        .db(ctx.db.clone())
+        .docker(ctx.docker.clone())
         .user(user.clone())
         .event(Some(event))
         .build()
         .await
         .map_err(|e| UniError::CustomError(format!("build event context error: {}", e)))?;
 
-    let strategy = event::EventStrategyFactory::create(&ctx.event.r#type);
+    let strategy = event::EventStrategyFactory::create(&event_ctx.event.r#type);
     let instance = strategy
-        .get_instance_by_challenge_id(&ctx, challenge_id)
+        .get_instance_by_challenge_id(&event_ctx, challenge_id)
         .await
         .map_err(|e| UniError::CustomError(format!("get_instance_by_challenge_id error: {}", e)))?;
 
@@ -356,7 +348,7 @@ pub struct CreateUserTeam {
 #[post("/{event_id}/team")]
 pub async fn create_team(
     user: UserJwtGuard,
-    db: WebDb,
+    ctx: ReqCtx,
     id: Path<Uuid>,
     cut: Json<CreateUserTeam>,
 ) -> UniResult<event_teams::Model> {
@@ -365,11 +357,11 @@ pub async fn create_team(
     let event_id = *id;
     let event = events::Entity::find_by_id(event_id)
         .filter(events::Column::Hidden.eq(false))
-        .one(db.get_ref())
+        .one(ctx.db.get_ref())
         .await?
         .ok_or(UniError::NotFound("event not found".to_string()))?;
 
-    match EventStatus::check(&db, &event.id).await? {
+    match EventStatus::check(&ctx.db, &event.id).await? {
         EventStatus::Ongoing | EventStatus::Ended => {
             return Err(UniError::CustomError("Event has not yet begun".to_string()));
         }
@@ -378,7 +370,7 @@ pub async fn create_team(
 
     // 判断是否已经加入了团队
     let event_user = event_users::Entity::find_by_id((event_id, user.id))
-        .one(db.get_ref())
+        .one(ctx.db.get_ref())
         .await?;
 
     if event_user.is_some() {
@@ -390,7 +382,7 @@ pub async fn create_team(
         event_id: Set(event_id),
         ..Default::default()
     }
-    .insert(db.get_ref())
+    .insert(ctx.db.get_ref())
     .await?;
 
     let new_event_user = event_users::ActiveModel {
@@ -398,7 +390,7 @@ pub async fn create_team(
         user_id: Set(user.id),
         ..Default::default()
     };
-    new_event_user.insert(db.get_ref()).await?;
+    new_event_user.insert(ctx.db.get_ref()).await?;
 
     let new_event_team_member = event_team_members::ActiveModel {
         event_id: Set(event_id),
@@ -407,53 +399,53 @@ pub async fn create_team(
         role: Set(EventTeamMemberRole::Captain),
         ..Default::default()
     };
-    new_event_team_member.insert(db.get_ref()).await?;
+    new_event_team_member.insert(ctx.db.get_ref()).await?;
 
     UniResponse::ok(team.into()).into()
 }
 /// DELETE /api/events/{event_id}/team/{team_id}
 #[delete("/{event_id}/team/{team_id}")]
-pub async fn quit_team(user: UserJwtGuard, db: WebDb, id: Path<(Uuid, Uuid)>) -> UniResult<()> {
+pub async fn quit_team(user: UserJwtGuard, ctx: ReqCtx, id: Path<(Uuid, Uuid)>) -> UniResult<()> {
     let user = user.into_inner();
     let (event_id, team_id) = id.into_inner();
     let team_member = event_team_members::Entity::find_by_id((event_id, team_id, user.id))
-        .one(db.get_ref())
+        .one(ctx.db.get_ref())
         .await?
         .ok_or(UniError::NotFound("You are not of the team".to_string()))?;
 
     if team_member.role == EventTeamMemberRole::Captain {
         let team = event_teams::Entity::find_by_id(team_id)
-            .one(db.get_ref())
+            .one(ctx.db.get_ref())
             .await?
             .ok_or(UniError::NotFound("team not found".to_string()))?;
-        team.delete(db.get_ref()).await?;
+        team.delete(ctx.db.get_ref()).await?;
     } else {
-        team_member.delete(db.get_ref()).await?;
+        team_member.delete(ctx.db.get_ref()).await?;
     }
 
     let event_user = event_users::Entity::find_by_id((event_id, user.id))
-        .one(db.get_ref())
+        .one(ctx.db.get_ref())
         .await?
         .ok_or(UniError::NotFound("You are not of the event".to_string()))?;
-    event_user.delete(db.get_ref()).await?;
+    event_user.delete(ctx.db.get_ref()).await?;
 
     UniResponse::ok_none().into()
 }
 
 /// POST /api/events/{event_id}/team/{team_id}/join
 #[post("/{event_id}/team/{team_id}/join")]
-pub async fn join_team(user: UserJwtGuard, db: WebDb, id: Path<(Uuid, Uuid)>) -> UniResult<()> {
+pub async fn join_team(user: UserJwtGuard, ctx: ReqCtx, id: Path<(Uuid, Uuid)>) -> UniResult<()> {
     let user = user.into_inner();
     let (event_id, team_id) = id.into_inner();
     let team_member = event_team_members::Entity::find_by_id((event_id, team_id, user.id))
-        .one(db.get_ref())
+        .one(ctx.db.get_ref())
         .await?;
 
     if team_member.is_some() {
         return Err(UniError::CustomError("already joined team".to_string()));
     }
     let event_team = event_teams::Entity::find_by_id(team_id)
-        .one(db.get_ref())
+        .one(ctx.db.get_ref())
         .await?
         .ok_or(UniError::NotFound("team not found".to_string()))?;
 
@@ -464,25 +456,25 @@ pub async fn join_team(user: UserJwtGuard, db: WebDb, id: Path<(Uuid, Uuid)>) ->
         role: Set(EventTeamMemberRole::Member),
         ..Default::default()
     };
-    new_event_team_member.insert(db.get_ref()).await?;
+    new_event_team_member.insert(ctx.db.get_ref()).await?;
 
     let new_event_user = event_users::ActiveModel {
         event_id: Set(event_id),
         user_id: Set(user.id),
         ..Default::default()
     };
-    new_event_user.insert(db.get_ref()).await?;
+    new_event_user.insert(ctx.db.get_ref()).await?;
 
     UniResponse::ok_none().into()
 }
 
 /// POST /api/events/{event_id}/team/{team_id}/leave
 #[post("/{event_id}/team/{team_id}/leave")]
-pub async fn leave_team(user: UserJwtGuard, db: WebDb, id: Path<(Uuid, Uuid)>) -> UniResult<()> {
+pub async fn leave_team(user: UserJwtGuard, ctx: ReqCtx, id: Path<(Uuid, Uuid)>) -> UniResult<()> {
     let user = user.into_inner();
     let (event_id, team_id) = id.into_inner();
     let team_member = event_team_members::Entity::find_by_id((event_id, team_id, user.id))
-        .one(db.get_ref())
+        .one(ctx.db.get_ref())
         .await?
         .ok_or(UniError::NotFound("You are not of the team".to_string()))?;
 
@@ -492,7 +484,7 @@ pub async fn leave_team(user: UserJwtGuard, db: WebDb, id: Path<(Uuid, Uuid)>) -
         ));
     }
 
-    team_member.delete(db.get_ref()).await?;
+    team_member.delete(ctx.db.get_ref()).await?;
 
     UniResponse::ok_none().into()
 }
@@ -501,13 +493,13 @@ pub async fn leave_team(user: UserJwtGuard, db: WebDb, id: Path<(Uuid, Uuid)>) -
 #[post("/{event_id}/join")]
 pub async fn join_event(
     user: UserJwtGuard,
-    db: WebDb,
+    ctx: ReqCtx,
     id: Path<Uuid>,
 ) -> UniResult<event_users::Model> {
     let user = user.into_inner();
     let event = events::Entity::find_by_id(*id)
         .filter(events::Column::Hidden.eq(false))
-        .one(db.get_ref())
+        .one(ctx.db.get_ref())
         .await?
         .ok_or(UniError::NotFound("event not found".to_string()))?;
 
@@ -515,7 +507,7 @@ pub async fn join_event(
         return Err(UniError::CustomError("event not allow join".to_string()));
     }
 
-    match EventStatus::check(&db, &event.id).await? {
+    match EventStatus::check(&ctx.db, &event.id).await? {
         EventStatus::Ongoing | EventStatus::Ended => {
             return Err(UniError::CustomError("Event has not yet begun".to_string()));
         }
@@ -529,25 +521,25 @@ pub async fn join_event(
     };
     //  event_status 只有在未开始时 可加入 退出
 
-    let user = new_event_user.insert(db.get_ref()).await?;
+    let user = new_event_user.insert(ctx.db.get_ref()).await?;
 
     UniResponse::ok(user.into()).into()
 }
 
 /// DELETE /api/events/{event_id}/leave
 #[delete("/{event_id}/leave")]
-pub async fn leave_event(user: UserJwtGuard, db: WebDb, id: Path<Uuid>) -> UniResult<u64> {
+pub async fn leave_event(user: UserJwtGuard, ctx: ReqCtx, id: Path<Uuid>) -> UniResult<u64> {
     let user = user.into_inner();
     let event = events::Entity::find_by_id(*id)
         .filter(events::Column::Hidden.eq(false))
-        .one(db.get_ref())
+        .one(ctx.db.get_ref())
         .await?
         .ok_or(UniError::NotFound("event not found".to_string()))?;
     if event.allow_join == false {
         return Err(UniError::CustomError("event not allow leave".to_string()));
     }
 
-    match EventStatus::check(&db, &event.id).await? {
+    match EventStatus::check(&ctx.db, &event.id).await? {
         EventStatus::Ongoing | EventStatus::Ended => {
             return Err(UniError::CustomError("Event has not yet begun".to_string()));
         }
@@ -555,11 +547,11 @@ pub async fn leave_event(user: UserJwtGuard, db: WebDb, id: Path<Uuid>) -> UniRe
     }
 
     let event_user = event_users::Entity::find_by_id((*id, user.id))
-        .one(db.get_ref())
+        .one(ctx.db.get_ref())
         .await?
         .ok_or(UniError::NotFound("event user not found".to_string()))?;
 
-    let event_user = event_user.delete(db.get_ref()).await?.rows_affected;
+    let event_user = event_user.delete(ctx.db.get_ref()).await?.rows_affected;
 
     UniResponse::ok(event_user.into()).into()
 }
@@ -635,7 +627,7 @@ pub async fn __get_scoreboard(db: WebDb, event_id: Uuid) -> anyhow::Result<Vec<S
             // 这些结构：
             // user_solved 用来判断某用户是否解出某题
             // total_solved_per_chal 记录每题总解出人数
-            // solve_order 为 (user_id, challenge_id) 记录该用户解出该题的“名次”（从 1 开始）
+            // solve_order 为 (user_id, challenge_id) 记录该用户解出该题的"名次"（从 1 开始）
             let mut user_solved: HashSet<(Uuid, Uuid)> = HashSet::new();
             let mut total_solved_per_chal: HashMap<Uuid, u64> = HashMap::new();
             let mut solve_order: HashMap<(Uuid, Uuid), u64> = HashMap::new();
@@ -679,7 +671,7 @@ pub async fn __get_scoreboard(db: WebDb, event_id: Uuid) -> anyhow::Result<Vec<S
                     challenges.push(ChallengeScoreboard {
                         name: challenge.name.clone(),
                         solved,
-                        solved_no: order_for_user, // ← 现在是“第几个解出”
+                        solved_no: order_for_user, // ← 现在是"第几个解出"
                     });
                 }
 
@@ -766,7 +758,7 @@ pub async fn __get_scoreboard(db: WebDb, event_id: Uuid) -> anyhow::Result<Vec<S
                     challenges.push(ChallengeScoreboard {
                         name: challenge.name.clone(),
                         solved,
-                        solved_no: order_for_user, // ← 现在是“第几个解出”
+                        solved_no: order_for_user, // ← 现在是"第几个解出"
                     });
                 }
 
@@ -792,16 +784,16 @@ pub async fn __get_scoreboard(db: WebDb, event_id: Uuid) -> anyhow::Result<Vec<S
 #[get("/{event_id}/scoreboard")]
 pub async fn get_scoreboard(
     _user: UserJwtGuard,
-    db: WebDb,
+    ctx: ReqCtx,
     event_id: Path<Uuid>,
 ) -> UniResult<Vec<ScoreboardItem>> {
     let event_id = event_id.into_inner();
 
-    let mut scoreboard = __get_scoreboard(db.clone(), event_id)
+    let mut scoreboard = __get_scoreboard(ctx.db.clone(), event_id)
         .await
         .map_err(|e| UniError::CustomError(format!("{}", e)))?;
 
-    match EventStatus::check(&db, &event_id).await? {
+    match EventStatus::check(&ctx.db, &event_id).await? {
         EventStatus::NotStarted => {
             for sb in &mut scoreboard {
                 sb.challenges = vec![];
@@ -991,10 +983,10 @@ pub async fn __get_trend(db: WebDb, event_id: Uuid) -> anyhow::Result<Vec<TrendI
 #[get("/{event_id}/trend")]
 pub async fn get_trend(
     _user: UserJwtGuard,
-    db: WebDb,
+    ctx: ReqCtx,
     event_id: Path<Uuid>,
 ) -> UniResult<Vec<TrendItem>> {
-    let trend_items = __get_trend(db, *event_id)
+    let trend_items = __get_trend(ctx.db, *event_id)
         .await
         .map_err(|e| UniError::CustomError(format!("{}", e)))?;
 
@@ -1005,13 +997,13 @@ pub async fn get_trend(
 #[get("/{event_id}/announcements")]
 pub async fn get_announcements(
     _user: UserJwtGuard,
-    db: WebDb,
+    ctx: ReqCtx,
     event_id: Path<Uuid>,
 ) -> UniResult<Vec<event_announcements::Model>> {
     let announcements = event_announcements::Entity::find()
         .filter(event_announcements::Column::EventId.eq(*event_id))
         .order_by_desc(event_announcements::Column::CreatedAt)
-        .all(db.get_ref())
+        .all(ctx.db.get_ref())
         .await?;
 
     UniResponse::ok(announcements.into()).into()
@@ -1022,13 +1014,13 @@ pub async fn get_announcements(
 
 pub async fn get_submit_wp_status(
     _user: UserJwtGuard,
-    db: WebDb,
+    ctx: ReqCtx,
     event_id: Path<Uuid>,
 ) -> UniResult<DateTime<FixedOffset>> {
     let wp = event_writeup::Entity::find()
         .filter(event_writeup::Column::EventId.eq(*event_id))
         .order_by_desc(event_writeup::Column::CreatedAt)
-        .one(db.get_ref())
+        .one(ctx.db.get_ref())
         .await?
         .ok_or(UniError::NotFound("no wp".into()))?;
 

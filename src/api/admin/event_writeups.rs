@@ -5,13 +5,14 @@ use sea_orm::Condition;
 use crate::{
     api::{FilterMapping, apply_filters, prelude::*, sea_orm_utils::paginate_query},
     entity::event_writeup,
+    prelude::*,
 };
 
 /// GET /api/admin/events/{event_id}/writeups
 #[get("")]
 pub async fn get_all_event_writeups(
     _user: SuperAdminJwtGuard,
-    db: WebDb,
+    ctx: ReqCtx,
     event_id: Path<Uuid>,
     query_params: Query<QueryParams>,
 ) -> UniResult<Vec<event_writeup::Model>> {
@@ -46,9 +47,9 @@ pub async fn get_all_event_writeups(
 
     let (items, total_items) =
         if let (Some(limit), Some(page)) = (query_params.limit, query_params.page) {
-            paginate_query(stmt, db.get_ref(), limit, page).await?
+            paginate_query(stmt, ctx.db.get_ref(), limit, page).await?
         } else {
-            let items = stmt.all(db.get_ref()).await?;
+            let items = stmt.all(ctx.db.get_ref()).await?;
             (items.clone(), items.len())
         };
 

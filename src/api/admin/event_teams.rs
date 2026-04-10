@@ -11,6 +11,7 @@ use crate::{
         event_team_members, event_teams, event_users, events,
         sea_orm_active_enums::EventTeamMemberRole, users,
     },
+    prelude::*,
 };
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -21,7 +22,7 @@ pub struct AddTeamRequest {
 /// POST /api/admin/events/{event_id}/teams
 #[post("")]
 pub async fn add_team(
-    db: WebDb,
+    ctx: ReqCtx,
     event_id: Path<Uuid>,
     atr: Json<AddTeamRequest>,
 ) -> UniResult<event_teams::Model> {
@@ -29,7 +30,7 @@ pub async fn add_team(
     let event_id = event_id.into_inner();
 
     let event = events::Entity::find_by_id(event_id)
-        .one(db.get_ref())
+        .one(ctx.db.get_ref())
         .await?
         .ok_or(UniError::NotFound(format!(" {} not exist", event_id)))?;
 
@@ -40,7 +41,7 @@ pub async fn add_team(
         ..Default::default()
     };
 
-    let event_team = new_event_team.insert(db.get_ref()).await?;
+    let event_team = new_event_team.insert(ctx.db.get_ref()).await?;
 
     UniResponse::ok(event_team.into()).into()
 }
@@ -48,7 +49,7 @@ pub async fn add_team(
 /// DELETE /api/admin/events/{event_id}/teams
 #[delete("")]
 pub async fn remove_team(
-    db: WebDb,
+    ctx: ReqCtx,
     path: Path<Uuid>,
     dir: Json<DeleteItemsRequest>,
 ) -> UniResult<u64> {
@@ -57,7 +58,7 @@ pub async fn remove_team(
     let deleted_count = event_teams::Entity::delete_many()
         .filter(event_teams::Column::EventId.eq(event_id))
         .filter(event_teams::Column::Id.is_in(dir.id_list))
-        .exec(db.get_ref())
+        .exec(ctx.db.get_ref())
         .await?
         .rows_affected;
 
@@ -81,7 +82,7 @@ pub struct TeamResult {
 #[get("")]
 pub async fn get_teams(
     _user: SuperAdminJwtGuard,
-    db: WebDb,
+    ctx: ReqCtx,
     event_id: Path<Uuid>,
     query_params: Query<QueryParams>,
 ) -> UniResult<Vec<TeamResult>> {
@@ -89,7 +90,7 @@ pub async fn get_teams(
     let mut query_params = query_params.0;
 
     let event = events::Entity::find_by_id(event_id)
-        .one(db.get_ref())
+        .one(ctx.db.get_ref())
         .await?
         .ok_or(UniError::NotFound(format!(" {} not exist", event_id)))?;
 
@@ -126,9 +127,9 @@ pub async fn get_teams(
 
     let (items, total_items) =
         if let (Some(limit), Some(page)) = (query_params.limit, query_params.page) {
-            paginate_query(stmt, db.get_ref(), limit, page).await?
+            paginate_query(stmt, ctx.db.get_ref(), limit, page).await?
         } else {
-            let items = stmt.all(db.get_ref()).await?;
+            let items = stmt.all(ctx.db.get_ref()).await?;
             (items.clone(), items.len())
         };
 
@@ -137,7 +138,7 @@ pub async fn get_teams(
         let members = team
             .find_related(event_team_members::Entity)
             .find_also_related(users::Entity)
-            .all(db.get_ref())
+            .all(ctx.db.get_ref())
             .await?;
         let mut team_members = Vec::new();
         let mut captain = String::new();
@@ -149,7 +150,7 @@ pub async fn get_teams(
                 let event_user = event_users::Entity::find()
                     .filter(event_users::Column::EventId.eq(event.id))
                     .filter(event_users::Column::UserId.eq(user.id))
-                    .one(db.get_ref())
+                    .one(ctx.db.get_ref())
                     .await?
                     .ok_or(UniError::NotFound(format!(
                         "EventUser {} not exist",
@@ -186,7 +187,7 @@ pub struct GetTeamMembersResult {
 #[get("/{team_id}")]
 pub async fn get_team_members(
     _user: SuperAdminJwtGuard,
-    db: WebDb,
+    ctx: ReqCtx,
     path: Path<(Uuid, Uuid)>,
     query_params: Query<QueryParams>,
 ) -> UniResult<GetTeamMembersResult> {
@@ -195,7 +196,7 @@ pub async fn get_team_members(
 
     let event_team = event_teams::Entity::find_by_id(team_id)
         .filter(event_teams::Column::EventId.eq(event_id))
-        .one(db.get_ref())
+        .one(ctx.db.get_ref())
         .await?
         .ok_or(UniError::NotFound(format!(" {} not exist", team_id)))?;
 
@@ -204,7 +205,7 @@ pub async fn get_team_members(
         .find_also_related(users::Entity);
 
     if let (Some(limit), Some(page)) = (query_params.limit, query_params.page) {
-        let paginator = stmt.paginate(db.get_ref(), limit);
+        let paginator = stmt.paginate(ctx.db.get_ref(), limit);
         let items: Vec<(event_team_members::Model, Option<users::Model>)> =
             paginator.fetch_page(page.saturating_sub(1)).await?;
         query_params.total = Some(paginator.num_items().await? as usize);
@@ -218,7 +219,7 @@ pub async fn get_team_members(
         };
         UniResponse::ok_meta(result.into(), query_params.into()).into()
     } else {
-        let items = stmt.all(db.get_ref()).await?;
+        let items = stmt.all(ctx.db.get_ref()).await?;
         let items: Vec<users::Model> = items
             .into_iter()
             .filter_map(|(_team_member, user_opt)| user_opt)
@@ -240,7 +241,7 @@ pub struct AddUserToTeamRequest {
 #[post("/{team_id}/users")]
 pub async fn add_user_to_team(
     _user: SuperAdminJwtGuard,
-    db: WebDb,
+    ctx: ReqCtx,
     path: Path<(Uuid, Uuid)>,
     utt: Json<AddUserToTeamRequest>,
 ) -> UniResult<event_team_members::Model> {
@@ -249,12 +250,12 @@ pub async fn add_user_to_team(
 
     let event_team = event_teams::Entity::find_by_id(team_id)
         .filter(event_teams::Column::EventId.eq(event_id))
-        .one(db.get_ref())
+        .one(ctx.db.get_ref())
         .await?
         .ok_or(UniError::NotFound(format!(" {} not exist", team_id)))?;
 
     let user = users::Entity::find_by_id(user_id)
-        .one(db.get_ref())
+        .one(ctx.db.get_ref())
         .await?
         .ok_or(UniError::NotFound(format!(" {} not exist", user_id)))?;
 
@@ -264,7 +265,7 @@ pub async fn add_user_to_team(
         ..Default::default()
     };
 
-    let _event_user = new_event_user.insert(db.get_ref()).await?;
+    let _event_user = new_event_user.insert(ctx.db.get_ref()).await?;
 
     let new_team_user = event_team_members::ActiveModel {
         event_id: Set(event_team.event_id),
@@ -273,7 +274,7 @@ pub async fn add_user_to_team(
         ..Default::default()
     };
 
-    let team_user = new_team_user.insert(db.get_ref()).await?;
+    let team_user = new_team_user.insert(ctx.db.get_ref()).await?;
 
     UniResponse::ok(team_user.into()).into()
 }
@@ -282,7 +283,7 @@ pub async fn add_user_to_team(
 #[delete("/{team_id}/users")]
 pub async fn remove_user_from_team(
     _user: SuperAdminJwtGuard,
-    db: WebDb,
+    ctx: ReqCtx,
     path: Path<(Uuid, Uuid)>,
     dir: Json<DeleteItemsRequest>,
 ) -> UniResult<u64> {
@@ -292,7 +293,7 @@ pub async fn remove_user_from_team(
         .filter(event_team_members::Column::EventId.eq(event_id))
         .filter(event_team_members::Column::TeamId.eq(team_id))
         .filter(event_team_members::Column::UserId.is_in(dir.id_list))
-        .exec(db.get_ref())
+        .exec(ctx.db.get_ref())
         .await?
         .rows_affected;
 
@@ -303,21 +304,21 @@ pub async fn remove_user_from_team(
 #[post("/{team_id}/banned")]
 pub async fn ban_team(
     _user: SuperAdminJwtGuard,
-    db: WebDb,
+    ctx: ReqCtx,
     path: Path<(Uuid, Uuid)>,
 ) -> UniResult<()> {
     let (event_id, team_id) = path.into_inner();
 
     let event_team = event_teams::Entity::find_by_id(team_id)
         .filter(event_teams::Column::EventId.eq(event_id))
-        .one(db.get_ref())
+        .one(ctx.db.get_ref())
         .await?
         .ok_or(UniError::NotFound(format!(" {} not exist", team_id)))?;
 
     let mut event_team: event_teams::ActiveModel = event_team.into();
     event_team.banned = Set(true);
 
-    let _event_team = event_team.update(db.get_ref()).await?;
+    let _event_team = event_team.update(ctx.db.get_ref()).await?;
 
     UniResponse::ok_none().into()
 }
@@ -326,21 +327,21 @@ pub async fn ban_team(
 #[post("/{team_id}/unbanned")]
 pub async fn unbanned_team(
     _user: SuperAdminJwtGuard,
-    db: WebDb,
+    ctx: ReqCtx,
     path: Path<(Uuid, Uuid)>,
 ) -> UniResult<()> {
     let (event_id, team_id) = path.into_inner();
 
     let event_team = event_teams::Entity::find_by_id(team_id)
         .filter(event_teams::Column::EventId.eq(event_id))
-        .one(db.get_ref())
+        .one(ctx.db.get_ref())
         .await?
         .ok_or(UniError::NotFound(format!(" {} not exist", team_id)))?;
 
     let mut event_team: event_teams::ActiveModel = event_team.into();
     event_team.banned = Set(false);
 
-    let _event_team = event_team.update(db.get_ref()).await?;
+    let _event_team = event_team.update(ctx.db.get_ref()).await?;
 
     UniResponse::ok_none().into()
 }

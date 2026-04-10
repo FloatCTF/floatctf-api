@@ -1,15 +1,16 @@
 use crate::{
     api::prelude::*,
     entity::{challenge_set_items, challenge_sets, challenges},
+    prelude::*,
 };
 
 /// GET /api/challenge_sets
 #[get("")]
 pub async fn get_challenge_sets(
     _user: UserJwtGuard,
-    db: WebDb,
+    ctx: ReqCtx,
 ) -> UniResult<Vec<challenge_sets::Model>> {
-    let challenge_sets = challenge_sets::Entity::find().all(db.get_ref()).await?;
+    let challenge_sets = challenge_sets::Entity::find().all(ctx.db.get_ref()).await?;
     UniResponse::ok(challenge_sets.into()).into()
 }
 
@@ -17,7 +18,7 @@ pub async fn get_challenge_sets(
 #[get("/{challenge_set_id}")]
 pub async fn get_challenge_set(
     _user: UserJwtGuard,
-    db: WebDb,
+    ctx: ReqCtx,
     challenge_set_id: Path<Uuid>,
 ) -> UniResult<Vec<challenges::Model>> {
     let challenge_set_id = challenge_set_id.into_inner();
@@ -33,7 +34,7 @@ pub async fn get_challenge_set(
         .filter(challenge_set_items::Column::SetId.eq(challenge_set_id))
         // 只查未隐藏的
         .filter(challenges::Column::Hidden.eq(false))
-        .all(db.get_ref())
+        .all(ctx.db.get_ref())
         .await?;
 
     UniResponse::ok(challenges.into()).into()

@@ -1,6 +1,7 @@
 use crate::{
     api::prelude::*,
     entity::{challenge_solves, users},
+    prelude::*,
 };
 
 use chrono::{DateTime, FixedOffset};
@@ -10,7 +11,7 @@ use std::collections::HashMap;
 #[get("")]
 pub async fn get_solves(
     user: UserJwtGuard,
-    db: WebDb,
+    ctx: ReqCtx,
     query_params: Query<QueryParams>,
 ) -> UniResult<Vec<challenge_solves::Model>> {
     let user = user.into_inner();
@@ -20,13 +21,13 @@ pub async fn get_solves(
         challenge_solves::Entity::find().filter(challenge_solves::Column::UserId.eq(user.id));
 
     if let (Some(limit), Some(page)) = (query_params.limit, query_params.page) {
-        let paginator = stmt.paginate(db.get_ref(), limit);
+        let paginator = stmt.paginate(ctx.db.get_ref(), limit);
         let items = paginator.fetch_page(page.saturating_sub(1)).await?;
         query_params.total = Some(paginator.num_items().await? as usize);
 
         UniResponse::ok_meta(items.into(), query_params.into()).into()
     } else {
-        let items = stmt.all(db.get_ref()).await?;
+        let items = stmt.all(ctx.db.get_ref()).await?;
         query_params.total = Some(items.len());
 
         UniResponse::ok_meta(items.into(), query_params.into()).into()
@@ -43,10 +44,10 @@ pub struct TopUser {
 
 /// GET /api/challenge_solves/top15users
 #[get("/top15users")]
-pub async fn get_top_15_users(_user: UserJwtGuard, db: WebDb) -> UniResult<Vec<TopUser>> {
+pub async fn get_top_15_users(_user: UserJwtGuard, ctx: ReqCtx) -> UniResult<Vec<TopUser>> {
     let solves = challenge_solves::Entity::find()
         .filter(challenge_solves::Column::EventId.is_null())
-        .all(db.get_ref())
+        .all(ctx.db.get_ref())
         .await?;
 
     // 2. 在内存里统计
@@ -67,7 +68,7 @@ pub async fn get_top_15_users(_user: UserJwtGuard, db: WebDb) -> UniResult<Vec<T
     // 3. 查昵称
     let mut result = Vec::new();
     for (uid, (count, last)) in stats {
-        if let Some(user) = users::Entity::find_by_id(uid).one(db.get_ref()).await? {
+        if let Some(user) = users::Entity::find_by_id(uid).one(ctx.db.get_ref()).await? {
             result.push((user.nickname, count, last));
         }
     }

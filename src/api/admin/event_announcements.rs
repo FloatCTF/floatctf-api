@@ -8,6 +8,7 @@ use crate::{
         sea_orm_utils::paginate_query,
     },
     entity::{event_announcements, events},
+    prelude::*,
 };
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -19,7 +20,7 @@ pub struct AddEventAnnouncementRequest {
 /// POST /api/admin/events/{event_id}/announcements
 #[post("")]
 pub async fn add_event_announcement(
-    db: WebDb,
+    ctx: ReqCtx,
     event_id: Path<Uuid>,
     atr: Json<AddEventAnnouncementRequest>,
 ) -> UniResult<event_announcements::Model> {
@@ -27,7 +28,7 @@ pub async fn add_event_announcement(
     let event_id = event_id.into_inner();
 
     let event = events::Entity::find_by_id(event_id)
-        .one(db.get_ref())
+        .one(ctx.db.get_ref())
         .await?
         .ok_or(UniError::NotFound(format!(" {} not exist", event_id)))?;
 
@@ -38,7 +39,7 @@ pub async fn add_event_announcement(
         ..Default::default()
     };
 
-    let event_announcement = new_event_announcement.insert(db.get_ref()).await?;
+    let event_announcement = new_event_announcement.insert(ctx.db.get_ref()).await?;
 
     UniResponse::ok(event_announcement.into()).into()
 }
@@ -51,7 +52,7 @@ pub struct PatchEventAnnouncementRequest {
 /// PATCH /api/admin/events/{event_id}/announcements/{announcement_id}
 #[patch("/{announcement_id}")]
 pub async fn patch_event_announcement(
-    db: WebDb,
+    ctx: ReqCtx,
     path: Path<(Uuid, Uuid)>,
     atr: Json<PatchEventAnnouncementRequest>,
 ) -> UniResult<event_announcements::Model> {
@@ -60,7 +61,7 @@ pub async fn patch_event_announcement(
 
     let mut event_announcement = event_announcements::Entity::find_by_id(announcement_id)
         .filter(event_announcements::Column::EventId.eq(event_id))
-        .one(db.get_ref())
+        .one(ctx.db.get_ref())
         .await?
         .ok_or(UniError::NotFound(format!(" {} not exist", event_id)))?
         .into_active_model();
@@ -68,7 +69,7 @@ pub async fn patch_event_announcement(
     atr.content
         .map(|content| event_announcement.content = Set(content));
 
-    let event_announcement = event_announcement.update(db.get_ref()).await?;
+    let event_announcement = event_announcement.update(ctx.db.get_ref()).await?;
 
     UniResponse::ok(event_announcement.into()).into()
 }
@@ -76,7 +77,7 @@ pub async fn patch_event_announcement(
 /// DELETE /api/admin/events/{event_id}/announcements
 #[delete("")]
 pub async fn remove_event_announcement(
-    db: WebDb,
+    ctx: ReqCtx,
     path: Path<Uuid>,
     dir: Json<DeleteItemsRequest>,
 ) -> UniResult<u64> {
@@ -86,7 +87,7 @@ pub async fn remove_event_announcement(
     let deleted_count = event_announcements::Entity::delete_many()
         .filter(event_announcements::Column::EventId.eq(event_id))
         .filter(event_announcements::Column::Id.is_in(dir.id_list))
-        .exec(db.get_ref())
+        .exec(ctx.db.get_ref())
         .await?;
 
     UniResponse::ok(deleted_count.rows_affected.into()).into()
@@ -95,14 +96,14 @@ pub async fn remove_event_announcement(
 /// GET /api/admin/events/{event_id}/announcements/{announcement_id}
 #[get("/{announcement_id}")]
 pub async fn get_event_announcement(
-    db: WebDb,
+    ctx: ReqCtx,
     path: Path<(Uuid, Uuid)>,
 ) -> UniResult<event_announcements::Model> {
     let (event_id, announcement_id) = path.into_inner();
 
     let event_announcement = event_announcements::Entity::find_by_id(announcement_id)
         .filter(event_announcements::Column::EventId.eq(event_id))
-        .one(db.get_ref())
+        .one(ctx.db.get_ref())
         .await?
         .ok_or(UniError::NotFound(format!(" {} not exist", event_id)))?;
 
@@ -113,7 +114,7 @@ pub async fn get_event_announcement(
 #[get("")]
 pub async fn list_event_announcements(
     _user: SuperAdminJwtGuard,
-    db: WebDb,
+    ctx: ReqCtx,
     event_id: Path<Uuid>,
     query_params: Query<QueryParams>,
 ) -> UniResult<Vec<event_announcements::Model>> {
@@ -149,9 +150,9 @@ pub async fn list_event_announcements(
 
     let (items, total_items) =
         if let (Some(limit), Some(page)) = (query_params.limit, query_params.page) {
-            paginate_query(stmt, db.get_ref(), limit, page).await?
+            paginate_query(stmt, ctx.db.get_ref(), limit, page).await?
         } else {
-            let items = stmt.all(db.get_ref()).await?;
+            let items = stmt.all(ctx.db.get_ref()).await?;
             (items.clone(), items.len())
         };
 

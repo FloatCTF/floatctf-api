@@ -1,12 +1,16 @@
 use crate::{
     api::{admin::dto::DeleteItemsRequest, prelude::*},
     entity::{sea_orm_active_enums::SettingValueType, settings},
+    prelude::*,
 };
 
 /// GET /api/admin/settings
 #[get("")]
-pub async fn get_settings(_user: SuperAdminJwtGuard, db: WebDb) -> UniResult<Vec<settings::Model>> {
-    let settings = settings::Entity::find().all(db.get_ref()).await?;
+pub async fn get_settings(
+    _user: SuperAdminJwtGuard,
+    ctx: ReqCtx,
+) -> UniResult<Vec<settings::Model>> {
+    let settings = settings::Entity::find().all(ctx.db.get_ref()).await?;
     UniResponse::ok(settings.into()).into()
 }
 
@@ -23,7 +27,7 @@ pub struct CreateSettingRequest {
 #[post("")]
 pub async fn create_setting(
     _user: SuperAdminJwtGuard,
-    db: WebDb,
+    ctx: ReqCtx,
     csr: Json<CreateSettingRequest>,
 ) -> UniResult<settings::Model> {
     let csr = csr.into_inner();
@@ -36,7 +40,7 @@ pub async fn create_setting(
         protected: Set(csr.protected),
         ..Default::default()
     };
-    let setting = setting.insert(db.get_ref()).await?;
+    let setting = setting.insert(ctx.db.get_ref()).await?;
     UniResponse::ok(setting.into()).into()
 }
 
@@ -53,14 +57,14 @@ pub struct PatchSettingRequest {
 #[patch("/{setting_id}")]
 pub async fn patch_setting(
     _user: SuperAdminJwtGuard,
-    db: WebDb,
+    ctx: ReqCtx,
     setting_id: Path<Uuid>,
     psr: Json<PatchSettingRequest>,
 ) -> UniResult<settings::Model> {
     let setting_id = setting_id.into_inner();
     let psr = psr.into_inner();
     let setting = settings::Entity::find_by_id(setting_id)
-        .one(db.get_ref())
+        .one(ctx.db.get_ref())
         .await?
         .ok_or(UniError::NotFound(format!(" {} not exist", setting_id)))?;
 
@@ -81,7 +85,7 @@ pub async fn patch_setting(
     psr.protected.map(|p| {
         m_setting.protected = Set(p);
     });
-    let setting = m_setting.update(db.get_ref()).await?;
+    let setting = m_setting.update(ctx.db.get_ref()).await?;
     UniResponse::ok(setting.into()).into()
 }
 
@@ -89,14 +93,14 @@ pub async fn patch_setting(
 #[delete("")]
 pub async fn delete_setting(
     _user: SuperAdminJwtGuard,
-    db: WebDb,
+    ctx: ReqCtx,
     dir: Json<DeleteItemsRequest>,
 ) -> UniResult<u64> {
     let dir = dir.into_inner();
     let mut deleted_count = 0;
     for setting_id in dir.id_list {
         let setting = settings::Entity::find_by_id(setting_id)
-            .one(db.get_ref())
+            .one(ctx.db.get_ref())
             .await?;
         if let Some(setting) = setting {
             if setting.protected {
@@ -105,7 +109,7 @@ pub async fn delete_setting(
                     setting.key
                 )));
             }
-            let r = setting.delete(db.get_ref()).await?;
+            let r = setting.delete(ctx.db.get_ref()).await?;
             deleted_count += r.rows_affected;
         }
     }

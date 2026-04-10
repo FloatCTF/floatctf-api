@@ -5,12 +5,13 @@ use actix_multipart::form::{MultipartForm, tempfile::TempFile};
 use crate::{
     api::{admin::dto::DeleteItemsRequest, prelude::*},
     entity::weapons,
+    prelude::*,
 };
 
 /// GET /api/admin/weapons
 #[get("")]
-pub async fn get_weapons(_user: SuperAdminJwtGuard, db: WebDb) -> UniResult<Vec<weapons::Model>> {
-    let weapons = weapons::Entity::find().all(db.get_ref()).await?;
+pub async fn get_weapons(_user: SuperAdminJwtGuard, ctx: ReqCtx) -> UniResult<Vec<weapons::Model>> {
+    let weapons = weapons::Entity::find().all(ctx.db.get_ref()).await?;
     UniResponse::ok(weapons.into()).into()
 }
 
@@ -28,7 +29,7 @@ pub struct CreateWeaponRequest {
 #[post("")]
 pub async fn create_weapon(
     _user: SuperAdminJwtGuard,
-    db: WebDb,
+    ctx: ReqCtx,
     cwr: Json<CreateWeaponRequest>,
 ) -> UniResult<weapons::Model> {
     let cwr = cwr.into_inner();
@@ -42,7 +43,7 @@ pub async fn create_weapon(
         download_count: Set(cwr.download_count.into()),
         ..Default::default()
     };
-    let weapon = weapon.insert(db.get_ref()).await?;
+    let weapon = weapon.insert(ctx.db.get_ref()).await?;
     UniResponse::ok(weapon.into()).into()
 }
 
@@ -60,7 +61,7 @@ pub struct PatchWeaponRequest {
 #[patch("/{weapon_id}")]
 pub async fn patch_weapon(
     _user: SuperAdminJwtGuard,
-    db: WebDb,
+    ctx: ReqCtx,
     weapon_id: Path<Uuid>,
     pwr: Json<PatchWeaponRequest>,
 ) -> UniResult<weapons::Model> {
@@ -68,7 +69,7 @@ pub async fn patch_weapon(
     let pwr = pwr.into_inner();
 
     let mut weapon = weapons::Entity::find_by_id(weapon_id)
-        .one(db.get_ref())
+        .one(ctx.db.get_ref())
         .await?
         .ok_or(UniError::NotFound(format!(
             "Weapon {} not exist",
@@ -95,21 +96,21 @@ pub async fn patch_weapon(
         weapon.download_count = Set(download_count.into());
     }
 
-    let weapon = weapon.update(db.get_ref()).await?;
+    let weapon = weapon.update(ctx.db.get_ref()).await?;
     UniResponse::ok(weapon.into()).into()
 }
 
 #[delete("")]
 pub async fn delete_weapon(
     _user: SuperAdminJwtGuard,
-    db: WebDb,
+    ctx: ReqCtx,
     dir: Json<DeleteItemsRequest>,
 ) -> UniResult<u64> {
     let dir = dir.into_inner();
 
     let deleted_count = weapons::Entity::delete_many()
         .filter(weapons::Column::Id.is_in(dir.id_list))
-        .exec(db.get_ref())
+        .exec(ctx.db.get_ref())
         .await?
         .rows_affected;
 
@@ -125,11 +126,11 @@ pub struct WeaponForm {
 #[post("/{weapon_id}/upload")]
 pub async fn upload_weapon(
     _user: SuperAdminJwtGuard,
-    db: WebDb,
+    ctx: ReqCtx,
     weapon_id: Path<Uuid>,
     MultipartForm(form): MultipartForm<WeaponForm>,
 ) -> UniResult<()> {
-    let weapons_dir = get_setting(&db, "WEAPONS_DIR")
+    let weapons_dir = get_setting(&ctx.db, "WEAPONS_DIR")
         .await
         .map_err(|e| UniError::CustomError(format!("get weapons dir error: {}", e)))?;
     // if not exists, create it
@@ -150,7 +151,7 @@ pub async fn upload_weapon(
         .map_err(|e| UniError::InternalError(format!("Failed to set permissions: {}", e)))?;
 
     let mut weapon = weapons::Entity::find_by_id(weapon_id)
-        .one(db.get_ref())
+        .one(ctx.db.get_ref())
         .await?
         .ok_or(UniError::NotFound(format!(
             "Weapon {} not exist",
@@ -159,7 +160,7 @@ pub async fn upload_weapon(
         .into_active_model();
     weapon.has_file = Set(true);
     weapon.file_url = Set(weapon_path);
-    weapon.update(db.get_ref()).await?;
+    weapon.update(ctx.db.get_ref()).await?;
 
     UniResponse::ok_none().into()
 }

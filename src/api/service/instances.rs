@@ -1,15 +1,15 @@
 use crate::{
     api::prelude::*,
     entity::{events, instances, sea_orm_active_enums::InstanceStatus},
+    prelude::*,
     strategies::event,
 };
-use actix_web::HttpRequest; // TODO : for log
 
 /// GET /api/instances
 #[get("")]
 pub async fn get_instances(
     user: UserJwtGuard,
-    db: WebDb,
+    ctx: ReqCtx,
     query_params: Query<QueryParams>,
 ) -> UniResult<Vec<instances::Model>> {
     // challenge no hidden
@@ -22,7 +22,7 @@ pub async fn get_instances(
         .filter(instances::Column::UserId.eq(user.id));
 
     if let (Some(limit), Some(page)) = (query_params.limit, query_params.page) {
-        let paginator = stmt.paginate(db.get_ref(), limit);
+        let paginator = stmt.paginate(ctx.db.get_ref(), limit);
         let mut items = paginator.fetch_page(page.saturating_sub(1)).await?;
         query_params.total = Some(paginator.num_items().await? as usize);
 
@@ -32,7 +32,7 @@ pub async fn get_instances(
 
         UniResponse::ok_meta(items.into(), query_params.into()).into()
     } else {
-        let mut items = stmt.all(db.get_ref()).await?;
+        let mut items = stmt.all(ctx.db.get_ref()).await?;
 
         query_params.total = Some(items.len());
 
@@ -48,7 +48,7 @@ pub async fn get_instances(
 #[get("/{instance_id}")]
 pub async fn get_instance(
     user: UserJwtGuard,
-    db: WebDb,
+    ctx: ReqCtx,
     instance_id: Path<Uuid>,
 ) -> UniResult<instances::Model> {
     let instance_id = instance_id.into_inner();
@@ -56,7 +56,7 @@ pub async fn get_instance(
 
     let mut model = instances::Entity::find_by_id(instance_id)
         .filter(instances::Column::UserId.eq(user.id))
-        .one(db.get_ref())
+        .one(ctx.db.get_ref())
         .await?
         .ok_or(UniError::NotFound(format!(" {} not exist", instance_id)))?;
 
@@ -76,8 +76,7 @@ pub struct LaunchInstanceRequest {
 #[post("/launch")]
 pub async fn launch_instance(
     user: UserJwtGuard,
-    db: WebDb,
-    docker: WebDocker,
+    ctx: ReqCtx,
     lir: Json<LaunchInstanceRequest>,
 ) -> UniResult<instances::Model> {
     let user = user.into_inner();
@@ -85,26 +84,26 @@ pub async fn launch_instance(
 
     let event = match lir.event_id {
         Some(event_id) => events::Entity::find_by_id(event_id)
-            .one(db.get_ref())
+            .one(ctx.db.get_ref())
             .await?
             .ok_or(UniError::NotFound("no event".into()))?
             .into(),
         None => None,
     };
 
-    let ctx = event::EventContextBuilder::new()
-        .db(db.clone())
-        .docker(docker.clone())
+    let event_ctx = event::EventContextBuilder::new()
+        .db(ctx.db.clone())
+        .docker(ctx.docker.clone())
         .user(user.clone())
         .event(event)
         .build()
         .await
         .map_err(|e| UniError::CustomError(format!("build event context error: {}", e)))?;
 
-    let strategy = event::EventStrategyFactory::create(&ctx.event.r#type);
+    let strategy = event::EventStrategyFactory::create(&event_ctx.event.r#type);
 
     let instance = strategy
-        .launch_instance(&ctx, lir.challenge_id)
+        .launch_instance(&event_ctx, lir.challenge_id)
         .await
         .map_err(|e| UniError::CustomError(format!("when launch instance:{}", e)))?;
 
@@ -115,13 +114,12 @@ pub async fn launch_instance(
 #[delete("/{instance_id}")]
 pub async fn destroy_instance(
     user: UserJwtGuard,
-    db: WebDb,
-    docker: WebDocker,
+    ctx: ReqCtx,
     instance_id: Path<Uuid>,
 ) -> UniResult<()> {
     let user = user.into_inner();
     let instance_id = instance_id.into_inner();
-    event::common::destroy_instance(&db, &docker, instance_id, &user)
+    event::common::destroy_instance(&ctx.db, &ctx.docker, instance_id, &user)
         .await
         .map_err(|e| UniError::CustomError(format!("destroy_instance:{}", e)))?;
 
