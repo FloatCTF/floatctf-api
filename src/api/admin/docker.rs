@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use bollard::query_parameters::ListContainersOptionsBuilder;
 
 use crate::{
-    api::preclude::*,
+    api::prelude::*,
     auth::SuperAdminJwtGuard,
     db::WebDocker,
     entity::{instances, sea_orm_active_enums::InstanceStatus},

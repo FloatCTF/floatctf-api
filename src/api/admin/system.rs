@@ -1,4 +1,4 @@
-use crate::api::preclude::*;
+use crate::api::prelude::*;
 use actix_web::get;
 use bollard::Docker;
 

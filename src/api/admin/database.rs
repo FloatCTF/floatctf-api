@@ -3,7 +3,7 @@ use base64::Engine;
 use sea_orm::sqlx::{self, Column, Row, TypeInfo, postgres::PgRow};
 use serde_json::{Value, json};
 
-use crate::{api::preclude::*, auth::SuperAdminJwtGuard};
+use crate::{api::prelude::*, auth::SuperAdminJwtGuard};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SqlStatement {

@@ -1,5 +1,5 @@
 use crate::{
-    api::{FilterMapping, admin::dto::DeleteItemsRequest, preclude::*, sea_orm_utils::query_query},
+    api::{FilterMapping, admin::dto::DeleteItemsRequest, prelude::*, sea_orm_utils::query_query},
     entity::scheduled_tasks,
 };
 use sea_orm::Condition;

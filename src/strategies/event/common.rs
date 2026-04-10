@@ -1,18 +1,14 @@
-pub use crate::api::preclude::*;
+pub use crate::api::prelude::*;
 
 pub use anyhow::{Context, Result, anyhow};
 
 use chrono::Utc;
 use fcmc::ChallengeMeta;
-use sea_orm::{DbConn};
+use sea_orm::DbConn;
 
 use crate::{
     db::{WebDb, WebDocker},
-    entity::{
-        challenges,  instances,
-        sea_orm_active_enums::{InstanceStatus},
-        users,
-    },
+    entity::{challenges, instances, sea_orm_active_enums::InstanceStatus, users},
 };
 
 pub async fn launch_instance(

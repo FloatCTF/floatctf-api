@@ -1,5 +1,5 @@
 use crate::{
-    api::preclude::*,
+    api::prelude::*,
     entity::{challenge_set_items, challenge_sets, challenges},
 };
 

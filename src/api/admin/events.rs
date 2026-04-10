@@ -4,7 +4,7 @@ use crate::{
         admin::{
             challenges::generate_safe_name, dto::DeleteItemsRequest, event_teams::TeamMemberResult,
         },
-        preclude::*,
+        prelude::*,
         sea_orm_utils::query_query,
         service::{
             __get_scoreboard, __get_trend, ScoreboardItem, TrendItem, calculate_next_dynamic_score,

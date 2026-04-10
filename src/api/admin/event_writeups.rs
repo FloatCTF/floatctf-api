@@ -3,7 +3,7 @@ use std::str::FromStr;
 use sea_orm::Condition;
 
 use crate::{
-    api::{FilterMapping, apply_filters, preclude::*, sea_orm_utils::paginate_query},
+    api::{FilterMapping, apply_filters, prelude::*, sea_orm_utils::paginate_query},
     entity::event_writeup,
 };
 

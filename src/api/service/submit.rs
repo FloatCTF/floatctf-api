@@ -1,5 +1,5 @@
 use crate::{
-    api::preclude::*,
+    api::prelude::*,
     entity::{event_teams, event_writeup, events},
     strategies::event,
 };

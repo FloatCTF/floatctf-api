@@ -7,7 +7,7 @@ use crate::{
         FilterMapping,
         admin::dto::DeleteItemsRequest,
         apply_filters,
-        preclude::*,
+        prelude::*,
         sea_orm_utils::{CrossFilterMapping, paginate_query, resolve_cross_filters},
     },
     entity::{event_users, events, users},

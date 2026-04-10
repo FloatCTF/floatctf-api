@@ -3,7 +3,7 @@ use std::os::unix::fs::PermissionsExt;
 use actix_multipart::form::{MultipartForm, tempfile::TempFile};
 
 use crate::{
-    api::{admin::dto::DeleteItemsRequest, preclude::*},
+    api::{admin::dto::DeleteItemsRequest, prelude::*},
     entity::weapons,
 };
 

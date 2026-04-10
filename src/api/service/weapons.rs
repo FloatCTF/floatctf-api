@@ -1,4 +1,4 @@
-use crate::{api::preclude::*, entity::weapons};
+use crate::{api::prelude::*, entity::weapons};
 
 #[get("")]
 pub async fn get_weapons(_user: UserJwtGuard, db: WebDb) -> UniResult<Vec<weapons::Model>> {

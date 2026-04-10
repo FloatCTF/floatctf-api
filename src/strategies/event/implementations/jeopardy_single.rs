@@ -1,5 +1,5 @@
 use crate::{
-    api::preclude::*,
+    api::prelude::*,
     entity::{
         challenges, event_challenge_solves, event_challenges, event_instances, event_users,
         instances, sea_orm_active_enums::InstanceStatus, users,

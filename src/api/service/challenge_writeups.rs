@@ -1,5 +1,5 @@
 use crate::{
-    api::preclude::*,
+    api::prelude::*,
     auth::UserJwtGuard,
     entity::{challenge_writeup, challenges, users},
 };

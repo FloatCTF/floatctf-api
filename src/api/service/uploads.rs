@@ -2,7 +2,7 @@ use std::os::unix::fs::PermissionsExt;
 
 use actix_multipart::form::{MultipartForm, tempfile::TempFile};
 
-use crate::api::preclude::*;
+use crate::api::prelude::*;
 use chrono::Utc;
 use uuid::Uuid;
 

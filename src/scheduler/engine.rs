@@ -216,7 +216,7 @@ impl TaskScheduler {
                     "TASK",
                     "EXECUTE",
                     format!("{} 执行成功", task.task_name).as_str(),
-                    json!(None::<String>),
+                    json!([]),
                     None,
                     None,
                     None,

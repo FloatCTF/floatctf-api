@@ -1,5 +1,5 @@
 use crate::{
-    api::{preclude::*, service::calculate_next_dynamic_score},
+    api::{prelude::*, service::calculate_next_dynamic_score},
     entity::{
         challenges, event_announcements, event_challenge_solves, event_challenges,
         event_team_members, event_teams, event_users, event_writeup, events, instances,

@@ -17,7 +17,26 @@ impl LogService {
     pub fn new(db: WebDb) -> Self {
         Self { db }
     }
+    pub fn get_client_ip(req: &actix_web::HttpRequest) -> Option<String> {
+        // 1. 优先取 X-Forwarded-For 的第一个（最真实）
+        if let Some(hdr) = req.headers().get("X-Forwarded-For") {
+            if let Ok(s) = hdr.to_str() {
+                return s.split(',').next().map(|ip| ip.trim().to_string());
+            }
+        }
 
+        // 2. 其次取 X-Real-IP
+        if let Some(hdr) = req.headers().get("X-Real-IP") {
+            if let Ok(s) = hdr.to_str() {
+                return Some(s.to_string());
+            }
+        }
+
+        // 3. 最后兜底
+        req.connection_info()
+            .realip_remote_addr()
+            .map(|s| s.to_string())
+    }
     pub async fn add_log(
         &self,
         level: &str,
@@ -29,13 +48,7 @@ impl LogService {
         superadmin_id: Option<Uuid>,
         request: Option<&actix_web::HttpRequest>,
     ) {
-        let ip_address = request
-            .map(|req| {
-                req.connection_info()
-                    .realip_remote_addr()
-                    .map(|ip| ip.to_string())
-            })
-            .flatten();
+        let ip_address = request.map(|req| Self::get_client_ip(req)).flatten();
 
         let log = logs::ActiveModel {
             level: Set(level.to_string()),
@@ -65,13 +78,7 @@ impl LogService {
         team_id: Option<Uuid>,
         request: Option<&actix_web::HttpRequest>,
     ) {
-        let ip_address = request
-            .map(|req| {
-                req.connection_info()
-                    .realip_remote_addr()
-                    .map(|ip| ip.to_string())
-            })
-            .flatten();
+        let ip_address = request.map(|req| Self::get_client_ip(req)).flatten();
 
         let log = event_logs::ActiveModel {
             event_id: Set(event.id),
@@ -93,3 +100,5 @@ impl LogService {
         });
     }
 }
+
+pub type WebLog = actix_web::web::Data<LogService>;

@@ -1,5 +1,5 @@
 use crate::{
-    api::preclude::*,
+    api::prelude::*,
     auth::{Role, gen_jwt_token},
     entity::{prelude::SuperAdmin, super_admin},
 };

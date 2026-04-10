@@ -4,6 +4,7 @@ mod config;
 mod db;
 mod entity;
 mod log;
+mod prelude;
 mod scheduler;
 mod strategies;
 

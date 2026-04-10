@@ -1,5 +1,5 @@
 use crate::{
-    api::{admin::dto::DeleteItemsRequest, preclude::*},
+    api::{admin::dto::DeleteItemsRequest, prelude::*},
     entity::{sea_orm_active_enums::SettingValueType, settings},
 };
 

@@ -1,7 +1,8 @@
 use crate::{
-    api::preclude::*,
+    api::prelude::*,
     auth::{Role, UserJwtGuard, gen_jwt_token, validate_jwt},
     entity::{prelude::Users, users},
+    prelude::*,
 };
 
 use argon2::{
@@ -17,12 +18,12 @@ pub struct UserLoginRequest {
 
 /// POST /api/users/session
 #[post("/session")]
-pub async fn user_login(db: WebDb, ulr: Json<UserLoginRequest>) -> UniResult<String> {
+pub async fn user_login(ctx: ReqCtx, ulr: Json<UserLoginRequest>) -> UniResult<String> {
     let ulr = ulr.into_inner();
 
     match Users::find()
         .filter(users::Column::Username.eq(ulr.username))
-        .one(db.get_ref())
+        .one(ctx.db.get_ref())
         .await?
     {
         Some(user) => {
@@ -36,11 +37,35 @@ pub async fn user_login(db: WebDb, ulr: Json<UserLoginRequest>) -> UniResult<Str
             };
 
             if verified {
+                ctx.log
+                    .add_log(
+                        "INFO",
+                        "AUTH",
+                        "LOGIN",
+                        format!("{} 登陆成功", user.username).as_str(),
+                        json!([]),
+                        user.id.into(),
+                        None,
+                        Some(&ctx.req),
+                    )
+                    .await;
                 let jwt = gen_jwt_token(user.id, Role::User, None)
                     .map_err(|e| UniError::CustomError(e.to_string()))?;
 
                 UniResponse::ok(jwt.into()).into()
             } else {
+                ctx.log
+                    .add_log(
+                        "ERROR",
+                        "AUTH",
+                        "LOGIN",
+                        format!("{} 登陆失败", user.username).as_str(),
+                        json!([]),
+                        user.id.into(),
+                        None,
+                        Some(&ctx.req),
+                    )
+                    .await;
                 UniError::AuthError.into()
             }
         }
@@ -58,7 +83,12 @@ pub struct CreateUserRequest {
 
 /// POST /api/users
 #[post("")]
-pub async fn create_user(db: WebDb, cur: Json<CreateUserRequest>) -> UniResult<String> {
+pub async fn create_user(
+    db: WebDb,
+    log: WebLog,
+    request: HttpRequest,
+    cur: Json<CreateUserRequest>,
+) -> UniResult<String> {
     let cur = cur.into_inner();
 
     let hashed_password = {
@@ -81,8 +111,18 @@ pub async fn create_user(db: WebDb, cur: Json<CreateUserRequest>) -> UniResult<S
         ..Default::default()
     };
 
-    let _user = new_user.insert(db.get_ref()).await?;
-
+    let user = new_user.insert(db.get_ref()).await?;
+    log.add_log(
+        "INFO",
+        "AUTH",
+        "REGISTER",
+        format!("{} 注册成功", user.username).as_str(),
+        json!({}),
+        user.id.into(),
+        None,
+        Some(&request),
+    )
+    .await;
     UniResponse::ok(
         "User created successfully, please login "
             .to_string()

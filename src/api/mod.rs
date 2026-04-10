@@ -1,5 +1,5 @@
 pub mod admin;
-pub mod preclude;
+pub mod prelude;
 pub mod sea_orm_utils;
 pub mod service;
 pub mod util;
