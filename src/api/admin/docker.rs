@@ -1,15 +1,12 @@
 use std::collections::HashMap;
 
 use bollard::query_parameters::ListContainersOptionsBuilder;
-use dotenvy::dotenv;
-use serde_json::to_value;
 
 use crate::{
     api::preclude::*,
     auth::SuperAdminJwtGuard,
-    config::get_setting,
-    db::{WebDocker, init_db, init_docker},
-    entity::{challenges, instances, prelude::Challenges, sea_orm_active_enums::InstanceStatus},
+    db::WebDocker,
+    entity::{instances, sea_orm_active_enums::InstanceStatus},
 };
 // /**
 //  *  容器名称
@@ -56,24 +53,24 @@ pub async fn get_containers(
 pub struct FloatDockerImage {}
 pub struct FloatDockerNetwork {}
 
-#[actix_web::test]
-pub async fn test_docker() {
-    dotenv().ok();
-    let db = init_db().await.unwrap();
-    let docker = init_docker().await.unwrap();
-    let instances = instances::Entity::find()
-        .filter(instances::Column::Status.eq(InstanceStatus::Running))
-        .all(&db)
-        .await
-        .unwrap()
-        .into_iter()
-        .map(|i| i.identifier)
-        .collect::<Vec<String>>();
-    dbg!(&instances);
-    let mut f = HashMap::new();
-    f.insert("name", instances);
+// #[actix_web::test]
+// pub async fn test_docker() {
+//     dotenv().ok();
+//     let db = init_db().await.unwrap();
+//     let docker = init_docker().await.unwrap();
+//     let instances = instances::Entity::find()
+//         .filter(instances::Column::Status.eq(InstanceStatus::Running))
+//         .all(&db)
+//         .await
+//         .unwrap()
+//         .into_iter()
+//         .map(|i| i.identifier)
+//         .collect::<Vec<String>>();
+//     dbg!(&instances);
+//     let mut f = HashMap::new();
+//     f.insert("name", instances);
 
-    let lc = ListContainersOptionsBuilder::new().filters(&f).build();
-    let c = docker.list_containers(Some(lc)).await.unwrap();
-    dbg!(c);
-}
+//     let lc = ListContainersOptionsBuilder::new().filters(&f).build();
+//     let c = docker.list_containers(Some(lc)).await.unwrap();
+//     dbg!(c);
+// }

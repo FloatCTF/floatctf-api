@@ -8,10 +8,6 @@ use argon2::{
     Argon2, PasswordHash, PasswordVerifier,
     password_hash::{PasswordHasher, SaltString, rand_core::OsRng},
 };
-use lettre::{
-    message::{Message, header::ContentType},
-    transport::smtp::{SmtpTransport, authentication::Credentials},
-};
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct UserLoginRequest {

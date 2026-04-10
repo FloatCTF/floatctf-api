@@ -1,4 +1,4 @@
-use sea_orm::{ActiveModelTrait, ActiveValue::Set, EntityTrait};
+use sea_orm::{ActiveModelTrait, ActiveValue::Set};
 use serde_json::Value;
 use tracing::error;
 use uuid::Uuid;

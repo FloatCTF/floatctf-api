@@ -1,6 +1,6 @@
 use sea_orm::entity::prelude::Uuid;
-use sea_orm::{Condition, DatabaseConnection, EntityTrait, QueryFilter, QueryTrait, Select};
-use sea_orm::{DbErr, QuerySelect};
+use sea_orm::{Condition, DatabaseConnection, EntityTrait, QueryFilter, Select};
+use sea_orm::{DbErr};
 pub struct FilterMapping {
     pub key: &'static str,
     pub column: Box<dyn Fn(&str) -> Condition>,

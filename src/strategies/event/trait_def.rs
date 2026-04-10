@@ -10,7 +10,6 @@ use uuid::Uuid;
 use crate::{
     db::{WebDb, WebDocker},
     entity::{event_teams, event_users, events, instances, users},
-    strategies::event::common,
 };
 pub enum EventStatus {
     NotStarted,

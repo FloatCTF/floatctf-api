@@ -1,10 +1,12 @@
 use crate::api::preclude::*;
 use actix_web::get;
 use bollard::Docker;
+
+#[allow(deprecated)]
 use bollard::container::ListContainersOptions;
+#[allow(deprecated)]
 use bollard::image::ListImagesOptions;
 use pnet::datalink;
-use sea_orm::{ConnectionTrait, Statement};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use sysinfo::{Components, Disks, Networks, System};
@@ -162,6 +164,7 @@ pub async fn get_sys_info(_: SuperAdminJwtGuard) -> UniResult<SystemInformation>
     let docker = Docker::connect_with_local_defaults().unwrap();
 
     // 镜像
+    #[allow(deprecated)]
     let images = docker
         .list_images(Some(ListImagesOptions::<String> {
             all: true,
@@ -179,6 +182,7 @@ pub async fn get_sys_info(_: SuperAdminJwtGuard) -> UniResult<SystemInformation>
         .collect();
 
     // 正在运行的容器数量
+    #[allow(deprecated)]
     let running_containers = docker
         .list_containers(Some(ListContainersOptions::<String> {
             all: false, // 只获取运行中的

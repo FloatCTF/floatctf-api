@@ -1,9 +1,9 @@
 use crate::{
     api::{preclude::*, service::calculate_next_dynamic_score},
     entity::{
-        challenges, event_announcements, event_challenge_solves, event_challenges, event_instances,
+        challenges, event_announcements, event_challenge_solves, event_challenges,
         event_team_members, event_teams, event_users, event_writeup, events, instances,
-        sea_orm_active_enums::{EventTeamMemberRole, EventType, InstanceStatus},
+        sea_orm_active_enums::{EventTeamMemberRole, EventType},
         users,
     },
     strategies::event,

@@ -4,13 +4,13 @@ pub use anyhow::{Context, Result, anyhow};
 
 use chrono::Utc;
 use fcmc::ChallengeMeta;
-use sea_orm::{DbConn, TryIntoModel};
+use sea_orm::{DbConn};
 
 use crate::{
     db::{WebDb, WebDocker},
     entity::{
-        challenges, event_teams, events, instances,
-        sea_orm_active_enums::{EventType, InstanceStatus},
+        challenges,  instances,
+        sea_orm_active_enums::{InstanceStatus},
         users,
     },
 };

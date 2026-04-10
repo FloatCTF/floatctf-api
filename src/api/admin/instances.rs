@@ -1,11 +1,10 @@
 use std::str::FromStr;
 
-use sea_orm::{Condition, sea_query::ValueType};
+use sea_orm::Condition;
 
 use crate::{
     api::{FilterMapping, preclude::*, sea_orm_utils::query_query},
-    entity::{instances, sea_orm_active_enums::InstanceStatus, users},
-    strategies::event,
+    entity::{instances, sea_orm_active_enums::InstanceStatus},
 };
 
 /// GET /api/admin/instances

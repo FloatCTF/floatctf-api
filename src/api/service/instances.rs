@@ -4,7 +4,6 @@ use crate::{
     strategies::event,
 };
 use actix_web::HttpRequest; // TODO : for log
-use anyhow::{Context, anyhow};
 
 /// GET /api/instances
 #[get("")]
