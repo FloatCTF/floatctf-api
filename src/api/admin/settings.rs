@@ -10,7 +10,10 @@ pub async fn get_settings(
     _user: SuperAdminJwtGuard,
     ctx: ReqCtx,
 ) -> UniResult<Vec<settings::Model>> {
-    let settings = settings::Entity::find().all(ctx.db.get_ref()).await?;
+    let settings = settings::Entity::find()
+        .order_by_desc(settings::Column::UpdatedAt)
+        .all(ctx.db.get_ref())
+        .await?;
     UniResponse::ok(settings.into()).into()
 }
 

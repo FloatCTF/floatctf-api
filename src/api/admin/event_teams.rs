@@ -124,6 +124,7 @@ pub async fn get_teams(
 
     let stmt = event.find_related(event_teams::Entity);
     let stmt = apply_filters(stmt, query_params.filter.clone(), &mappings);
+    let stmt = stmt.order_by_desc(event_teams::Column::UpdatedAt);
 
     let (items, total_items) =
         if let (Some(limit), Some(page)) = (query_params.limit, query_params.page) {

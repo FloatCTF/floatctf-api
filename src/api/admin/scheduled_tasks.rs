@@ -194,8 +194,15 @@ pub async fn get_scheduled_tasks(
         },
     ];
 
-    let (items, total_items) =
-        query_query::<scheduled_tasks::Entity>(ctx.db.get_ref(), &mappings, &query_params).await?;
+    let (items, total_items) = query_query::<scheduled_tasks::Entity>(
+        ctx.db.get_ref(),
+        &mappings,
+        &query_params,
+        Some(Box::new(|stmt| {
+            stmt.order_by_desc(scheduled_tasks::Column::UpdatedAt)
+        })),
+    )
+    .await?;
 
     query_params.total = Some(total_items);
 

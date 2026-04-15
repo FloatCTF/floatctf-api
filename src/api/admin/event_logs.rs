@@ -66,6 +66,7 @@ pub async fn get_event_logs(
 
     let stmt = event_logs::Entity::find().filter(event_logs::Column::EventId.eq(event_id));
     let stmt = apply_filters(stmt, query_params.filter.clone(), &mappings);
+    let stmt = stmt.order_by_desc(event_logs::Column::CreatedAt);
 
     let (items, total_items) =
         if let (Some(limit), Some(page)) = (query_params.limit, query_params.page) {

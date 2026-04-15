@@ -55,8 +55,13 @@ pub async fn get_logs(
             column: Box::new(|v| Condition::all().add(logs::Column::Level.eq(v.to_string()))),
         },
     ];
-    let (items, total_items) =
-        query_query::<logs::Entity>(ctx.db.get_ref(), &mappings, &query_params).await?;
+    let (items, total_items) = query_query::<logs::Entity>(
+        ctx.db.get_ref(),
+        &mappings,
+        &query_params,
+        Some(Box::new(|stmt| stmt.order_by_desc(logs::Column::CreatedAt))),
+    )
+    .await?;
 
     query_params.total = Some(total_items);
 

@@ -141,8 +141,15 @@ pub async fn get_challenges(
             column: Box::new(|v| Condition::all().add(challenges::Column::Description.contains(v))),
         },
     ];
-    let (items, total_items) =
-        query_query::<challenges::Entity>(ctx.db.get_ref(), &mappings, &query_params).await?;
+    let (items, total_items) = query_query::<challenges::Entity>(
+        ctx.db.get_ref(),
+        &mappings,
+        &query_params,
+        Some(Box::new(|stmt| {
+            stmt.order_by_desc(challenges::Column::UpdatedAt)
+        })),
+    )
+    .await?;
 
     query_params.total = Some(total_items);
 

@@ -109,7 +109,7 @@ pub async fn get_super_admins(
 ) -> UniResult<Vec<super_admin::Model>> {
     let mut query_params = query_params.0;
 
-    let stmt = super_admin::Entity::find();
+    let stmt = super_admin::Entity::find().order_by_desc(super_admin::Column::UpdatedAt);
 
     if let (Some(limit), Some(page)) = (query_params.limit, query_params.page) {
         let paginator = stmt.paginate(ctx.db.get_ref(), limit);

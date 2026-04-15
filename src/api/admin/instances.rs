@@ -66,8 +66,15 @@ pub async fn get_instances(
             }),
         },
     ];
-    let (items, total_items) =
-        query_query::<instances::Entity>(ctx.db.get_ref(), &mappings, &query_params).await?;
+    let (items, total_items) = query_query::<instances::Entity>(
+        ctx.db.get_ref(),
+        &mappings,
+        &query_params,
+        Some(Box::new(|stmt| {
+            stmt.order_by_desc(instances::Column::UpdatedAt)
+        })),
+    )
+    .await?;
 
     query_params.total = Some(total_items);
 

@@ -11,7 +11,10 @@ use crate::{
 /// GET /api/admin/weapons
 #[get("")]
 pub async fn get_weapons(_user: SuperAdminJwtGuard, ctx: ReqCtx) -> UniResult<Vec<weapons::Model>> {
-    let weapons = weapons::Entity::find().all(ctx.db.get_ref()).await?;
+    let weapons = weapons::Entity::find()
+        .order_by_desc(weapons::Column::UpdatedAt)
+        .all(ctx.db.get_ref())
+        .await?;
     UniResponse::ok(weapons.into()).into()
 }
 

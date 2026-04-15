@@ -174,6 +174,7 @@ pub async fn get_users(
     }
 
     let stmt = apply_filters(stmt, query_params.filter.clone(), &mappings);
+    let stmt = stmt.order_by_desc(event_users::Column::JoinedAt);
 
     let (items, total_items) =
         if let (Some(limit), Some(page)) = (query_params.limit, query_params.page) {

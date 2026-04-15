@@ -1,6 +1,6 @@
+use sea_orm::DbErr;
 use sea_orm::entity::prelude::Uuid;
 use sea_orm::{Condition, DatabaseConnection, EntityTrait, QueryFilter, Select};
-use sea_orm::{DbErr};
 pub struct FilterMapping {
     pub key: &'static str,
     pub column: Box<dyn Fn(&str) -> Condition>,
@@ -113,12 +113,17 @@ pub async fn query_query<E>(
     db: &DatabaseConnection,
     mappings: &[FilterMapping],
     query_params: &QueryParams,
+    order_fn: Option<Box<dyn FnOnce(Select<E>) -> Select<E>>>,
 ) -> Result<(Vec<E::Model>, usize), DbErr>
 where
     E: EntityTrait,
     E::Model: Send + Sync,
 {
     let stmt = apply_filters(E::find(), query_params.filter.clone(), &mappings);
+    let stmt = match order_fn {
+        Some(f) => f(stmt),
+        None => stmt,
+    };
 
     let (items, total_items) =
         if let (Some(limit), Some(page)) = (query_params.limit, query_params.page) {

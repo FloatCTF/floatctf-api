@@ -121,8 +121,15 @@ pub async fn get_challenge_sets(
             }),
         },
     ];
-    let (items, total_items) =
-        query_query::<challenge_sets::Entity>(ctx.db.get_ref(), &mappings, &query_params).await?;
+    let (items, total_items) = query_query::<challenge_sets::Entity>(
+        ctx.db.get_ref(),
+        &mappings,
+        &query_params,
+        Some(Box::new(|stmt| {
+            stmt.order_by_desc(challenge_sets::Column::CreatedAt)
+        })),
+    )
+    .await?;
 
     query_params.total = Some(total_items);
     UniResponse::ok_meta(items.into(), query_params.into()).into()

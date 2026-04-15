@@ -147,6 +147,7 @@ pub async fn list_event_announcements(
     let stmt = event_announcements::Entity::find()
         .filter(event_announcements::Column::EventId.eq(event_id));
     let stmt = apply_filters(stmt, query_params.filter.clone(), &mappings);
+    let stmt = stmt.order_by_desc(event_announcements::Column::CreatedAt);
 
     let (items, total_items) =
         if let (Some(limit), Some(page)) = (query_params.limit, query_params.page) {
