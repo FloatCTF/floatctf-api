@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS "settings" (
     "updated_at" TIMESTAMPZ NOT NULL DEFAULT now()
 );
 
+
 CREATE TABLE IF NOT EXISTS "weapons" (
     "id" UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
     "name" TEXT NOT NULL,
@@ -71,7 +72,15 @@ CREATE TABLE IF NOT EXISTS "super_admin" (
     "updated_at" TIMESTAMPZ NOT NULL DEFAULT now()
 );
 
-
+CREATE TABLE IF NOT EXISTS "announcements" (
+    "id" UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
+    "title" TEXT NOT NULL,
+    "content" TEXT,
+    "publisher_id" UUID NOT NULL REFERENCES "super_admin" ("id") ON DELETE CASCADE,
+    "publiser" TEXT NOT NULL,
+    "created_at" TIMESTAMPTZ NOT NULL DEFAULT now(),
+    "updated_at" TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 
 -- challenge tables
 CREATE TABLE IF NOT EXISTS "challenges" (

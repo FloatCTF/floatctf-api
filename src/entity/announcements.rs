@@ -4,37 +4,36 @@ use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq, Serialize, Deserialize)]
-#[sea_orm(table_name = "super_admin")]
+#[sea_orm(table_name = "announcements")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: Uuid,
-    #[sea_orm(column_type = "Text", unique)]
-    pub username: String,
     #[sea_orm(column_type = "Text")]
-    pub password: String,
-    #[sea_orm(column_type = "Text")]
-    pub email: String,
+    pub title: String,
+    #[sea_orm(column_type = "Text", nullable)]
+    pub content: Option<String>,
+    pub publisher_id: Uuid,
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: DateTimeWithTimeZone,
+    #[sea_orm(column_type = "Text")]
+    pub publisher: String,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
-    #[sea_orm(has_many = "super::announcements::Entity")]
-    Announcements,
-    #[sea_orm(has_many = "super::logs::Entity")]
-    Logs,
+    #[sea_orm(
+        belongs_to = "super::super_admin::Entity",
+        from = "Column::PublisherId",
+        to = "super::super_admin::Column::Id",
+        on_update = "NoAction",
+        on_delete = "Cascade"
+    )]
+    SuperAdmin,
 }
 
-impl Related<super::announcements::Entity> for Entity {
+impl Related<super::super_admin::Entity> for Entity {
     fn to() -> RelationDef {
-        Relation::Announcements.def()
-    }
-}
-
-impl Related<super::logs::Entity> for Entity {
-    fn to() -> RelationDef {
-        Relation::Logs.def()
+        Relation::SuperAdmin.def()
     }
 }
 

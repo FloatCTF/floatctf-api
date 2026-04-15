@@ -1,3 +1,4 @@
+mod announcements;
 mod challenge_solves;
 
 mod challenge_sets;
@@ -21,6 +22,9 @@ pub fn config(cfg: &mut ServiceConfig) {
     cfg.service(super_admin::super_admin_login);
     // GET /api/weapons
     cfg.service(scope("/weapons").service(weapons::get_weapons));
+
+    // GET /api/announcements
+    cfg.service(scope("/announcements").service(announcements::get_announcements));
 
     // POST /api/uploads/image
     cfg.service(scope("/uploads").service(uploads::upload_image));

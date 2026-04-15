@@ -111,7 +111,10 @@ pub async fn get_top_15_users(_user: UserJwtGuard, ctx: ReqCtx) -> UniResult<Vec
     }
 
     // 4. 排序 + 取前 15
-    result.sort_by(|a, b| b.1.cmp(&a.1));
+    result.sort_by(|a, b| {
+        b.1.cmp(&a.1) // 解题次数倒序
+            .then_with(|| b.2.cmp(&a.2)) // 最后解题时间倒序（解题次数相同时，越晚的排前面）
+    });
     result.truncate(15);
 
     // 5. 加上排名号 no

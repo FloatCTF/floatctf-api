@@ -2,6 +2,7 @@
 
 pub mod prelude;
 
+pub mod announcements;
 pub mod challenge_set_items;
 pub mod challenge_sets;
 pub mod challenge_solves;

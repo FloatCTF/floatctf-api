@@ -1,3 +1,4 @@
+mod announcements;
 mod challenge_sets;
 mod challenges;
 mod database;
@@ -31,6 +32,18 @@ pub fn config(cfg: &mut ServiceConfig) {
 
     // POST /api/admin/database/exec_sql
     cfg.service(scope("/database").service(database::exec_sql));
+
+    cfg.service(
+        scope("/announcements")
+            // GET /api/admin/announcements
+            .service(announcements::get_announcements)
+            // POST /api/admin/announcements
+            .service(announcements::create_announcement)
+            // DELETE /api/admin/announcements
+            .service(announcements::delete_announcement)
+            // PATCH /api/admin/announcements/{announcement_id}
+            .service(announcements::patch_announcement),
+    );
 
     cfg.service(
         scope("/settings")
