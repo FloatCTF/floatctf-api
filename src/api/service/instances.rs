@@ -1,5 +1,9 @@
+use std::str::FromStr;
+
+use sea_orm::Condition;
+
 use crate::{
-    api::prelude::*,
+    api::{FilterMapping, apply_filters, prelude::*, sea_orm_utils::paginate_query},
     entity::{events, instances, sea_orm_active_enums::InstanceStatus},
     prelude::*,
     strategies::event,
@@ -12,37 +16,69 @@ pub async fn get_instances(
     ctx: ReqCtx,
     query_params: Query<QueryParams>,
 ) -> UniResult<Vec<instances::Model>> {
-    // challenge no hidden
     let user = user.into_inner();
     let mut query_params = query_params.0;
+
+    let mappings = [
+        FilterMapping {
+            key: "id",
+            column: Box::new(|v| {
+                Condition::all()
+                    .add(instances::Column::Id.eq(Uuid::from_str(&v).unwrap_or(Uuid::nil())))
+            }),
+        },
+        FilterMapping {
+            key: "status",
+            column: Box::new(|v| {
+                Condition::all().add(
+                    instances::Column::Status
+                        .eq(serde_json::from_str(v).unwrap_or(InstanceStatus::Running)),
+                )
+            }),
+        },
+        FilterMapping {
+            key: "ref",
+            column: Box::new(|v| Condition::all().add(instances::Column::Ref.contains(v))),
+        },
+        FilterMapping {
+            key: "challenge_id",
+            column: Box::new(|v| {
+                Condition::all().add(
+                    instances::Column::ChallengeId.eq(Uuid::from_str(&v).unwrap_or(Uuid::nil())),
+                )
+            }),
+        },
+        FilterMapping {
+            key: "gamebox_id",
+            column: Box::new(|v| {
+                Condition::all()
+                    .add(instances::Column::GameboxId.eq(Uuid::from_str(&v).unwrap_or(Uuid::nil())))
+            }),
+        },
+    ];
 
     let stmt = instances::Entity::find()
         .filter(instances::Column::Status.eq(InstanceStatus::Running))
         .filter(instances::Column::Ref.eq("JeopardyPractice"))
-        .filter(instances::Column::UserId.eq(user.id))
-        .order_by_desc(instances::Column::UpdatedAt);
+        .filter(instances::Column::UserId.eq(user.id));
+    let stmt = apply_filters(stmt, query_params.filter.clone(), &mappings);
+    let stmt = stmt.order_by_desc(instances::Column::UpdatedAt);
 
-    if let (Some(limit), Some(page)) = (query_params.limit, query_params.page) {
-        let paginator = stmt.paginate(ctx.db.get_ref(), limit);
-        let mut items = paginator.fetch_page(page.saturating_sub(1)).await?;
-        query_params.total = Some(paginator.num_items().await? as usize);
+    let (mut items, total_items) =
+        if let (Some(limit), Some(page)) = (query_params.limit, query_params.page) {
+            paginate_query(stmt, ctx.db.get_ref(), limit, page).await?
+        } else {
+            let items = stmt.all(ctx.db.get_ref()).await?;
+            (items.clone(), items.len())
+        };
 
-        for item in &mut items {
-            item.flag.clear();
-        }
-
-        UniResponse::ok_meta(items.into(), query_params.into()).into()
-    } else {
-        let mut items = stmt.all(ctx.db.get_ref()).await?;
-
-        query_params.total = Some(items.len());
-
-        for item in &mut items {
-            item.flag.clear();
-        }
-
-        UniResponse::ok_meta(items.into(), query_params.into()).into()
+    for item in &mut items {
+        item.flag.clear();
     }
+
+    query_params.total = Some(total_items);
+
+    UniResponse::ok_meta(items.into(), query_params.into()).into()
 }
 
 /// GET /api/instances/{instance_id}

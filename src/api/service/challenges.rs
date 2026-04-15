@@ -1,5 +1,9 @@
+use std::str::FromStr;
+
+use sea_orm::Condition;
+
 use crate::{
-    api::prelude::*,
+    api::{FilterMapping, apply_filters, prelude::*, sea_orm_utils::paginate_query},
     entity::{challenges, instances, sea_orm_active_enums::InstanceStatus},
     prelude::*,
 };
@@ -13,22 +17,43 @@ pub async fn get_challenges(
 ) -> UniResult<Vec<challenges::Model>> {
     let mut query_params = query_params.0;
 
-    let stmt = challenges::Entity::find()
-        .filter(challenges::Column::Hidden.eq(false))
-        .order_by_desc(challenges::Column::UpdatedAt);
+    let mappings = [
+        FilterMapping {
+            key: "id",
+            column: Box::new(|v| {
+                Condition::all()
+                    .add(challenges::Column::Id.eq(Uuid::from_str(&v).unwrap_or(Uuid::nil())))
+            }),
+        },
+        FilterMapping {
+            key: "name",
+            column: Box::new(|v| Condition::all().add(challenges::Column::Name.contains(v))),
+        },
+        FilterMapping {
+            key: "category",
+            column: Box::new(|v| Condition::all().add(challenges::Column::Category.contains(v))),
+        },
+        FilterMapping {
+            key: "description",
+            column: Box::new(|v| Condition::all().add(challenges::Column::Description.contains(v))),
+        },
+    ];
 
-    if let (Some(limit), Some(page)) = (query_params.limit, query_params.page) {
-        let paginator = stmt.paginate(ctx.db.get_ref(), limit);
-        let items = paginator.fetch_page(page.saturating_sub(1)).await?;
-        query_params.total = Some(paginator.num_items().await? as usize);
+    let stmt = challenges::Entity::find().filter(challenges::Column::Hidden.eq(false));
+    let stmt = apply_filters(stmt, query_params.filter.clone(), &mappings);
+    let stmt = stmt.order_by_desc(challenges::Column::UpdatedAt);
 
-        UniResponse::ok_meta(items.into(), query_params.into()).into()
-    } else {
-        let items = stmt.all(ctx.db.get_ref()).await?;
-        query_params.total = Some(items.len());
+    let (items, total_items) =
+        if let (Some(limit), Some(page)) = (query_params.limit, query_params.page) {
+            paginate_query(stmt, ctx.db.get_ref(), limit, page).await?
+        } else {
+            let items = stmt.all(ctx.db.get_ref()).await?;
+            (items.clone(), items.len())
+        };
 
-        UniResponse::ok_meta(items.into(), query_params.into()).into()
-    }
+    query_params.total = Some(total_items);
+
+    UniResponse::ok_meta(items.into(), query_params.into()).into()
 }
 
 /// GET /api/challenges/{challenge_id}

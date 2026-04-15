@@ -1,5 +1,9 @@
+use std::str::FromStr;
+
+use sea_orm::Condition;
+
 use crate::{
-    api::{prelude::*, service::calculate_next_dynamic_score},
+    api::{FilterMapping, apply_filters, prelude::*, service::calculate_next_dynamic_score},
     entity::{
         challenges, event_announcements, event_challenge_solves, event_challenges,
         event_team_members, event_teams, event_users, event_writeup, events, instances,
@@ -31,12 +35,49 @@ pub struct EventInfo {
 
 /// GET /api/events
 #[get("")]
-pub async fn get_events(user: UserJwtGuard, ctx: ReqCtx) -> UniResult<Vec<EventInfo>> {
+pub async fn get_events(
+    user: UserJwtGuard,
+    ctx: ReqCtx,
+    query_params: Query<QueryParams>,
+) -> UniResult<Vec<EventInfo>> {
     let user = user.into_inner();
+    let query_params = query_params.0;
 
-    let events_with_users = events::Entity::find()
-        .filter(events::Column::Hidden.eq(false))
-        .order_by_desc(events::Column::UpdatedAt)
+    let mappings = [
+        FilterMapping {
+            key: "id",
+            column: Box::new(|v| {
+                Condition::all()
+                    .add(events::Column::Id.eq(Uuid::from_str(&v).unwrap_or(Uuid::nil())))
+            }),
+        },
+        FilterMapping {
+            key: "title",
+            column: Box::new(|v| Condition::all().add(events::Column::Title.contains(v))),
+        },
+        FilterMapping {
+            key: "type",
+            column: Box::new(|v| {
+                Condition::all().add(
+                    events::Column::Type
+                        .eq(serde_json::from_str(v).unwrap_or(EventType::JeopardyPractice)),
+                )
+            }),
+        },
+        FilterMapping {
+            key: "allow_join",
+            column: Box::new(|v| {
+                Condition::all()
+                    .add(events::Column::AllowJoin.eq(v.parse::<bool>().unwrap_or(false)))
+            }),
+        },
+    ];
+
+    let stmt = events::Entity::find().filter(events::Column::Hidden.eq(false));
+    let stmt = apply_filters(stmt, query_params.filter.clone(), &mappings);
+    let stmt = stmt.order_by_desc(events::Column::UpdatedAt);
+
+    let events_with_users = stmt
         .find_with_related(event_users::Entity)
         .all(ctx.db.get_ref())
         .await?;

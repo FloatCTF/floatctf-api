@@ -1,5 +1,9 @@
+use std::str::FromStr;
+
+use sea_orm::Condition;
+
 use crate::{
-    api::prelude::*,
+    api::{FilterMapping, prelude::*, sea_orm_utils::query_query},
     entity::{challenge_set_items, challenge_sets, challenges},
     prelude::*,
 };
@@ -9,12 +13,42 @@ use crate::{
 pub async fn get_challenge_sets(
     _user: UserJwtGuard,
     ctx: ReqCtx,
+    query_params: Query<QueryParams>,
 ) -> UniResult<Vec<challenge_sets::Model>> {
-    let challenge_sets = challenge_sets::Entity::find()
-        .order_by_desc(challenge_sets::Column::CreatedAt)
-        .all(ctx.db.get_ref())
-        .await?;
-    UniResponse::ok(challenge_sets.into()).into()
+    let mut query_params = query_params.0;
+
+    let mappings = [
+        FilterMapping {
+            key: "id",
+            column: Box::new(|v| {
+                Condition::all()
+                    .add(challenge_sets::Column::Id.eq(Uuid::from_str(&v).unwrap_or(Uuid::nil())))
+            }),
+        },
+        FilterMapping {
+            key: "name",
+            column: Box::new(|v| Condition::all().add(challenge_sets::Column::Name.contains(v))),
+        },
+        FilterMapping {
+            key: "description",
+            column: Box::new(|v| {
+                Condition::all().add(challenge_sets::Column::Description.contains(v))
+            }),
+        },
+    ];
+
+    let (items, total_items) = query_query::<challenge_sets::Entity>(
+        ctx.db.get_ref(),
+        &mappings,
+        &query_params,
+        Some(Box::new(|stmt| {
+            stmt.order_by_desc(challenge_sets::Column::CreatedAt)
+        })),
+    )
+    .await?;
+
+    query_params.total = Some(total_items);
+    UniResponse::ok_meta(items.into(), query_params.into()).into()
 }
 
 /// GET /api/challenge_sets/{challenge_set_id}
@@ -42,3 +76,4 @@ pub async fn get_challenge_set(
 
     UniResponse::ok(challenges.into()).into()
 }
+
