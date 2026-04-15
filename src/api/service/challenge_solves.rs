@@ -17,8 +17,9 @@ pub async fn get_solves(
     let user = user.into_inner();
     let mut query_params = query_params.0;
 
-    let stmt =
-        challenge_solves::Entity::find().filter(challenge_solves::Column::UserId.eq(user.id));
+    let stmt = challenge_solves::Entity::find()
+        .filter(challenge_solves::Column::UserId.eq(user.id))
+        .order_by_desc(challenge_solves::Column::CreatedAt);
 
     if let (Some(limit), Some(page)) = (query_params.limit, query_params.page) {
         let paginator = stmt.paginate(ctx.db.get_ref(), limit);

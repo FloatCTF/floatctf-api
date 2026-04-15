@@ -94,6 +94,7 @@ pub async fn get_challenge_writeups(
     let writeups = challenge_writeup::Entity::find()
         .filter(challenge_writeup::Column::ChallengeId.eq(challenge_id))
         .find_also_related(challenges::Entity)
+        .order_by_desc(challenge_writeup::Column::CreatedAt)
         .all(ctx.db.get_ref())
         .await?;
 
@@ -173,6 +174,7 @@ pub async fn get_writeups(
 ) -> UniResult<Vec<ChallengeWriteupResult>> {
     let writeups = challenge_writeup::Entity::find()
         .find_also_related(challenges::Entity)
+        .order_by_desc(challenge_writeup::Column::CreatedAt)
         .all(ctx.db.get_ref())
         .await?;
 

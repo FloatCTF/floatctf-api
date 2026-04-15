@@ -36,6 +36,7 @@ pub async fn get_events(user: UserJwtGuard, ctx: ReqCtx) -> UniResult<Vec<EventI
 
     let events_with_users = events::Entity::find()
         .filter(events::Column::Hidden.eq(false))
+        .order_by_desc(events::Column::UpdatedAt)
         .find_with_related(event_users::Entity)
         .all(ctx.db.get_ref())
         .await?;

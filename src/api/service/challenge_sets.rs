@@ -10,7 +10,10 @@ pub async fn get_challenge_sets(
     _user: UserJwtGuard,
     ctx: ReqCtx,
 ) -> UniResult<Vec<challenge_sets::Model>> {
-    let challenge_sets = challenge_sets::Entity::find().all(ctx.db.get_ref()).await?;
+    let challenge_sets = challenge_sets::Entity::find()
+        .order_by_desc(challenge_sets::Column::CreatedAt)
+        .all(ctx.db.get_ref())
+        .await?;
     UniResponse::ok(challenge_sets.into()).into()
 }
 

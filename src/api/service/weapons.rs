@@ -2,7 +2,10 @@ use crate::{api::prelude::*, entity::weapons, prelude::*};
 
 #[get("")]
 pub async fn get_weapons(_user: UserJwtGuard, ctx: ReqCtx) -> UniResult<Vec<weapons::Model>> {
-    let mut weapons = weapons::Entity::find().all(ctx.db.get_ref()).await?;
+    let mut weapons = weapons::Entity::find()
+        .order_by_desc(weapons::Column::UpdatedAt)
+        .all(ctx.db.get_ref())
+        .await?;
     for weapon in &mut weapons {
         let weapon_file = std::path::Path::new(&weapon.file_url);
         if !weapon_file.exists() {

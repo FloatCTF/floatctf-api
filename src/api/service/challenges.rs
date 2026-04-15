@@ -13,7 +13,9 @@ pub async fn get_challenges(
 ) -> UniResult<Vec<challenges::Model>> {
     let mut query_params = query_params.0;
 
-    let stmt = challenges::Entity::find().filter(challenges::Column::Hidden.eq(false));
+    let stmt = challenges::Entity::find()
+        .filter(challenges::Column::Hidden.eq(false))
+        .order_by_desc(challenges::Column::UpdatedAt);
 
     if let (Some(limit), Some(page)) = (query_params.limit, query_params.page) {
         let paginator = stmt.paginate(ctx.db.get_ref(), limit);

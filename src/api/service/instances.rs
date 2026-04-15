@@ -19,7 +19,8 @@ pub async fn get_instances(
     let stmt = instances::Entity::find()
         .filter(instances::Column::Status.eq(InstanceStatus::Running))
         .filter(instances::Column::Ref.eq("JeopardyPractice"))
-        .filter(instances::Column::UserId.eq(user.id));
+        .filter(instances::Column::UserId.eq(user.id))
+        .order_by_desc(instances::Column::UpdatedAt);
 
     if let (Some(limit), Some(page)) = (query_params.limit, query_params.page) {
         let paginator = stmt.paginate(ctx.db.get_ref(), limit);
