@@ -63,7 +63,7 @@ CREATE INDEX idx_event_logs_action ON "event_logs" ("action");
 -- 索引：后台管理页面通常按时间倒序查，或按类别/用户查
 CREATE INDEX idx_sys_logs_created_at ON "logs" ("created_at" DESC);
 CREATE INDEX idx_sys_logs_category_action ON "logs" ("category", "action");
-CREATE INDEX idx_sys_logs_user_op ON "logs" ("user_id", "superadmin");
+CREATE INDEX idx_sys_logs_user_op ON "logs" ("user_id", "superadmin_id");
 -- JSONB 索引：支持搜索 details 里的具体内容
 CREATE INDEX idx_sys_logs_details ON "logs" USING GIN ("details");
 
