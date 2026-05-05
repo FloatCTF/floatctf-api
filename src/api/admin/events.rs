@@ -367,10 +367,11 @@ pub async fn get_data(
 /// GET /api/admin/events/{event_id}/report
 #[get("/{event_id}/report")]
 pub async fn get_report(
-    _user: SuperAdminJwtGuard,
+    admin: SuperAdminJwtGuard,
     ctx: ReqCtx,
     event_id: Path<Uuid>,
 ) -> UniResult<String> {
+    let admin = admin.into_inner();
     let event_id = event_id.into_inner();
     let event = events::Entity::find_by_id(event_id)
         .one(ctx.db.get_ref())
@@ -386,10 +387,6 @@ pub async fn get_report(
     let mut zip_buffer = std::io::Cursor::new(Vec::new());
     {
         let mut zip = zip::ZipWriter::new(std::io::Write::by_ref(&mut zip_buffer));
-        let options = FileOptions::<()>::default();
-
-        zip.add_directory("uploads/", options)
-            .map_err(|e| UniError::CustomError(e.to_string()))?;
 
         for writeup in event_writeups {
             let s3_key = writeup.file_url;
@@ -401,7 +398,9 @@ pub async fn get_report(
                 .key(&s3_key)
                 .send()
                 .await
-                .map_err(|e| UniError::CustomError(format!("Failed to get writeup from S3: {}", e)))?;
+                .map_err(|e| {
+                    UniError::CustomError(format!("Failed to get writeup from S3: {}", e))
+                })?;
 
             let body = obj
                 .body
@@ -414,11 +413,9 @@ pub async fn get_report(
                 .file_name()
                 .and_then(|n| n.to_str())
                 .unwrap_or("unknown");
-            zip.start_file(
-                format!("uploads/{}", file_name),
-                FileOptions::<()>::default(),
-            )
-            .map_err(|e| UniError::CustomError(e.to_string()))?;
+            // Preserve the S3 key structure in zip (e.g., writeups/event_id/user_id/file.pdf)
+            zip.start_file(&s3_key, FileOptions::<()>::default())
+                .map_err(|e| UniError::CustomError(e.to_string()))?;
             zip.write_all(&file_bytes)
                 .map_err(|e| UniError::CustomError(e.to_string()))?;
         }
@@ -696,8 +693,26 @@ pub async fn get_report(
         .await
         .map_err(|e| UniError::CustomError(format!("Failed to upload report to S3: {}", e)))?;
 
+    let message = format!(
+        "{} export event {} all wirteup!",
+        admin.username, event.title
+    );
+    info!(message);
+    ctx.log
+        .add_log(
+            "INFO",
+            "FILES",
+            "EXPORT",
+            &message,
+            json!([]),
+            None,
+            admin.id.into(),
+            Some(&ctx.req),
+        )
+        .await;
     UniResponse::ok(s3_key.into()).into()
 }
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ReportTeam {
     pub team: event_teams::Model,
