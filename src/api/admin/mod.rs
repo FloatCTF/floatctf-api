@@ -3,6 +3,7 @@ mod challenge_sets;
 mod challenges;
 mod database;
 mod docker;
+mod download;
 mod dto;
 mod event_announcements;
 mod event_challenges;
@@ -22,6 +23,9 @@ mod weapons;
 use actix_web::web::{ServiceConfig, scope};
 
 pub fn config(cfg: &mut ServiceConfig) {
+    // GET /api/admin/download?key=asd/asd
+    cfg.service(download::download);
+
     cfg.service(
         scope("system")
             // GET /api/admin/system/monitor

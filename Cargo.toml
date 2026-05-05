@@ -1,54 +1,57 @@
 [package]
 name = "floatctf"
-version = "0.2.5"
+version = "0.2.6"
 edition = "2024"
 
 [dependencies]
 fcmc = { path = "./fcmc" }
 
-actix-web = "4"
+actix-cors = "0.7.1"
 actix-multipart = "0.7.2"
+actix-web = "4"
+anyhow = "1"
+argon2 = "0.5"
+async-trait = "0.1.89"
+aws-config = { version = "1.1.7", features = ["behavior-version-latest"] }
+aws-sdk-s3 = "1.129.0"
+base64 = "0.22.1"
+bollard = "0.19.1"
+chrono = { version = "0.4", features = ["serde"] }
+cron = "0.12"
+dotenvy = "0.15"
+futures-util = "0.3.31"
+jsonwebtoken = "9.3.1"
+lettre = "0.11.19"
+minijinja = "2.12.0"
+pnet = "0.35.0"
 sea-orm = { version = "1.1.0", features = [
-    "macros",
-    "with-chrono",
-    "sqlx-postgres",
-    "runtime-tokio-native-tls",
+  "macros",
+  "runtime-tokio-native-tls",
+  "sqlx-postgres",
+  "with-chrono",
 ] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-chrono = { version = "0.4", features = ["serde"] }
-uuid = { version = "1.0", features = ["serde", "v4"] }
-dotenvy = "0.15"
-anyhow = "1"
-thiserror = "2"
-argon2 = "0.5"
-toml = "0.9.5"
-base64 = "0.22.1"
-futures-util = "0.3.31"
-jsonwebtoken = "9.3.1"
-bollard = "0.19.1"
-zip = "4.3.0"
-tempfile = "3.20.0"
-actix-cors = "0.7.1"
-# logging
-tracing = "0.1" # 核心 tracing
-tracing-subscriber = { version = "0.3", features = [
-    "env-filter",
-    "fmt",
-    "chrono",
-] }
-tracing-appender = "0.2" # 支持日志写入文件
-tracing-actix-web = "0.7.19" # Actix Web 的 TracingLogger middleware
-pnet = "0.35.0"
 sysinfo = "0.37.0"
-minijinja = "2.12.0"
-async-trait = "0.1.89"
-lettre = "0.11.19"
-cron = "0.12"
+tempfile = "3.20.0"
+thiserror = "2"
+toml = "0.9.5"
+# logging
+tracing = "0.1"  # 核心 tracing
+tracing-actix-web = "0.7.19"  # Actix Web 的 TracingLogger middleware
+tracing-appender = "0.2"  # 支持日志写入文件
+tracing-subscriber = { version = "0.3", features = [
+  "chrono",
+  "env-filter",
+  "fmt",
+] }
+uuid = { version = "1.0", features = ["serde", "v4"] }
+zip = "4.3.0"
+tokio = { version = "1", features = ["fs"] }
 
 [profile.dev]
-opt-level = 0      # 0: 不优化，编译最快（默认）
+opt-level = 0  # 0: 不优化，编译最快（默认）
 debug = true
-                   # 1: 基础优化，平衡速度
-                   # 2: 显著优化
-                   # 3: 最高级别优化（类似 Release）
+# 1: 基础优化，平衡速度
+# 2: 显著优化
+# 3: 最高级别优化（类似 Release）

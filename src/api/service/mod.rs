@@ -1,9 +1,9 @@
 mod announcements;
-mod challenge_solves;
-
 mod challenge_sets;
+mod challenge_solves;
 mod challenge_writeups;
 mod challenges;
+mod download;
 mod events;
 mod instances;
 mod submit;

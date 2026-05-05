@@ -1,4 +1,4 @@
-pub use crate::db::{WebDb, WebDocker};
+pub use crate::db::{WebDb, WebDocker, WebRustfs};
 pub use crate::log::WebLog;
 use actix_web::FromRequest;
 pub use actix_web::HttpRequest;
@@ -8,6 +8,7 @@ pub use tracing::{debug, error, info, trace, warn};
 pub struct ReqCtx {
     pub db: WebDb,
     pub docker: WebDocker,
+    pub rustfs: WebRustfs,
     pub log: WebLog,
     pub req: HttpRequest,
 }
@@ -21,10 +22,15 @@ impl FromRequest for ReqCtx {
             .app_data::<WebDocker>()
             .expect("WebDocker not found")
             .clone();
+        let rustfs = req
+            .app_data::<WebRustfs>()
+            .expect("WebRustfs not found")
+            .clone();
         let log = req.app_data::<WebLog>().expect("WebLog not found").clone();
         std::future::ready(Ok(Self {
             db,
             docker,
+            rustfs,
             log,
             req: req.clone(),
         }))

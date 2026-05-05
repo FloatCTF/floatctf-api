@@ -14,7 +14,7 @@ use actix_web::{App, HttpServer, web};
 use dotenvy::dotenv;
 use std::env;
 use std::sync::Arc;
-use tracing::info;
+use tracing::{error, info};
 use tracing_actix_web::TracingLogger;
 use tracing_appender::rolling;
 use tracing_subscriber::{EnvFilter, fmt::writer::MakeWriterExt};
@@ -49,16 +49,31 @@ async fn main() -> std::io::Result<()> {
     info!("Current working dir = {}, version = {}", work_dir, version);
 
     // for database
-    let db: db::WebDb = web::Data::new(
-        db::init_db()
-            .await
-            .expect("DATABASE_URL must be set in .env file!"),
-    );
+    let db: db::WebDb = match db::init_db().await {
+        Ok(db) => web::Data::new(db),
+        Err(e) => {
+            error!("init db failed: {}", e);
+            panic!("init db failed: {}", e);
+        }
+    };
 
     // for docker
-    let docker: db::WebDocker =
-        web::Data::new(db::init_docker().await.expect("no docker installed!"));
+    let docker: db::WebDocker = match db::init_docker().await {
+        Ok(docker) => web::Data::new(docker),
+        Err(e) => {
+            error!("init docker failed: {}", e);
+            panic!("init docker failed: {}", e);
+        }
+    };
 
+    // for rustfs
+    let rustfs: db::WebRustfs = match db::init_rustfs().await {
+        Ok(rustfs) => web::Data::new(rustfs),
+        Err(e) => {
+            error!("init rustfs failed: {}", e);
+            panic!("init rustfs failed: {}", e);
+        }
+    };
     // for settings
     config::init_settings(&db).await;
 
@@ -106,7 +121,9 @@ async fn main() -> std::io::Result<()> {
             .wrap(cors)
             .app_data(db.clone())
             .app_data(docker.clone())
+            .app_data(rustfs.clone())
             .app_data(web::Data::new(log_service.clone()))
+            .app_data(web::Data::new(task_scheduler_arc.clone()))
             .service(
                 web::scope("/api")
                     .configure(api::service_config)

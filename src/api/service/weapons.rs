@@ -46,16 +46,6 @@ pub async fn get_weapons(
     )
     .await?;
 
-    for weapon in &mut items {
-        let weapon_file = std::path::Path::new(&weapon.file_url);
-        if !weapon_file.exists() {
-            let mut m_weapon = weapon.clone().into_active_model();
-            m_weapon.has_file = Set(false);
-            m_weapon.update(ctx.db.get_ref()).await?;
-            weapon.has_file = false;
-        }
-    }
-
     query_params.total = Some(total_items);
 
     UniResponse::ok_meta(items.into(), query_params.into()).into()

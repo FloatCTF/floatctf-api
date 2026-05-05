@@ -1,4 +1,4 @@
-use std::os::unix::fs::PermissionsExt;
+use aws_sdk_s3::primitives::ByteStream;
 
 use actix_multipart::form::{MultipartForm, tempfile::TempFile};
 
@@ -133,25 +133,28 @@ pub async fn upload_weapon(
     weapon_id: Path<Uuid>,
     MultipartForm(form): MultipartForm<WeaponForm>,
 ) -> UniResult<()> {
-    let weapons_dir = get_setting(&ctx.db, "WEAPONS_DIR")
-        .await
-        .map_err(|e| UniError::CustomError(format!("get weapons dir error: {}", e)))?;
-    // if not exists, create it
-    if !std::fs::metadata(&weapons_dir).is_ok() {
-        std::fs::create_dir_all(&weapons_dir).unwrap();
-    }
-
     let weapon_id = weapon_id.into_inner();
     let weapon_file = form.weapon;
-    let weapon_path = format!(
-        "{}/{}",
-        weapons_dir,
-        weapon_file.file_name.unwrap_or(weapon_id.to_string())
+    let file_name = weapon_file
+        .file_name
+        .unwrap_or_else(|| weapon_id.to_string());
+
+    let s3_key = format!("weapons/{}", file_name);
+
+    let body = ByteStream::from(
+        tokio::fs::read(&weapon_file.file.path())
+            .await
+            .map_err(|e| UniError::InternalError(format!("Failed to read weapon file: {}", e)))?,
     );
-    std::fs::copy(weapon_file.file.path(), &weapon_path)
-        .map_err(|e| UniError::InternalError(format!("Failed to copy file: {}", e)))?;
-    std::fs::set_permissions(&weapon_path, std::fs::Permissions::from_mode(0o644))
-        .map_err(|e| UniError::InternalError(format!("Failed to set permissions: {}", e)))?;
+
+    ctx.rustfs
+        .put_object()
+        .bucket("floatctf-public")
+        .key(&s3_key)
+        .body(body)
+        .send()
+        .await
+        .map_err(|e| UniError::InternalError(format!("Failed to upload weapon to S3: {}", e)))?;
 
     let mut weapon = weapons::Entity::find_by_id(weapon_id)
         .one(ctx.db.get_ref())
@@ -162,7 +165,7 @@ pub async fn upload_weapon(
         )))?
         .into_active_model();
     weapon.has_file = Set(true);
-    weapon.file_url = Set(weapon_path);
+    weapon.file_url = Set(s3_key);
     weapon.update(ctx.db.get_ref()).await?;
 
     UniResponse::ok_none().into()

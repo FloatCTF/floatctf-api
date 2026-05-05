@@ -16,10 +16,11 @@ use crate::{
     },
     prelude::*,
 };
+use aws_sdk_s3::primitives::ByteStream;
 use chrono::{DateTime, FixedOffset};
 use sea_orm::Condition;
 use std::io::Write;
-use std::{fs::File, str::FromStr};
+use std::str::FromStr;
 use zip::write::FileOptions;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -30,6 +31,7 @@ pub struct CreateEventRequest {
     pub hidden: bool,
     pub allow_join: bool,
     pub rules: String,
+    pub flag_prefix: Option<String>,
     pub start_time: DateTime<FixedOffset>,
     pub end_time: DateTime<FixedOffset>,
 }
@@ -42,6 +44,7 @@ pub async fn create_event(
     cer: Json<CreateEventRequest>,
 ) -> UniResult<events::Model> {
     let cer = cer.into_inner();
+    info!("POST /api/admin/events\nCreate Event Request:{:?}", cer);
 
     let new_event = events::ActiveModel {
         r#type: Set(cer.r#type),
@@ -51,6 +54,7 @@ pub async fn create_event(
         hidden: Set(cer.hidden),
         allow_join: Set(cer.allow_join),
         end_time: Set(cer.end_time),
+        flag_prefix: Set(cer.flag_prefix),
         rules: Set(cer.rules),
         ..Default::default()
     };
@@ -372,64 +376,55 @@ pub async fn get_report(
         .one(ctx.db.get_ref())
         .await?
         .ok_or(UniError::NotFound(format!("Event {} not exist", event_id)))?;
-    let upload_dir = get_setting(&ctx.db, "UPLOAD_DIR")
-        .await
-        .map_err(|e| UniError::CustomError(format!("Failed to get upload dir setting: {}", e)))?;
-
-    let target_zip = std::path::Path::new(&upload_dir).join(format!(
-        "{}_{}.zip",
-        generate_safe_name(&event.title),
-        event_id
-    ));
 
     let event_writeups = event_writeup::Entity::find()
         .filter(event_writeup::Column::EventId.eq(event_id))
         .all(ctx.db.get_ref())
         .await?;
 
-    let writeup_paths = event_writeups
-        .iter()
-        .map(|w| w.file_url.clone())
-        .collect::<Vec<_>>();
+    // Create zip in memory
+    let mut zip_buffer = std::io::Cursor::new(Vec::new());
+    {
+        let mut zip = zip::ZipWriter::new(std::io::Write::by_ref(&mut zip_buffer));
+        let options = FileOptions::<()>::default();
 
-    let zip_file = File::create(&target_zip).map_err(|e| {
-        UniError::CustomError(format!(
-            "Failed to create zip file at {}: {}",
-            target_zip.display(),
-            e
-        ))
-    })?;
+        zip.add_directory("uploads/", options)
+            .map_err(|e| UniError::CustomError(e.to_string()))?;
 
-    let mut zip = zip::ZipWriter::new(zip_file);
-    let options = FileOptions::<()>::default();
+        for writeup in event_writeups {
+            let s3_key = writeup.file_url;
+            // Get object from S3
+            let obj = ctx
+                .rustfs
+                .get_object()
+                .bucket("floatctf-private")
+                .key(&s3_key)
+                .send()
+                .await
+                .map_err(|e| UniError::CustomError(format!("Failed to get writeup from S3: {}", e)))?;
 
-    zip.add_directory("uploads/", options)
-        .map_err(|e| UniError::CustomError(e.to_string()))?;
+            let body = obj
+                .body
+                .collect()
+                .await
+                .map_err(|e| UniError::CustomError(format!("Failed to read S3 body: {}", e)))?;
+            let file_bytes = body.to_vec();
 
-    for wp_path in writeup_paths {
-        let path = std::path::Path::new(&wp_path);
-        if !path.exists() {
-            // 可以选择忽略或者报错，这里我忽略并继续
-            eprintln!("文件不存在: {:?}", path);
-            continue;
+            let file_name = std::path::Path::new(&s3_key)
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("unknown");
+            zip.start_file(
+                format!("uploads/{}", file_name),
+                FileOptions::<()>::default(),
+            )
+            .map_err(|e| UniError::CustomError(e.to_string()))?;
+            zip.write_all(&file_bytes)
+                .map_err(|e| UniError::CustomError(e.to_string()))?;
         }
-        let file_name = path
-            .file_name()
-            .ok_or(UniError::CustomError("无法获取文件名".to_string()))?;
-        let file_name_str = file_name.to_str().ok_or(UniError::CustomError(
-            "文件名不是有效的UTF-8字符串".to_string(),
-        ))?;
-        let file = File::open(path).map_err(|e| UniError::CustomError(e.to_string()))?;
-        zip.start_file(
-            format!("uploads/{}", file_name_str),
-            FileOptions::<()>::default(),
-        )
-        .map_err(|e| UniError::CustomError(e.to_string()))?;
-        std::io::copy(&mut &file, &mut zip).map_err(|e| UniError::CustomError(e.to_string()))?;
-    }
 
-    // 添加index.html报表 这里要根据不同的比赛类型设计
-    let template_html = r#"
+        // 添加index.html报表 这里要根据不同的比赛类型设计
+        let template_html = r#"
 <html lang="zh-CN">
 <head>
   <style>
@@ -552,137 +547,156 @@ pub async fn get_report(
   </table> {% endif %}
 </html>
 "#;
-    let env = minijinja::Environment::new();
-    let tmpl = env
-        .template_from_str(template_html)
-        .map_err(|e| UniError::CustomError(format!("Failed to create template: {}", e)))?;
-    // prepare context
+        let env = minijinja::Environment::new();
+        let tmpl = env
+            .template_from_str(template_html)
+            .map_err(|e| UniError::CustomError(format!("Failed to create template: {}", e)))?;
+        // prepare context
 
-    let ctx = match event.r#type {
-        EventType::JeopardySingle => {
-            let event_users = event_users::Entity::find()
-                .filter(event_users::Column::EventId.eq(event_id))
-                .find_also_related(users::Entity)
-                .all(ctx.db.get_ref())
-                .await?;
-            let event_users_results = {
-                let mut event_users_results = Vec::new();
-                let mut has_writeup = false;
+        let ctx = match event.r#type {
+            EventType::JeopardySingle => {
+                let event_users = event_users::Entity::find()
+                    .filter(event_users::Column::EventId.eq(event_id))
+                    .find_also_related(users::Entity)
+                    .all(ctx.db.get_ref())
+                    .await?;
+                let event_users_results = {
+                    let mut event_users_results = Vec::new();
+                    let mut has_writeup = false;
 
-                for (event_user, user) in event_users {
-                    if let Some(user) = user {
-                        let writeup = event_writeup::Entity::find()
-                            .filter(event_writeup::Column::UserId.eq(user.id))
-                            .one(ctx.db.get_ref())
-                            .await?;
-
-                        if writeup.is_some() {
-                            has_writeup = true;
-                        }
-
-                        let user_result = ReportUser {
-                            username: user.username,
-                            nickname: user.nickname,
-                            points: event_user.points,
-                            writeup_url: writeup.map(|w| w.file_url).unwrap_or_default(),
-                            banned: event_user.banned,
-                        };
-                        event_users_results.push(user_result);
-                    }
-                }
-
-                if has_writeup {
-                    // ✅ 比赛需要 writeup → 剔除没有 writeup 的
-                    event_users_results.retain(|u| !u.writeup_url.is_empty());
-                }
-
-                // ✅ 排序：按分数从高到低
-                event_users_results.sort_by(|a, b| b.points.partial_cmp(&a.points).unwrap());
-                event_users_results
-            };
-
-            minijinja::context! {
-                event,
-                event_users => event_users_results,
-            }
-        }
-
-        EventType::JeopardyTeam => {
-            let event_teams = event_teams::Entity::find()
-                .inner_join(event_writeup::Entity) // with wp
-                .filter(event_writeup::Column::EventId.eq(event_id))
-                .all(ctx.db.get_ref())
-                .await?;
-            let event_teams_results = {
-                let mut event_teams_results = Vec::new();
-                for team in event_teams {
-                    let members = team
-                        .find_related(event_team_members::Entity)
-                        .find_also_related(users::Entity)
-                        .all(ctx.db.get_ref())
-                        .await?;
-                    let mut team_members = Vec::new();
-
-                    for (member, user) in members {
+                    for (event_user, user) in event_users {
                         if let Some(user) = user {
-                            let event_user = event_users::Entity::find()
-                                .filter(event_users::Column::EventId.eq(event.id))
-                                .filter(event_users::Column::UserId.eq(user.id))
+                            let writeup = event_writeup::Entity::find()
+                                .filter(event_writeup::Column::UserId.eq(user.id))
                                 .one(ctx.db.get_ref())
-                                .await?
-                                .ok_or(UniError::NotFound(format!(
-                                    "EventUser {} not exist",
-                                    user.id
-                                )))?;
+                                .await?;
 
-                            team_members.push(TeamMemberResult {
+                            if writeup.is_some() {
+                                has_writeup = true;
+                            }
+
+                            let user_result = ReportUser {
                                 username: user.username,
                                 nickname: user.nickname,
-                                role: member.role,
                                 points: event_user.points,
-                            });
+                                writeup_url: writeup.map(|w| w.file_url).unwrap_or_default(),
+                                banned: event_user.banned,
+                            };
+                            event_users_results.push(user_result);
                         }
                     }
 
-                    let writeup = event_writeup::Entity::find()
-                        .filter(event_writeup::Column::TeamId.eq(team.id))
-                        .one(ctx.db.get_ref())
-                        .await?;
-                    let writeup_url = writeup.map(|w| w.file_url).unwrap_or_default();
-                    let team_result = ReportTeam {
-                        team,
-                        writeup_url,
-                        members: team_members,
-                    };
-                    event_teams_results.push(team_result);
-                }
-                event_teams_results
-            };
-            minijinja::context! {
-                event,
-                event_teams_results,
-            }
-        }
-        _ => minijinja::context! {
-            event,
-        },
-    };
-    let rendered = tmpl
-        .render(ctx)
-        .map_err(|e| UniError::CustomError(format!("Failed to render template: {}", e)))?;
-    zip.start_file("report.html", FileOptions::<()>::default())
-        .map_err(|e| UniError::CustomError(e.to_string()))?;
-    zip.write_all(rendered.as_bytes())
-        .map_err(|e| UniError::CustomError(e.to_string()))?;
-    // 返回zip文件的路径
-    // uploads/c7b32b99-ed9e-476d-a7dc-b06b03e94c39.zip
-    // writeups/
-    // report.html
-    // wp/1.pdf
-    zip.finish()
-        .map_err(|e| UniError::CustomError(e.to_string()))?;
+                    if has_writeup {
+                        // ✅ 比赛需要 writeup → 剔除没有 writeup 的
+                        event_users_results.retain(|u| !u.writeup_url.is_empty());
+                    }
 
-    UniResponse::ok(target_zip.to_string_lossy().to_string().into()).into()
+                    // ✅ 排序：按分数从高到低
+                    event_users_results.sort_by(|a, b| b.points.partial_cmp(&a.points).unwrap());
+                    event_users_results
+                };
+
+                minijinja::context! {
+                    event,
+                    event_users => event_users_results,
+                }
+            }
+
+            EventType::JeopardyTeam => {
+                let event_teams = event_teams::Entity::find()
+                    .inner_join(event_writeup::Entity) // with wp
+                    .filter(event_writeup::Column::EventId.eq(event_id))
+                    .all(ctx.db.get_ref())
+                    .await?;
+                let event_teams_results = {
+                    let mut event_teams_results = Vec::new();
+                    for team in event_teams {
+                        let members = team
+                            .find_related(event_team_members::Entity)
+                            .find_also_related(users::Entity)
+                            .all(ctx.db.get_ref())
+                            .await?;
+                        let mut team_members = Vec::new();
+
+                        for (member, user) in members {
+                            if let Some(user) = user {
+                                let event_user = event_users::Entity::find()
+                                    .filter(event_users::Column::EventId.eq(event.id))
+                                    .filter(event_users::Column::UserId.eq(user.id))
+                                    .one(ctx.db.get_ref())
+                                    .await?
+                                    .ok_or(UniError::NotFound(format!(
+                                        "EventUser {} not exist",
+                                        user.id
+                                    )))?;
+
+                                team_members.push(TeamMemberResult {
+                                    username: user.username,
+                                    nickname: user.nickname,
+                                    role: member.role,
+                                    points: event_user.points,
+                                });
+                            }
+                        }
+
+                        let writeup = event_writeup::Entity::find()
+                            .filter(event_writeup::Column::TeamId.eq(team.id))
+                            .one(ctx.db.get_ref())
+                            .await?;
+                        let writeup_url = writeup.map(|w| w.file_url).unwrap_or_default();
+                        let team_result = ReportTeam {
+                            team,
+                            writeup_url,
+                            members: team_members,
+                        };
+                        event_teams_results.push(team_result);
+                    }
+                    event_teams_results
+                };
+                minijinja::context! {
+                    event,
+                    event_teams_results,
+                }
+            }
+            _ => minijinja::context! {
+                event,
+            },
+        };
+        let rendered = tmpl
+            .render(ctx)
+            .map_err(|e| UniError::CustomError(format!("Failed to render template: {}", e)))?;
+        zip.start_file("report.html", FileOptions::<()>::default())
+            .map_err(|e| UniError::CustomError(e.to_string()))?;
+        zip.write_all(rendered.as_bytes())
+            .map_err(|e| UniError::CustomError(e.to_string()))?;
+        // 返回zip文件的路径
+        // uploads/c7b32b99-ed9e-476d-a7dc-b06b03e94c39.zip
+        // writeups/
+        // report.html
+        // wp/1.pdf
+        zip.finish()
+            .map_err(|e| UniError::CustomError(e.to_string()))?;
+    }
+
+    // Upload zip to S3
+    let s3_key = format!(
+        "writeups/{}/{}_{}.zip",
+        event_id,
+        generate_safe_name(&event.title),
+        event_id
+    );
+
+    let body = ByteStream::from(zip_buffer.into_inner());
+    ctx.rustfs
+        .put_object()
+        .bucket("floatctf-private")
+        .key(&s3_key)
+        .body(body)
+        .send()
+        .await
+        .map_err(|e| UniError::CustomError(format!("Failed to upload report to S3: {}", e)))?;
+
+    UniResponse::ok(s3_key.into()).into()
 }
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ReportTeam {

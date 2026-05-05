@@ -1,9 +1,11 @@
 use crate::{
-    api::prelude::*,
+    api::{FilterMapping, apply_filters, prelude::*, sea_orm_utils::paginate_query},
     auth::UserJwtGuard,
     entity::{challenge_writeup, challenges, users},
     prelude::*,
 };
+use sea_orm::Condition;
+use std::str::FromStr;
 
 /// GET /api/challenges/{challenge_id}/my_writeups
 #[get("/{challenge_id}/my_writeup")]
@@ -169,18 +171,55 @@ pub async fn get_writeup(
 /// GET /api/writeups
 #[get("")]
 pub async fn get_writeups(
-    _user: UserJwtGuard,
+    user: UserJwtGuard,
     ctx: ReqCtx,
+    query_params: Query<QueryParams>,
 ) -> UniResult<Vec<ChallengeWriteupResult>> {
-    let writeups = challenge_writeup::Entity::find()
-        .find_also_related(challenges::Entity)
-        .order_by_desc(challenge_writeup::Column::CreatedAt)
-        .all(ctx.db.get_ref())
-        .await?;
+    let user = user.into_inner();
+    let mut query_params = query_params.0;
+
+    let mappings = [
+        FilterMapping {
+            key: "id",
+            column: Box::new(|v| {
+                Condition::all().add(
+                    challenge_writeup::Column::Id.eq(Uuid::from_str(&v).unwrap_or(Uuid::nil())),
+                )
+            }),
+        },
+        FilterMapping {
+            key: "challenge_id",
+            column: Box::new(|v| {
+                Condition::all().add(
+                    challenge_writeup::Column::ChallengeId
+                        .eq(Uuid::from_str(&v).unwrap_or(Uuid::nil())),
+                )
+            }),
+        },
+    ];
+
+    let stmt = challenge_writeup::Entity::find();
+    let stmt = apply_filters(stmt, query_params.filter.clone(), &mappings);
+    let stmt = stmt.order_by_desc(challenge_writeup::Column::CreatedAt);
+
+    let (items, total_items) =
+        if let (Some(limit), Some(page)) = (query_params.limit, query_params.page) {
+            paginate_query(stmt, ctx.db.get_ref(), limit, page).await?
+        } else {
+            let items = stmt.all(ctx.db.get_ref()).await?;
+            (items.clone(), items.len())
+        };
 
     let mut results = Vec::new();
 
-    for (writeup, challenge) in writeups {
+    for writeup in items {
+        let challenge = challenges::Entity::find_by_id(writeup.challenge_id)
+            .one(ctx.db.get_ref())
+            .await?
+            .ok_or(UniError::NotFound(format!(
+                "Challenge {} not found",
+                writeup.challenge_id
+            )))?;
         let user = users::Entity::find_by_id(writeup.user_id)
             .one(ctx.db.get_ref())
             .await?
@@ -192,15 +231,13 @@ pub async fn get_writeups(
         let result = ChallengeWriteupResult {
             nickname: user.nickname,
             email: user.email,
-            challenge: challenge.ok_or(UniError::NotFound(format!(
-                "Challenge {} not found",
-                writeup.challenge_id
-            )))?,
+            challenge,
             writeup,
         };
 
         results.push(result);
     }
 
-    UniResponse::ok(results.into()).into()
+    query_params.total = Some(total_items);
+    UniResponse::ok_meta(results.into(), query_params.into()).into()
 }

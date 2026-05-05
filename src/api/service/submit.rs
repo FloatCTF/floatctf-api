@@ -5,7 +5,7 @@ use crate::{
     strategies::event,
 };
 use actix_multipart::form::{MultipartForm, tempfile::TempFile, text::Text};
-use std::{fs, os::unix::fs::PermissionsExt};
+use aws_sdk_s3::primitives::ByteStream;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct SubmitFlagRequest {
@@ -81,13 +81,6 @@ pub async fn submit_writeup(
     ctx: ReqCtx,
     MultipartForm(form): MultipartForm<WriteupForm>,
 ) -> UniResult<()> {
-    let upload_dir = get_setting(ctx.db.get_ref(), "UPLOAD_DIR")
-        .await
-        .map_err(|e| UniError::CustomError(format!("get upload dir error: {}", e)))?;
-    // if not exists, create it
-    if !fs::metadata(&upload_dir).is_ok() {
-        fs::create_dir_all(&upload_dir).unwrap();
-    }
     let user = user.into_inner();
 
     let event_id = form.event_id.into_inner();
@@ -101,20 +94,29 @@ pub async fn submit_writeup(
                 .one(ctx.db.get_ref())
                 .await?
                 .ok_or(UniError::NotFound("no team".into()))?;
-            format!("{}_{}_{}.pdf", event_id, team.name, user.nickname)
+            format!("{}/{}/{}.pdf", event_id, team.id, team.name)
         } else {
-            format!("{}_{}.pdf", event_id, user.nickname)
+            format!("{}/{}/{}.pdf", event_id, user.id, user.nickname)
         }
     };
 
-    let writeup_file_path = format!("{}/{}", upload_dir, writeup_file_name);
-    let writeup_file_path = std::path::Path::new(&writeup_file_path);
+    let s3_key = format!("writeups/{}", writeup_file_name);
 
-    // copy 会覆盖旧文件
-    std::fs::copy(writeup_file.file.path(), &writeup_file_path)
-        .map_err(|e| UniError::InternalError(format!("Failed to copy writeup file: {}", e)))?;
-    std::fs::set_permissions(&writeup_file_path, std::fs::Permissions::from_mode(0o644))
-        .map_err(|e| UniError::InternalError(format!("Failed to set permissions: {}", e)))?;
+    let body = ByteStream::from(
+        tokio::fs::read(&writeup_file.file.path())
+            .await
+            .map_err(|e| UniError::InternalError(format!("Failed to read writeup file: {}", e)))?,
+    );
+
+    ctx.rustfs
+        .put_object()
+        .bucket("floatctf-private")
+        .key(&s3_key)
+        .body(body)
+        .content_type("application/pdf")
+        .send()
+        .await
+        .map_err(|e| UniError::InternalError(format!("Failed to upload writeup to S3: {}", e)))?;
 
     // 插入或更新数据库
     use sea_orm::sea_query::OnConflict;
@@ -123,7 +125,7 @@ pub async fn submit_writeup(
         event_id: Set(event_id),
         user_id: Set(user.id),
         team_id: Set(team_id),
-        file_url: Set(writeup_file_path.to_str().unwrap().to_string()),
+        file_url: Set(s3_key),
         ..Default::default()
     })
     .on_conflict(
