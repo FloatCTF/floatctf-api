@@ -9,6 +9,7 @@ fcmc = { path = "./fcmc" }
 actix-cors = "0.7.1"
 actix-multipart = "0.7.2"
 actix-web = "4"
+actix-ws = "0.3"
 anyhow = "1"
 argon2 = "0.5"
 async-trait = "0.1.89"
