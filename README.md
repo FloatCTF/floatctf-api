@@ -1967,3 +1967,8 @@ score = min_points + (base_points - min_points) * sqrt(decay / (decay + solves))
 Where:
 - `min_points = base_points * event_score_min_percent`
 - `decay` and `event_score_min_percent` are system settings
+
+
+## License
+本项目以 [GNU AGPLv3](LICENSE) 协议发布。
+Copyright (C) 2025-2026 fb0sh@outlook.com
