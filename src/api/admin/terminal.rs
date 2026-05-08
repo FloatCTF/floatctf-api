@@ -123,11 +123,12 @@ pub async fn terminal_ws(
                     // Check if this is a resize message
                     if let Ok(ctrl) = serde_json::from_str::<TerminalControl>(&text) {
                         if ctrl.r#type == "resize" {
-                            // Tell bash about the new terminal size via stty
+                            let rows = ctrl.rows.unwrap_or(24);
+                            let cols = ctrl.cols.unwrap_or(80);
+                            // Clear screen before stty so the echoed command is wiped
                             let cmd = format!(
-                                "stty rows {} cols {} 2>/dev/null\n",
-                                ctrl.rows.unwrap_or(24),
-                                ctrl.cols.unwrap_or(80)
+                                "printf '\\033[2J\\033[H'; stty rows {} cols {} 2>/dev/null\r",
+                                rows, cols
                             );
                             let _ = child_stdin.write_all(cmd.as_bytes()).await;
                             continue;
