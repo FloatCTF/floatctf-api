@@ -252,6 +252,28 @@ pub fn config(cfg: &mut ServiceConfig) {
             .service(logs::get_log),
     );
 
+    cfg.service(
+        scope("/docker")
+            // GET /api/admin/docker/containers
+            .service(docker::get_containers)
+            // POST /api/admin/docker/containers/{container_id}/stop
+            .service(docker::stop_container)
+            // POST /api/admin/docker/containers/{container_id}/start
+            .service(docker::start_container)
+            // DELETE /api/admin/docker/containers/{container_id}
+            .service(docker::delete_container)
+            // GET /api/admin/docker/images
+            .service(docker::get_images)
+            // DELETE /api/admin/docker/images/{image_id}
+            .service(docker::delete_image)
+            // GET /api/admin/docker/networks
+            .service(docker::get_networks)
+            // POST /api/admin/docker/networks
+            .service(docker::create_network)
+            // DELETE /api/admin/docker/networks/{network_id}
+            .service(docker::delete_network),
+    );
+
     // GET /api/admin/terminal/ws (WebSocket)
     cfg.service(scope("/terminal").service(terminal::terminal_ws));
 }
