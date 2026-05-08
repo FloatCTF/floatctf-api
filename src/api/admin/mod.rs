@@ -18,6 +18,7 @@ mod scheduled_tasks;
 mod settings;
 mod super_admin;
 mod system;
+mod terminal;
 mod users;
 mod weapons;
 use actix_web::web::{ServiceConfig, scope};
@@ -250,4 +251,7 @@ pub fn config(cfg: &mut ServiceConfig) {
             // GET /api/admin/logs/{log_id}
             .service(logs::get_log),
     );
+
+    // GET /api/admin/terminal/ws (WebSocket)
+    cfg.service(scope("/terminal").service(terminal::terminal_ws));
 }
