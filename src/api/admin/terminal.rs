@@ -33,9 +33,21 @@ pub async fn terminal_ws(
     // Upgrade to WebSocket
     let (res, mut session, mut msg_stream) = actix_ws::handle(&req, stream)?;
 
+    // Check if web terminal is enabled
+    let enable_web_terminal = std::env::var("ENABLE_WEB_TERMINAL")
+        .unwrap_or_else(|_| "0".to_string())
+        .parse::<i32>()
+        .unwrap_or(0);
+
+    if enable_web_terminal != 1 {
+        let _ = session
+            .text("\r\n\x1b[31m[ERROR] Web terminal is disabled. Please set ENABLE_WEB_TERMINAL=1 in .env and restart.\x1b[0m\r\n")
+            .await;
+        let _ = session.close(None).await;
+        return Ok(res);
+    }
+
     // Spawn bash inside script for PTY support
-    // macOS: script -q /dev/null bash --login
-    // Linux: script -q -c "bash --login" /dev/null
     let mut cmd = if cfg!(target_os = "macos") {
         let mut c = Command::new("script");
         c.arg("-q").arg("/dev/null").arg("bash").arg("--login");
