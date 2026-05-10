@@ -57,13 +57,20 @@ pub async fn remove_team(
     let dir = dir.into_inner();
     let deleted_count = event_teams::Entity::delete_many()
         .filter(event_teams::Column::EventId.eq(event_id))
-        .filter(event_teams::Column::Id.is_in(dir.id_list))
+        .filter(event_teams::Column::Id.is_in(dir.id_list.clone()))
         .exec(ctx.db.get_ref())
         .await?
         .rows_affected;
 
-    UniResponse::ok(deleted_count.into()).into()
+    let d = event_users::Entity::delete_many()
+        .filter(event_users::Column::EventId.eq(event_id))
+        .exec(ctx.db.get_ref())
+        .await?
+        .rows_affected;
+
+    UniResponse::ok((deleted_count + d).into()).into()
 }
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TeamMemberResult {
     pub username: String,

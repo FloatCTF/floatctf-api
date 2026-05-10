@@ -234,6 +234,8 @@ pub fn config(cfg: &mut ServiceConfig) {
         scope("/scheduled_tasks")
             // POST /api/admin/scheduled_tasks
             .service(scheduled_tasks::create_scheduled_task)
+            // POST /api/admin/scheduled_tasks/{task_id}/run
+            .service(scheduled_tasks::run_scheduled_task)
             // DELETE /api/admin/scheduled_tasks
             .service(scheduled_tasks::delete_scheduled_task)
             // PATCH /api/admin/scheduled_tasks/{task_id}

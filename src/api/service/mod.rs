@@ -119,8 +119,8 @@ pub fn config(cfg: &mut ServiceConfig) {
             .service(events::get_announcements)
             // GET /api/events/{event_id}/trend
             .service(events::get_trend)
-            // GET /api/events/{event_id}/submit_wp_status
-            .service(events::get_submit_wp_status)
+            // GET /api/events/{event_id}/own_wp
+            .service(events::get_own_wp)
             // POST /api/events/{event_id}/join
             .service(events::join_event)
             // POST /api/events/{event_id}/leave

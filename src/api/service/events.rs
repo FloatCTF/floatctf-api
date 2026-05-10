@@ -3,7 +3,10 @@ use std::str::FromStr;
 use sea_orm::Condition;
 
 use crate::{
-    api::{FilterMapping, apply_filters, prelude::*, service::calculate_next_dynamic_score},
+    api::{
+        FilterMapping, apply_filters, prelude::*, service::calculate_next_dynamic_score,
+        service::download::generate_presigned_download_url,
+    },
     entity::{
         challenges, event_announcements, event_challenge_solves, event_challenges,
         event_team_members, event_teams, event_users, event_writeup, events, instances,
@@ -1051,22 +1054,70 @@ pub async fn get_announcements(
     UniResponse::ok(announcements.into()).into()
 }
 
-/// GET /api/events/{event_id}/submit_wp_status
-#[get("/{event_id}/submit_wp_status")]
-
-pub async fn get_submit_wp_status(
-    _user: UserJwtGuard,
+#[get("/{event_id}/own_wp")]
+pub async fn get_own_wp(
+    user: UserJwtGuard,
     ctx: ReqCtx,
     event_id: Path<Uuid>,
-) -> UniResult<DateTime<FixedOffset>> {
-    let wp = event_writeup::Entity::find()
-        .filter(event_writeup::Column::EventId.eq(*event_id))
-        .order_by_desc(event_writeup::Column::CreatedAt)
+) -> UniResult<String> {
+    let user = user.into_inner();
+    let event = events::Entity::find_by_id(*event_id)
         .one(ctx.db.get_ref())
         .await?
-        .ok_or(UniError::NotFound("no wp".into()))?;
+        .ok_or(UniError::NotFound(format!("event {} not found", *event_id)))?;
 
-    UniResponse::ok(wp.created_at.into()).into()
+    let wp = match event.r#type {
+        EventType::JeopardyPractice => None,
+        EventType::JeopardySingle => {
+            let wp = event_writeup::Entity::find()
+                .filter(event_writeup::Column::EventId.eq(*event_id))
+                .filter(event_writeup::Column::UserId.eq(user.id))
+                .one(ctx.db.get_ref())
+                .await?;
+            wp
+        }
+        EventType::JeopardyTeam => {
+            let team_id = event_team_members::Entity::find()
+                .filter(event_team_members::Column::UserId.eq(user.id))
+                .one(ctx.db.get_ref())
+                .await?
+                .ok_or(UniError::CustomError("This member has no team!".into()))?
+                .team_id;
+
+            let wp = event_writeup::Entity::find()
+                .filter(event_writeup::Column::EventId.eq(*event_id))
+                .filter(event_writeup::Column::TeamId.eq(team_id))
+                .one(ctx.db.get_ref())
+                .await?;
+            wp
+        }
+        EventType::AwdTeam => {
+            let team_id = event_team_members::Entity::find()
+                .filter(event_team_members::Column::UserId.eq(user.id))
+                .one(ctx.db.get_ref())
+                .await?
+                .ok_or(UniError::CustomError("This member has no team!".into()))?
+                .team_id;
+
+            let wp = event_writeup::Entity::find()
+                .filter(event_writeup::Column::EventId.eq(*event_id))
+                .filter(event_writeup::Column::TeamId.eq(team_id))
+                .one(ctx.db.get_ref())
+                .await?;
+            wp
+        }
+    };
+
+    let file_url = wp.ok_or(UniError::NotFound("Has no wp".into()))?.file_url;
+    let signed_url = generate_presigned_download_url(
+        ctx.rustfs,
+        "floatctf-private",
+        &file_url,
+        5 * 60, // 5 minutes
+    )
+    .await
+    .map_err(|e| UniError::InternalError(format!("Failed to generate signed URL: {}", e)))?;
+    UniResponse::ok(Some(signed_url)).into()
 }
 
 pub enum EventStatus {

@@ -141,8 +141,11 @@ pub async fn get_challenge_set(
     _user: SuperAdminJwtGuard,
     ctx: ReqCtx,
     challenge_set_id: Path<Uuid>,
+    query_params: Query<QueryParams>,
 ) -> UniResult<Vec<challenges::Model>> {
     let challenge_set_id = challenge_set_id.into_inner();
+    let mut query_params = query_params.0;
+
     let challenge_set_items = challenge_set_items::Entity::find()
         .filter(challenge_set_items::Column::SetId.eq(challenge_set_id))
         .all(ctx.db.get_ref())
@@ -151,11 +154,27 @@ pub async fn get_challenge_set(
         .iter()
         .map(|item| item.challenge_id)
         .collect();
-    let challenges = challenges::Entity::find()
-        .filter(challenges::Column::Id.is_in(challenge_ids))
-        .all(ctx.db.get_ref())
-        .await?;
-    UniResponse::ok(challenges.into()).into()
+    let total_items = challenge_ids.len();
+
+    let (items, _total) = if let (Some(limit), Some(page)) =
+        (query_params.limit, query_params.page)
+    {
+        let stmt = challenges::Entity::find()
+            .filter(challenges::Column::Id.is_in(challenge_ids));
+        let total_pages = (total_items + limit as usize - 1) / limit as usize;
+        let page_index = page.saturating_sub(1).min(total_pages.saturating_sub(1) as u64);
+        let items = stmt.paginate(ctx.db.get_ref(), limit).fetch_page(page_index).await?;
+        (items, total_items)
+    } else {
+        let items = challenges::Entity::find()
+            .filter(challenges::Column::Id.is_in(challenge_ids))
+            .all(ctx.db.get_ref())
+            .await?;
+        (items, total_items)
+    };
+
+    query_params.total = Some(total_items);
+    UniResponse::ok_meta(items.into(), query_params.into()).into()
 }
 
 /// DELETE /api/admin/challenge_sets/{challenge_set_id}/challenges
