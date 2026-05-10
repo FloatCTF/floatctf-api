@@ -225,6 +225,29 @@ pub async fn get_scheduled_task(
     UniResponse::ok(model.into()).into()
 }
 
+/// POST /api/admin/scheduled_tasks/{task_id}/run
+#[post("/{task_id}/run")]
+pub async fn run_scheduled_task(
+    _user: SuperAdminJwtGuard,
+    ctx: ReqCtx,
+    task_id: Path<Uuid>,
+) -> UniResult<scheduled_tasks::Model> {
+    let task_id = task_id.into_inner();
+
+    let task = scheduled_tasks::Entity::find_by_id(task_id)
+        .one(ctx.db.get_ref())
+        .await?
+        .ok_or(UniError::NotFound(format!(" {} not exist", task_id)))?;
+
+    let mut m_task = task.into_active_model();
+    m_task.status = Set("pending".to_string());
+    m_task.execute_at = Set(Some(Utc::now().into()));
+    m_task.updated_at = Set(Utc::now().into());
+
+    let task = m_task.update(ctx.db.get_ref()).await?;
+    UniResponse::ok(task.into()).into()
+}
+
 /// DELETE /api/admin/scheduled_tasks
 #[delete("")]
 pub async fn delete_scheduled_task(
