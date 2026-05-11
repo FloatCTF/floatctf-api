@@ -41,7 +41,7 @@ jobs:
           OPENSSL_INCLUDE_DIR: /usr/local/musl/include
           OPENSSL_LIB_DIR: /usr/local/musl/lib64
           RUSTFLAGS: -C target-feature=+crt-static
-        run: cargo build --release --target x86_64-unknown-linux-musl
+        run: RUSTC_WRAPPER="" cargo build --release --target x86_64-unknown-linux-musl
 
       - name: Release
         uses: softprops/action-gh-release@v2
