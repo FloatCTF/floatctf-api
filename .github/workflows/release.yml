@@ -4,6 +4,11 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '要构建的 Tag（例如 v1.0.0），不填则使用当前最新 tag'
+        required: false
 
 jobs:
   build:
