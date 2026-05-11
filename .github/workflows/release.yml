@@ -8,12 +8,21 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "要构建的 Tag（例如 v1.0.0）"
+        description: "要发布的 Tag（例如 v0.2.9）"
         required: false
+
+permissions:
+  contents: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
+    env:
+      CARGO_TERM_COLOR: always
+      CARGO_INCREMENTAL: 0
+      CARGO_PROFILE_RELEASE_DEBUG: 0
+      RUSTFLAGS: "-C target-feature=+crt-static"
 
     steps:
       - name: Checkout
@@ -33,11 +42,12 @@ jobs:
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
+        with:
+          cache-all-crates: true
 
       - name: Build
         env:
           CC: musl-gcc
-          RUSTFLAGS: "-C target-feature=+crt-static"
         run: |
           RUSTC_WRAPPER="" cargo build \
             --release \
@@ -52,13 +62,15 @@ jobs:
           file target/x86_64-unknown-linux-musl/release/floatctf
           ldd target/x86_64-unknown-linux-musl/release/floatctf || true
 
-      - name: Rename artifact
+      - name: Prepare artifact
         run: |
-          mkdir dist
+          mkdir -p dist
           cp target/x86_64-unknown-linux-musl/release/floatctf \
              dist/floatctf-linux-amd64-musl
 
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          generate_release_notes: true
           files: dist/*
