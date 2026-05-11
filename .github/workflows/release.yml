@@ -62,15 +62,23 @@ jobs:
           file target/x86_64-unknown-linux-musl/release/floatctf
           ldd target/x86_64-unknown-linux-musl/release/floatctf || true
 
+      # =========================
+      # 核心修改点：在这里将 src/sql 目录打包并放入 dist
+      # =========================
       - name: Prepare artifact
         run: |
           mkdir -p dist
+          # 1. 复制二进制文件
           cp target/x86_64-unknown-linux-musl/release/floatctf \
              dist/floatctf-linux-amd64-musl
+          
+          # 2. 将 src/sql 目录打包成 sql.tar.gz，并放入 dist 目录
+          tar -czf dist/sql.tar.gz src/sql
 
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.tag || github.ref_name }}
           generate_release_notes: true
+          # 因为上面把 sql.tar.gz 放进了 dist 里面，所以这里的 dist/* 会自动把它一起传上去
           files: dist/*
