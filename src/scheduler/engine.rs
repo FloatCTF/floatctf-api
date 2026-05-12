@@ -1,4 +1,4 @@
-use crate::db::{WebDb, WebDocker};
+use crate::db::{WebDb, WebDocker, WebRustfs};
 use crate::entity::scheduled_tasks;
 use crate::log::LogService;
 use crate::scheduler::handlers;
@@ -28,16 +28,18 @@ pub trait TaskHandler: Send + Sync {
 pub struct TaskScheduler {
     db: WebDb,
     docker: WebDocker,
+    rustfs: WebRustfs,
     logger: LogService,
     handlers: HashMap<String, Arc<dyn TaskHandler>>,
 }
 
 impl TaskScheduler {
-    pub fn new(db: WebDb, docker: WebDocker, logger: LogService) -> Self {
+    pub fn new(db: WebDb, docker: WebDocker, rustfs: WebRustfs, logger: LogService) -> Self {
         Self {
             db,
             docker,
             logger,
+            rustfs,
             handlers: HashMap::new(),
         }
     }
@@ -261,6 +263,7 @@ impl TaskScheduler {
             db: self.db.clone(),
             docker: self.docker.clone(),
             logger: self.logger.clone(),
+            rustfs: self.rustfs.clone(),
             handlers: self.handlers.clone(),
         }
     }
@@ -281,11 +284,20 @@ impl TaskScheduler {
                     db: self.db.clone(),
                     docker: self.docker.clone(),
                 }),
-            ), // (
-               //     "另一个-UUID",
-               //     "Flag刷新",
-               //     Arc::new(handlers::FlagRefreshHandler {}),
-               // ),
+            ),
+            (
+                "00000000-0000-0000-0000-000000000002",
+                "RUSTFS文件清理",
+                Arc::new(handlers::CleanUnusedRustFSFilesHandler {
+                    db: self.db.clone(),
+                    rustfs: self.rustfs.clone(),
+                }),
+            ),
+            // (
+            //     "另一个-UUID",
+            //     "Flag刷新",
+            //     Arc::new(handlers::FlagRefreshHandler {}),
+            // ),
         ];
 
         for (id_str, name, handler) in startup_tasks {
