@@ -81,7 +81,12 @@ async fn main() -> std::io::Result<()> {
     let log_service = LogService::new(db.clone());
 
     // task scheduler
-    let mut task_scheduler = TaskScheduler::new(db.clone(), docker.clone(), log_service.clone());
+    let mut task_scheduler = TaskScheduler::new(
+        db.clone(),
+        docker.clone(),
+        rustfs.clone(),
+        log_service.clone(),
+    );
 
     task_scheduler
         .init_startup_handlers()

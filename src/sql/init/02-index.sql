@@ -37,14 +37,12 @@ CREATE INDEX IF NOT EXISTS "idx_event_team_members_user_id" ON "event_team_membe
 
 CREATE INDEX "idx_event_user_challenge" ON "event_instances" (
     "event_id",
-    "user_id",
-    "challenge_id"
+    "user_id"
 );
 
 CREATE INDEX "idx_event_team_challenge" ON "event_instances" (
     "event_id",
-    "team_id",
-    "challenge_id"
+    "team_id"
 );
 
 -- 2. 调度器专用的极速轮询索引 (极其重要)

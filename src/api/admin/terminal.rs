@@ -47,14 +47,25 @@ pub async fn terminal_ws(
         return Ok(res);
     }
 
-    // Spawn bash inside script for PTY support
+    // Find best available shell: fish > zsh > bash > sh
+    let (shell, login_arg) = find_shell();
+
+    // Spawn shell inside script for PTY support
     let mut cmd = if cfg!(target_os = "macos") {
         let mut c = Command::new("script");
-        c.arg("-q").arg("/dev/null").arg("bash").arg("--login");
+        c.arg("-q").arg("/dev/null").arg(shell);
+        if let Some(flag) = login_arg {
+            c.arg(flag);
+        }
         c
     } else {
         let mut c = Command::new("script");
-        c.arg("-q").arg("-c").arg("bash --login").arg("/dev/null");
+        let shell_cmd = if let Some(flag) = login_arg {
+            format!("{shell} {flag}")
+        } else {
+            shell.to_string()
+        };
+        c.arg("-q").arg("-c").arg(shell_cmd).arg("/dev/null");
         c
     };
 
@@ -173,6 +184,30 @@ pub async fn terminal_ws(
     });
 
     Ok(res)
+}
+
+/// Try shells in order: fish > zsh > bash > sh.
+/// Returns (shell_name, optional_login_flag).
+fn find_shell() -> (&'static str, Option<&'static str>) {
+    let candidates: &[(&str, Option<&str>)] = &[
+        ("fish", Some("--login")),
+        ("zsh", Some("--login")),
+        ("bash", Some("--login")),
+        ("sh", None),
+    ];
+    for &(shell, login) in candidates {
+        if std::process::Command::new(shell)
+            .arg("--version")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false)
+        {
+            return (shell, login);
+        }
+    }
+    ("sh", None)
 }
 
 #[derive(Debug, Deserialize)]

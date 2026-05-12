@@ -99,7 +99,6 @@ CREATE TABLE IF NOT EXISTS "challenges" (
 
 CREATE TABLE IF NOT EXISTS "challenge_solves" (
     "id" UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
-    "event_id" UUID NULL REFERENCES "events" ("id") ON DELETE CASCADE,
     "challenge_id" UUID NOT NULL REFERENCES "challenges" ("id") ON DELETE CASCADE,
     "user_id" UUID NOT NULL REFERENCES "users" ("id") ON DELETE CASCADE,
     "created_at" TIMESTAMPTZ NOT NULL DEFAULT now()

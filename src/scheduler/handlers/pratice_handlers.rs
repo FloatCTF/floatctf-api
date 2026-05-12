@@ -31,9 +31,9 @@ impl TaskHandler for CleanRunningInstancesHandler {
         "CLEAN_INSTANCES"
     }
     async fn run(&self, task: scheduled_tasks::Model) -> anyhow::Result<()> {
-        info!("[CLEAN_INSTANCES] CleanRunningInstancesHandler");
+        info!("{} CleanRunningInstancesHandler", self.task_key());
 
-        info!("[CLEAN_INSTANCES] task is running : {:?}", &task);
+        info!("{} task is running : {:?}", self.task_key(), &task);
 
         let instances_users = instances::Entity::find()
             .filter(instances::Column::Status.eq(InstanceStatus::Running))
@@ -48,13 +48,13 @@ impl TaskHandler for CleanRunningInstancesHandler {
             match event::common::destroy_instance(&self.db, &self.docker, instance.id, &user).await
             {
                 Ok(_) => {
-                    info!("[CLEAN_INSTANCES] Killed instance {}", instance.id);
+                    info!("{} Killed instance {}", self.task_key(), instance.id);
                 }
                 Err(e) => {
                     let mut m_instance = instance.into_active_model();
                     m_instance.status = Set(InstanceStatus::Failed);
                     let instance = m_instance.update(self.db.get_ref()).await?;
-                    error!("[CLEAN_INSTANCES] {}: But {} was killed!", e, instance.id);
+                    error!("{} {}: But {} was killed!", self.task_key(), e, instance.id);
                 }
             }
         }
@@ -81,7 +81,7 @@ impl TaskHandler for CheckPraticeEventHandler {
             .await?;
 
         if pratice_event.is_some() {
-            info!("[CHECK_PRATICE_EVENT] PraticeEvent already exists");
+            info!("{} PraticeEvent already exists", self.task_key());
             return Ok(());
         }
 
@@ -104,7 +104,8 @@ impl TaskHandler for CheckPraticeEventHandler {
         let pratice_event = pratice_event.insert(self.db.get_ref()).await?;
 
         info!(
-            "[CHECK_PRATICE_EVENT] Inserting pratice_event: {:?}",
+            "{} Inserting pratice_event: {:?}",
+            self.task_key(),
             pratice_event
         );
 
