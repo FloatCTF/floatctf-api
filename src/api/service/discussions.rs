@@ -14,6 +14,7 @@ pub struct DiscussionWithAuthor {
     pub discussion: discussions::Model,
     pub author_nickname: String,
     pub author_avatar: Option<String>,
+    pub is_liked: bool,
 }
 
 /// GET /api/discussions
@@ -79,6 +80,7 @@ pub async fn get_discussions(
                 author_nickname: author
                     .map_or_else(|| d.author_id.to_string(), |u| u.nickname.clone()),
                 author_avatar: author.and_then(|u| u.avatar.clone()),
+                is_liked: false,
                 discussion: d,
             }
         })
@@ -92,11 +94,12 @@ pub async fn get_discussions(
 /// GET /api/discussions/{discussion_id}
 #[get("/{discussion_id}")]
 pub async fn get_discussion(
-    _user: UserJwtGuard,
+    user: UserJwtGuard,
     ctx: ReqCtx,
     path: Path<Uuid>,
 ) -> UniResult<DiscussionWithAuthor> {
     let discussion_id = path.into_inner();
+    let user = user.into_inner();
 
     let discussion = discussions::Entity::find_by_id(discussion_id)
         .one(ctx.db.get_ref())
@@ -116,15 +119,27 @@ pub async fn get_discussion(
         .map_or_else(|| discussion.author_id.to_string(), |u| u.nickname.clone());
     let author_avatar = author.and_then(|u| u.avatar.clone());
 
-    // Increment view count
-    let new_view_count = discussion.view_count + 1;
+    // Check if current user has liked this discussion
+    let existing_like = discussion_likes::Entity::find()
+        .filter(discussion_likes::Column::DiscussionId.eq(discussion_id))
+        .filter(discussion_likes::Column::UserId.eq(user.id))
+        .one(ctx.db.get_ref())
+        .await?;
+    let is_liked = existing_like.is_some();
+
+    // Increment view count — only if viewer is not the author
+    let is_author = discussion.author_id == user.id;
+    let current_views = discussion.view_count;
     let mut m = discussion.into_active_model();
-    m.view_count = Set(new_view_count);
+    if !is_author {
+        m.view_count = Set(current_views + 1);
+    }
     let updated = m.update(ctx.db.get_ref()).await?;
 
     let result = DiscussionWithAuthor {
         author_nickname,
         author_avatar,
+        is_liked,
         discussion: updated,
     };
 

@@ -609,8 +609,10 @@ pub struct ChallengeScoreboard {
 }
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ScoreboardItem {
+    pub id: Uuid,
     pub no: u64,
     pub name: String,
+    pub avatar: Option<String>,
     pub score: f64,
     pub solved_count: u64,
     pub challenges: Vec<ChallengeScoreboard>,
@@ -723,8 +725,10 @@ pub async fn __get_scoreboard(db: WebDb, event_id: Uuid) -> anyhow::Result<Vec<S
                 let solved_count = challenges.iter().filter(|c| c.solved).count() as u64;
 
                 scoreboard.push(ScoreboardItem {
+                    id: user.id,
                     no: no as u64 + 1,
                     name: user.nickname.clone(),
+                    avatar: user.avatar.clone(),
                     score: event_user.points,
                     solved_count,
                     challenges,
@@ -810,8 +814,10 @@ pub async fn __get_scoreboard(db: WebDb, event_id: Uuid) -> anyhow::Result<Vec<S
                 let solved_count = challenges.iter().filter(|c| c.solved).count() as u64;
 
                 scoreboard.push(ScoreboardItem {
+                    id: event_team.id,
                     no: no as u64 + 1,
                     name: event_team.name.clone(),
+                    avatar: None,
                     score: event_team.points,
                     solved_count,
                     challenges,

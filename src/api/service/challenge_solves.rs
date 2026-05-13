@@ -75,15 +75,8 @@ pub async fn get_solves(
 
     query_params.total = Some(total_items);
 
-    // All solves belong to current user, fetch once
-    let user_model = users::Entity::find_by_id(user.id)
-        .one(ctx.db.get_ref())
-        .await?;
-
-    let nickname = user_model
-        .as_ref()
-        .map_or_else(|| user.id.to_string(), |u| u.nickname.clone());
-    let avatar = user_model.as_ref().and_then(|u| u.avatar.clone());
+    let nickname = user.nickname.clone();
+    let avatar = user.avatar.clone();
 
     let results: Vec<SolveResult> = items
         .into_iter()
