@@ -299,4 +299,3 @@ pub async fn reset_password(
 
     UniResponse::ok_none().into()
 }
-

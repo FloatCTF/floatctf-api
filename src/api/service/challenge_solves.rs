@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{collections::HashMap, str::FromStr};
 
 use sea_orm::Condition;
 
@@ -9,7 +9,14 @@ use crate::{
 };
 
 use chrono::{DateTime, FixedOffset};
-use std::collections::HashMap;
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SolveResult {
+    #[serde(flatten)]
+    pub solve: challenge_solves::Model,
+    pub nickname: String,
+    pub avatar: Option<String>,
+}
 
 /// GET /api/challenge_solves
 #[get("")]
@@ -17,7 +24,7 @@ pub async fn get_solves(
     user: UserJwtGuard,
     ctx: ReqCtx,
     query_params: Query<QueryParams>,
-) -> UniResult<Vec<challenge_solves::Model>> {
+) -> UniResult<Vec<SolveResult>> {
     let user = user.into_inner();
     let mut query_params = query_params.0;
 
@@ -68,13 +75,26 @@ pub async fn get_solves(
 
     query_params.total = Some(total_items);
 
-    UniResponse::ok_meta(items.into(), query_params.into()).into()
+    let nickname = user.nickname.clone();
+    let avatar = user.avatar.clone();
+
+    let results: Vec<SolveResult> = items
+        .into_iter()
+        .map(|s| SolveResult {
+            nickname: nickname.clone(),
+            avatar: avatar.clone(),
+            solve: s,
+        })
+        .collect();
+
+    UniResponse::ok_meta(results.into(), query_params.into()).into()
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TopUser {
     no: usize,
     nickname: String,
+    avatar: Option<String>,
     solved_count: u64,
     solved_last_at: DateTime<FixedOffset>,
 }
@@ -102,11 +122,11 @@ pub async fn get_top_15_users(_user: UserJwtGuard, ctx: ReqCtx) -> UniResult<Vec
             .or_insert((1, s.created_at));
     }
 
-    // 3. 查昵称
+    // 3. 查昵称和头像
     let mut result = Vec::new();
     for (uid, (count, last)) in stats {
         if let Some(user) = users::Entity::find_by_id(uid).one(ctx.db.get_ref()).await? {
-            result.push((user.nickname, count, last));
+            result.push((user.nickname, user.avatar, count, last));
         }
     }
 
@@ -121,9 +141,10 @@ pub async fn get_top_15_users(_user: UserJwtGuard, ctx: ReqCtx) -> UniResult<Vec
     let result: Vec<TopUser> = result
         .into_iter()
         .enumerate()
-        .map(|(idx, (nickname, count, last))| TopUser {
-            no: idx + 1, // 👈 排名
+        .map(|(idx, (nickname, avatar, count, last))| TopUser {
+            no: idx + 1,
             nickname,
+            avatar,
             solved_count: count,
             solved_last_at: last,
         })

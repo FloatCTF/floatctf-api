@@ -18,6 +18,8 @@ pub struct Model {
     pub email: String,
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: DateTimeWithTimeZone,
+    #[sea_orm(column_type = "Text", nullable)]
+    pub avatar: Option<String>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -26,6 +28,12 @@ pub enum Relation {
     ChallengeSolves,
     #[sea_orm(has_many = "super::challenge_writeup::Entity")]
     ChallengeWriteup,
+    #[sea_orm(has_many = "super::discussion_comments::Entity")]
+    DiscussionComments,
+    #[sea_orm(has_many = "super::discussion_likes::Entity")]
+    DiscussionLikes,
+    #[sea_orm(has_many = "super::discussions::Entity")]
+    Discussions,
     #[sea_orm(has_many = "super::event_challenge_solves::Entity")]
     EventChallengeSolves,
     #[sea_orm(has_many = "super::event_instances::Entity")]
@@ -53,6 +61,24 @@ impl Related<super::challenge_solves::Entity> for Entity {
 impl Related<super::challenge_writeup::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::ChallengeWriteup.def()
+    }
+}
+
+impl Related<super::discussion_comments::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::DiscussionComments.def()
+    }
+}
+
+impl Related<super::discussion_likes::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::DiscussionLikes.def()
+    }
+}
+
+impl Related<super::discussions::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Discussions.def()
     }
 }
 

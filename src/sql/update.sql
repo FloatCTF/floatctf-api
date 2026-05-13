@@ -1,1 +1,1 @@
-ALTER TYPE "event_type" ADD VALUE 'jeopardy_practice';
+ALTER TABLE users ADD COLUMN avatar TEXT DEFAULT NULL;

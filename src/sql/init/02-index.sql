@@ -66,3 +66,10 @@ CREATE INDEX idx_sys_logs_user_op ON "logs" ("user_id", "superadmin_id");
 CREATE INDEX idx_sys_logs_details ON "logs" USING GIN ("details");
 
 CREATE INDEX idx_event_logs_ip_address ON "event_logs" ("ip_address");
+
+
+CREATE INDEX idx_discussions_author ON "discussions"("author_id");
+CREATE INDEX idx_discussions_created ON "discussions"("created_at" DESC);
+CREATE INDEX idx_discussion_comments_discussion ON "discussion_comments"("discussion_id");
+CREATE INDEX idx_discussion_comments_author ON "discussion_comments"("author_id");
+CREATE INDEX idx_discussion_likes_discussion ON "discussion_likes"("discussion_id");

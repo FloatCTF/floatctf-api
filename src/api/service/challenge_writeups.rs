@@ -79,6 +79,7 @@ pub async fn create_challenge_writeup(
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ChallengeWriteupResult {
     pub nickname: String,
+    pub avatar: Option<String>,
     pub email: String,
     pub challenge: challenges::Model,
     pub writeup: challenge_writeup::Model,
@@ -113,6 +114,7 @@ pub async fn get_challenge_writeups(
 
         let result = ChallengeWriteupResult {
             nickname: user.nickname,
+            avatar: user.avatar.clone(),
             email: user.email,
             challenge: challenge.ok_or(UniError::NotFound(format!(
                 "Challenge {} not found",
@@ -157,6 +159,7 @@ pub async fn get_writeup(
 
     let result = ChallengeWriteupResult {
         nickname: user.nickname,
+        avatar: user.avatar.clone(),
         email: user.email,
         challenge: challenge.ok_or(UniError::NotFound(format!(
             "Challenge {} not found",
@@ -230,6 +233,7 @@ pub async fn get_writeups(
 
         let result = ChallengeWriteupResult {
             nickname: user.nickname,
+            avatar: user.avatar.clone(),
             email: user.email,
             challenge,
             writeup,
