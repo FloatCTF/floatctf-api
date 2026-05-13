@@ -17,6 +17,14 @@ pub struct DiscussionWithAuthor {
     pub is_liked: bool,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CommentWithAuthor {
+    #[serde(flatten)]
+    pub comment: discussion_comments::Model,
+    pub author_nickname: String,
+    pub author_avatar: Option<String>,
+}
+
 /// GET /api/discussions
 #[get("")]
 pub async fn get_discussions(
@@ -324,7 +332,7 @@ pub async fn get_discussion_comments(
     ctx: ReqCtx,
     path: Path<Uuid>,
     query_params: Query<QueryParams>,
-) -> UniResult<Vec<discussion_comments::Model>> {
+) -> UniResult<Vec<CommentWithAuthor>> {
     let discussion_id = path.into_inner();
     let mut query_params = query_params.0;
 
@@ -340,9 +348,34 @@ pub async fn get_discussion_comments(
             (items.clone(), items.len())
         };
 
+    // Fetch author info
+    let authors: Vec<users::Model> = if !items.is_empty() {
+        let author_ids: Vec<Uuid> = items.iter().map(|c| c.author_id).collect();
+        users::Entity::find()
+            .filter(users::Column::Id.is_in(author_ids))
+            .all(ctx.db.get_ref())
+            .await?
+    } else {
+        Vec::new()
+    };
+    let author_map: HashMap<Uuid, &users::Model> = authors.iter().map(|u| (u.id, u)).collect();
+
+    let results: Vec<CommentWithAuthor> = items
+        .into_iter()
+        .map(|c| {
+            let author = author_map.get(&c.author_id);
+            CommentWithAuthor {
+                author_nickname: author
+                    .map_or_else(|| c.author_id.to_string(), |u| u.nickname.clone()),
+                author_avatar: author.and_then(|u| u.avatar.clone()),
+                comment: c,
+            }
+        })
+        .collect();
+
     query_params.total = Some(total_items);
 
-    UniResponse::ok_meta(items.into(), query_params.into()).into()
+    UniResponse::ok_meta(results.into(), query_params.into()).into()
 }
 
 #[derive(Debug, Serialize, Deserialize)]
