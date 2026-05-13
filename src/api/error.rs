@@ -17,6 +17,10 @@ pub enum UniError {
     CustomError(String),
     #[error("SQL Execution Error: {0}")]
     SQLError(String),
+    #[error("Bad Request: {0}")]
+    BadRequest(String),
+    #[error("Not Enough Permission")]
+    NotEnoughPermission,
 }
 
 impl UniError {
@@ -28,6 +32,8 @@ impl UniError {
             UniError::AuthError => 401,
             UniError::CustomError(_) => 400,
             UniError::SQLError(_) => 400,
+            UniError::BadRequest(_) => 400,
+            UniError::NotEnoughPermission => 403,
         }
     }
 
@@ -40,6 +46,19 @@ impl ResponseError for UniError {
     fn error_response(&self) -> HttpResponse {
         // HttpResponse::Ok().json(self.to_response())
         HttpResponse::build(self.status_code()).json(self.to_response())
+    }
+
+    fn status_code(&self) -> actix_web::http::StatusCode {
+        match self {
+            UniError::DatabaseError(_) => actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
+            UniError::InternalError(_) => actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
+            UniError::NotFound(_) => actix_web::http::StatusCode::NOT_FOUND,
+            UniError::AuthError => actix_web::http::StatusCode::UNAUTHORIZED,
+            UniError::CustomError(_) => actix_web::http::StatusCode::BAD_REQUEST,
+            UniError::SQLError(_) => actix_web::http::StatusCode::BAD_REQUEST,
+            UniError::BadRequest(_) => actix_web::http::StatusCode::BAD_REQUEST,
+            UniError::NotEnoughPermission => actix_web::http::StatusCode::FORBIDDEN,
+        }
     }
 }
 

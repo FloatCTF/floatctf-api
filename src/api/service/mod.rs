@@ -3,6 +3,7 @@ mod challenge_sets;
 mod challenge_solves;
 mod challenge_writeups;
 mod challenges;
+mod discussions;
 mod download;
 mod events;
 mod instances;
@@ -26,8 +27,39 @@ pub fn config(cfg: &mut ServiceConfig) {
     // GET /api/announcements
     cfg.service(scope("/announcements").service(announcements::get_announcements));
 
+    // GET /api/discussions
+    cfg.service(
+        scope("/discussions")
+            // GET /api/discussions
+            .service(discussions::get_discussions)
+            // GET /api/discussions/{discussion_id}
+            .service(discussions::get_discussion)
+            // POST /api/discussions
+            .service(discussions::create_discussion)
+            // PATCH /api/discussions/{discussion_id}
+            .service(discussions::patch_discussion)
+            // DELETE /api/discussions/{discussion_id}
+            .service(discussions::delete_discussion)
+            // POST /api/discussions/{discussion_id}/like
+            .service(discussions::like_discussion)
+            // DELETE /api/discussions/{discussion_id}/like
+            .service(discussions::unlike_discussion)
+            // GET /api/discussions/{discussion_id}/comments
+            .service(discussions::get_discussion_comments)
+            // POST /api/discussions/{discussion_id}/comments
+            .service(discussions::create_comment)
+            // PATCH /api/discussions/{discussion_id}/comments/{comment_id}
+            .service(discussions::patch_comment)
+            // DELETE /api/discussions/{discussion_id}/comments/{comment_id}
+            .service(discussions::delete_comment),
+    );
+
     // POST /api/uploads/image
-    cfg.service(scope("/uploads").service(uploads::upload_image));
+    cfg.service(
+        scope("/uploads")
+            .service(uploads::upload_image)
+            .service(uploads::upload_avatar),
+    );
     cfg.service(
         scope("/users")
             // POST /api/users/session

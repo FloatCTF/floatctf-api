@@ -52,3 +52,40 @@ pub async fn upload_image(
     let render_path = format!("/public/{}", image_path);
     UniResponse::ok(render_path.into()).into()
 }
+
+// PATCH /api/uploads/avatar
+#[patch("/avatar")]
+pub async fn upload_avatar(
+    user: UserJwtGuard,
+    ctx: ReqCtx,
+    MultipartForm(form): MultipartForm<ImageForm>,
+) -> UniResult<String> {
+    let user = user.into_inner();
+    let avatar_file = form.image_file;
+    let image_name = avatar_file.file_name.unwrap_or("avatar.png".to_string());
+    let image_path = gen_image_path(Some(&image_name));
+
+    let body = ByteStream::from(
+        tokio::fs::read(&avatar_file.file.path())
+            .await
+            .map_err(|e| UniError::InternalError(format!("Failed to read avatar file: {}", e)))?,
+    );
+
+    ctx.rustfs
+        .put_object()
+        .bucket("floatctf-public")
+        .key(&image_path)
+        .body(body)
+        .send()
+        .await
+        .map_err(|e| UniError::InternalError(format!("Failed to upload avatar to S3: {}", e)))?;
+
+    let avatar_url = format!("/public/{}", image_path);
+
+    // Update user's avatar
+    let mut m_user = user.into_active_model();
+    m_user.avatar = Set(Some(avatar_url.clone()));
+    m_user.update(ctx.db.get_ref()).await?;
+
+    UniResponse::ok(avatar_url.into()).into()
+}

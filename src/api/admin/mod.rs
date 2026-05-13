@@ -2,6 +2,7 @@ mod announcements;
 mod challenge_sets;
 mod challenges;
 mod database;
+mod discussions;
 mod docker;
 mod download;
 mod dto;
@@ -48,6 +49,20 @@ pub fn config(cfg: &mut ServiceConfig) {
             .service(announcements::delete_announcement)
             // PATCH /api/admin/announcements/{announcement_id}
             .service(announcements::patch_announcement),
+    );
+
+    cfg.service(
+        scope("/discussions")
+            // GET /api/admin/discussions
+            .service(discussions::get_discussions)
+            // GET /api/admin/discussions/{discussion_id}
+            .service(discussions::get_discussion)
+            // DELETE /api/admin/discussions
+            .service(discussions::delete_discussions)
+            // GET /api/admin/discussions/{discussion_id}/comments
+            .service(discussions::get_discussion_comments)
+            // DELETE /api/admin/discussions/{discussion_id}/comments/{comment_id}
+            .service(discussions::delete_comment),
     );
 
     cfg.service(

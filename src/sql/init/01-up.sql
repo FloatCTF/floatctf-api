@@ -327,3 +327,37 @@ CREATE TABLE IF NOT EXISTS "logs" (
     -- 4. 时间
     "created_at" TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+
+-- 讨论帖子表
+CREATE TABLE IF NOT EXISTS "discussions" (
+    "id" UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    "title" TEXT NOT NULL,
+    "content" TEXT NOT NULL,
+    "author_id" UUID NOT NULL REFERENCES "users" ("id") ON DELETE CASCADE,
+    "view_count" INT NOT NULL DEFAULT 0,
+    "like_count" INT NOT NULL DEFAULT 0,
+    "comment_count" INT NOT NULL DEFAULT 0,
+    "created_at" TIMESTAMPTZ NOT NULL DEFAULT now(),
+    "updated_at" TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 评论表（支持回复）
+CREATE TABLE IF NOT EXISTS "discussion_comments" (
+    "id" UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    "discussion_id" UUID NOT NULL REFERENCES "discussions" ("id") ON DELETE CASCADE,
+    "author_id" UUID NOT NULL REFERENCES "users" ("id") ON DELETE CASCADE,
+    "content" TEXT NOT NULL,
+    "parent_id" UUID REFERENCES "discussion_comments" ("id") ON DELETE CASCADE,  -- NULL 表示顶级评论
+    "created_at" TIMESTAMPTZ NOT NULL DEFAULT now(),
+    "updated_at" TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 点赞表（防止重复点赞）
+CREATE TABLE IF NOT EXISTS "discussion_likes" (
+    "id" UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    "discussion_id" UUID NOT NULL REFERENCES "discussions" ("id") ON DELETE CASCADE,
+    "user_id" UUID NOT NULL REFERENCES "users" ("id") ON DELETE CASCADE,
+    "created_at" TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE ("discussion_id", "user_id")
+);
