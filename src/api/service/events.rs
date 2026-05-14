@@ -422,6 +422,7 @@ pub async fn create_team(
         return Err(UniError::CustomError("already joined team".to_string()));
     }
 
+    let team_name = cut.name.clone();
     let team = event_teams::ActiveModel {
         name: Set(cut.name),
         event_id: Set(event_id),
@@ -445,6 +446,18 @@ pub async fn create_team(
         ..Default::default()
     };
     new_event_team_member.insert(ctx.db.get_ref()).await?;
+
+    ctx.log
+        .add_event_log(
+            &event,
+            "INFO",
+            "CREATE_TEAM",
+            json!({"team_name": team_name}),
+            Some(user.id),
+            Some(team.id),
+            Some(&ctx.req),
+        )
+        .await;
 
     UniResponse::ok(team.into()).into()
 }
@@ -473,6 +486,19 @@ pub async fn quit_team(user: UserJwtGuard, ctx: ReqCtx, id: Path<(Uuid, Uuid)>) 
         .await?
         .ok_or(UniError::NotFound("You are not of the event".to_string()))?;
     event_user.delete(ctx.db.get_ref()).await?;
+
+    ctx.log
+        .add_log(
+            "INFO",
+            "EVENT",
+            "QUIT_TEAM",
+            format!("退出赛事 {} 的团队 {}", event_id, team_id).as_str(),
+            json!({}),
+            user.id.into(),
+            None,
+            Some(&ctx.req),
+        )
+        .await;
 
     UniResponse::ok_none().into()
 }
@@ -510,6 +536,19 @@ pub async fn join_team(user: UserJwtGuard, ctx: ReqCtx, id: Path<(Uuid, Uuid)>) 
     };
     new_event_user.insert(ctx.db.get_ref()).await?;
 
+    ctx.log
+        .add_log(
+            "INFO",
+            "EVENT",
+            "JOIN_TEAM",
+            format!("加入赛事 {} 的团队 {}", event_id, event_team.id).as_str(),
+            json!({"team_name": event_team.name}),
+            user.id.into(),
+            None,
+            Some(&ctx.req),
+        )
+        .await;
+
     UniResponse::ok_none().into()
 }
 
@@ -530,6 +569,19 @@ pub async fn leave_team(user: UserJwtGuard, ctx: ReqCtx, id: Path<(Uuid, Uuid)>)
     }
 
     team_member.delete(ctx.db.get_ref()).await?;
+
+    ctx.log
+        .add_log(
+            "INFO",
+            "EVENT",
+            "LEAVE_TEAM",
+            format!("离开赛事 {} 的团队 {}", event_id, team_id).as_str(),
+            json!({}),
+            user.id.into(),
+            None,
+            Some(&ctx.req),
+        )
+        .await;
 
     UniResponse::ok_none().into()
 }
@@ -568,6 +620,18 @@ pub async fn join_event(
 
     let user = new_event_user.insert(ctx.db.get_ref()).await?;
 
+    ctx.log
+        .add_event_log(
+            &event,
+            "INFO",
+            "JOIN_EVENT",
+            json!({}),
+            Some(user.user_id),
+            None,
+            Some(&ctx.req),
+        )
+        .await;
+
     UniResponse::ok(user.into()).into()
 }
 
@@ -597,6 +661,18 @@ pub async fn leave_event(user: UserJwtGuard, ctx: ReqCtx, id: Path<Uuid>) -> Uni
         .ok_or(UniError::NotFound("event user not found".to_string()))?;
 
     let event_user = event_user.delete(ctx.db.get_ref()).await?.rows_affected;
+
+    ctx.log
+        .add_event_log(
+            &event,
+            "INFO",
+            "LEAVE_EVENT",
+            json!({}),
+            Some(user.id),
+            None,
+            Some(&ctx.req),
+        )
+        .await;
 
     UniResponse::ok(event_user.into()).into()
 }

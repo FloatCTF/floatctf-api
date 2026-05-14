@@ -56,11 +56,38 @@ pub async fn submit_flag(
             &event_ctx,
             event::SubmitFlagRequest {
                 instance_id: sfr.instance_id,
-                flag: sfr.flag,
+                flag: sfr.flag.clone(),
             },
         )
         .await
         .map_err(|e| UniError::CustomError(format!("submit flag error: {}", e)))?;
+
+    if let Some(_event_id) = sfr.event_id {
+        ctx.log
+            .add_event_log(
+                &event_ctx.event,
+                "INFO",
+                "SUBMIT_FLAG",
+                json!({"flag": sfr.flag, "instance_id": sfr.instance_id}),
+                Some(event_ctx.user.id),
+                event_ctx.team.as_ref().map(|t| t.id),
+                Some(&ctx.req),
+            )
+            .await;
+    } else {
+        ctx.log
+            .add_log(
+                "INFO",
+                "SUBMIT",
+                "SUBMIT_FLAG",
+                format!("提交 Flag: {}", sfr.flag).as_str(),
+                json!({"instance_id": sfr.instance_id}),
+                event_ctx.user.id.into(),
+                None,
+                Some(&ctx.req),
+            )
+            .await;
+    }
 
     UniResponse::ok_none().into()
 }
@@ -141,6 +168,23 @@ pub async fn submit_writeup(
     )
     .exec(ctx.db.get_ref())
     .await?;
+
+    let event = events::Entity::find_by_id(event_id)
+        .one(ctx.db.get_ref())
+        .await?
+        .ok_or(UniError::NotFound("event not found".to_string()))?;
+
+    ctx.log
+        .add_event_log(
+            &event,
+            "INFO",
+            "SUBMIT_WRITEUP",
+            json!({"team_id": team_id}),
+            Some(user.id),
+            team_id,
+            Some(&ctx.req),
+        )
+        .await;
 
     UniResponse::ok_none().into()
 }

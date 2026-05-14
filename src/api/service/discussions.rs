@@ -170,6 +170,7 @@ pub async fn create_discussion(
     let cdr = cdr.into_inner();
     let user = user.into_inner();
 
+    let discussion_title = cdr.title.clone();
     let discussion = discussions::ActiveModel {
         title: Set(cdr.title),
         content: Set(cdr.content),
@@ -180,6 +181,18 @@ pub async fn create_discussion(
         ..Default::default()
     };
     let discussion = discussion.insert(ctx.db.get_ref()).await?;
+    ctx.log
+        .add_log(
+            "INFO",
+            "DISCUSSION",
+            "CREATE",
+            format!("创建讨论: {}", discussion_title).as_str(),
+            json!({}),
+            user.id.into(),
+            None,
+            Some(&ctx.req),
+        )
+        .await;
     UniResponse::ok(discussion.into()).into()
 }
 
@@ -222,6 +235,18 @@ pub async fn patch_discussion(
         m.content = Set(content);
     }
     let discussion = m.update(ctx.db.get_ref()).await?;
+    ctx.log
+        .add_log(
+            "INFO",
+            "DISCUSSION",
+            "UPDATE",
+            format!("编辑讨论: {}", discussion.title).as_str(),
+            json!({}),
+            user.id.into(),
+            None,
+            Some(&ctx.req),
+        )
+        .await;
     UniResponse::ok(discussion.into()).into()
 }
 
@@ -244,7 +269,20 @@ pub async fn delete_discussion(user: UserJwtGuard, ctx: ReqCtx, path: Path<Uuid>
         return UniError::NotEnoughPermission.into();
     }
 
+    let discussion_title = discussion.title.clone();
     discussion.delete(ctx.db.get_ref()).await?;
+    ctx.log
+        .add_log(
+            "INFO",
+            "DISCUSSION",
+            "DELETE",
+            format!("删除讨论: {}", discussion_title).as_str(),
+            json!({}),
+            user.id.into(),
+            None,
+            Some(&ctx.req),
+        )
+        .await;
     UniResponse::ok_none().into()
 }
 
@@ -283,10 +321,24 @@ pub async fn like_discussion(user: UserJwtGuard, ctx: ReqCtx, path: Path<Uuid>) 
     like.insert(ctx.db.get_ref()).await?;
 
     // Update like count
+    let discussion_title = discussion.title.clone();
     let new_like_count = discussion.like_count + 1;
     let mut m = discussion.into_active_model();
     m.like_count = Set(new_like_count);
     m.update(ctx.db.get_ref()).await?;
+
+    ctx.log
+        .add_log(
+            "INFO",
+            "DISCUSSION",
+            "LIKE",
+            format!("点赞讨论: {}", discussion_title).as_str(),
+            json!({}),
+            user.id.into(),
+            None,
+            Some(&ctx.req),
+        )
+        .await;
 
     UniResponse::ok_none().into()
 }
@@ -312,6 +364,7 @@ pub async fn unlike_discussion(user: UserJwtGuard, ctx: ReqCtx, path: Path<Uuid>
         .one(ctx.db.get_ref())
         .await?;
 
+    let discussion_title = discussion.title.clone();
     if let Some(like) = like {
         like.delete(ctx.db.get_ref()).await?;
 
@@ -320,6 +373,19 @@ pub async fn unlike_discussion(user: UserJwtGuard, ctx: ReqCtx, path: Path<Uuid>
         let mut m = discussion.into_active_model();
         m.like_count = Set(new_like_count);
         m.update(ctx.db.get_ref()).await?;
+
+        ctx.log
+            .add_log(
+                "INFO",
+                "DISCUSSION",
+                "UNLIKE",
+                format!("取消点赞讨论: {}", discussion_title).as_str(),
+                json!({}),
+                user.id.into(),
+                None,
+                Some(&ctx.req),
+            )
+            .await;
     }
 
     UniResponse::ok_none().into()
@@ -432,10 +498,24 @@ pub async fn create_comment(
     let comment = comment.insert(ctx.db.get_ref()).await?;
 
     // Update comment count
+    let discussion_title = discussion.title.clone();
     let new_comment_count = discussion.comment_count + 1;
     let mut m = discussion.into_active_model();
     m.comment_count = Set(new_comment_count);
     m.update(ctx.db.get_ref()).await?;
+
+    ctx.log
+        .add_log(
+            "INFO",
+            "COMMENT",
+            "CREATE",
+            format!("评论讨论: {}", discussion_title).as_str(),
+            json!({}),
+            user.id.into(),
+            None,
+            Some(&ctx.req),
+        )
+        .await;
 
     UniResponse::ok(comment.into()).into()
 }
@@ -474,6 +554,18 @@ pub async fn patch_comment(
         m.content = Set(content);
     }
     let comment = m.update(ctx.db.get_ref()).await?;
+    ctx.log
+        .add_log(
+            "INFO",
+            "COMMENT",
+            "UPDATE",
+            format!("编辑评论 {}", comment_id).as_str(),
+            json!({}),
+            user.id.into(),
+            None,
+            Some(&ctx.req),
+        )
+        .await;
     UniResponse::ok(comment.into()).into()
 }
 
@@ -520,10 +612,24 @@ pub async fn delete_comment(
             discussion_id
         )))?;
 
+    let discussion_title = discussion.title.clone();
     let new_comment_count = (discussion.comment_count - 1).max(0);
     let mut m = discussion.into_active_model();
     m.comment_count = Set(new_comment_count);
     m.update(ctx.db.get_ref()).await?;
+
+    ctx.log
+        .add_log(
+            "INFO",
+            "COMMENT",
+            "DELETE",
+            format!("删除评论 {} (讨论: {})", comment_id, discussion_title).as_str(),
+            json!({}),
+            user.id.into(),
+            None,
+            Some(&ctx.req),
+        )
+        .await;
 
     UniResponse::ok_none().into()
 }

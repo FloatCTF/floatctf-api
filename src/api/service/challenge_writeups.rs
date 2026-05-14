@@ -60,7 +60,20 @@ pub async fn create_challenge_writeup(
             let mut active = wp.into_active_model();
             active.content = Set(ccw.content);
             active.created_at = Set(chrono::Utc::now().into());
-            active.update(ctx.db.get_ref()).await?
+            let wp = active.update(ctx.db.get_ref()).await?;
+            ctx.log
+                .add_log(
+                    "INFO",
+                    "WRITEUP",
+                    "UPDATE",
+                    format!("更新题目 {} 的 Writeup", challenge_id).as_str(),
+                    json!({}),
+                    user.id.into(),
+                    None,
+                    Some(&ctx.req),
+                )
+                .await;
+            wp
         }
         None => {
             let active = challenge_writeup::ActiveModel {
@@ -69,7 +82,20 @@ pub async fn create_challenge_writeup(
                 content: Set(ccw.content),
                 ..Default::default()
             };
-            active.insert(ctx.db.get_ref()).await?
+            let wp = active.insert(ctx.db.get_ref()).await?;
+            ctx.log
+                .add_log(
+                    "INFO",
+                    "WRITEUP",
+                    "CREATE",
+                    format!("为题目 {} 创建 Writeup", challenge_id).as_str(),
+                    json!({}),
+                    user.id.into(),
+                    None,
+                    Some(&ctx.req),
+                )
+                .await;
+            wp
         }
     };
 
