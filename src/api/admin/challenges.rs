@@ -29,10 +29,11 @@ pub struct CreateChallengeRequest {
 // POST /api/admin/challenges
 #[post("")]
 pub async fn create_challenge(
-    _user: SuperAdminJwtGuard,
+    user: SuperAdminJwtGuard,
     ctx: ReqCtx,
     ccr: Json<CreateChallengeRequest>,
 ) -> UniResult<challenges::Model> {
+    let user = user.into_inner();
     let ccr = ccr.into_inner();
 
     let new_challenge = challenges::ActiveModel {
@@ -46,6 +47,19 @@ pub async fn create_challenge(
     };
 
     let challenge = new_challenge.insert(ctx.db.get_ref()).await?;
+
+    ctx.log
+        .add_log(
+            "INFO",
+            "CHALLENGES",
+            "CREATE",
+            format!("{} 创建题目: {}", user.username, challenge.name).as_str(),
+            json!({"name": challenge.name, "category": challenge.category}),
+            None,
+            user.id.into(),
+            Some(&ctx.req),
+        )
+        .await;
 
     UniResponse::ok(challenge.into()).into()
 }
@@ -62,11 +76,12 @@ pub struct PatchChallengeRequest {
 /// PATCH /api/admin/challenges/{challenge_id}
 #[patch("/{challenge_id}")]
 pub async fn patch_challenge(
-    _user: SuperAdminJwtGuard,
+    user: SuperAdminJwtGuard,
     ctx: ReqCtx,
     pcr: Json<PatchChallengeRequest>,
     challenge_id: Path<Uuid>,
 ) -> UniResult<challenges::Model> {
+    let user = user.into_inner();
     let pcr = pcr.into_inner();
     let challenge_id = challenge_id.into_inner();
     let challenge = Challenges::find_by_id(challenge_id)
@@ -100,6 +115,19 @@ pub async fn patch_challenge(
     m_challenge.updated_at = Set(Utc::now().into());
 
     let challenge = m_challenge.update(ctx.db.get_ref()).await?;
+
+    ctx.log
+        .add_log(
+            "INFO",
+            "CHALLENGES",
+            "UPDATE",
+            format!("{} 更新题目: {}", user.username, challenge.name).as_str(),
+            json!({"challenge_id": challenge.id}),
+            None,
+            user.id.into(),
+            Some(&ctx.req),
+        )
+        .await;
 
     UniResponse::ok(challenge.into()).into()
 }
@@ -174,10 +202,11 @@ pub async fn get_challenge(
 /// DELETE /api/admin/challenges
 #[delete("")]
 pub async fn delete_challenge(
-    _user: SuperAdminJwtGuard,
+    user: SuperAdminJwtGuard,
     ctx: ReqCtx,
     dir: Json<DeleteItemsRequest>,
 ) -> UniResult<u64> {
+    let user = user.into_inner();
     let dir = dir.into_inner();
 
     let mut deleted_count = 0;
@@ -200,6 +229,19 @@ pub async fn delete_challenge(
         deleted_count += r.rows_affected;
     }
 
+    ctx.log
+        .add_log(
+            "INFO",
+            "CHALLENGES",
+            "DELETE",
+            format!("{} 删除 {} 道题目", user.username, deleted_count).as_str(),
+            json!({"deleted_count": deleted_count}),
+            None,
+            user.id.into(),
+            Some(&ctx.req),
+        )
+        .await;
+
     UniResponse::ok(deleted_count.into()).into()
 }
 
@@ -214,10 +256,11 @@ struct UploadForm {
 /// POST /api/admin/challenges/import
 #[post("/import")]
 pub async fn web_import_challenge(
-    _user: SuperAdminJwtGuard,
+    user: SuperAdminJwtGuard,
     ctx: ReqCtx,
     MultipartForm(form): MultipartForm<UploadForm>,
 ) -> UniResult<Vec<challenges::Model>> {
+    let user = user.into_inner();
     let mut will_insert_toml_strs = Vec::new();
     let mut inserted_challenges = Vec::new();
 
@@ -257,6 +300,24 @@ pub async fn web_import_challenge(
 
         inserted_challenges.push(challenge);
     }
+
+    ctx.log
+        .add_log(
+            "INFO",
+            "CHALLENGES",
+            "IMPORT",
+            format!(
+                "{} 导入 {} 道题目",
+                user.username,
+                inserted_challenges.len()
+            )
+            .as_str(),
+            json!({"count": inserted_challenges.len()}),
+            None,
+            user.id.into(),
+            Some(&ctx.req),
+        )
+        .await;
 
     UniResponse::ok(inserted_challenges.into()).into()
 }
@@ -451,10 +512,11 @@ pub struct BuildChallengeResult {
 
 #[post("/build")]
 pub async fn build_challenge(
-    _user: SuperAdminJwtGuard,
+    user: SuperAdminJwtGuard,
     ctx: ReqCtx,
     bcr: Json<BuildChallengeRequest>,
 ) -> UniResult<Vec<BuildChallengeResult>> {
+    let user = user.into_inner();
     let bcr = bcr.into_inner();
     let mut res = Vec::new();
     let mut challenge_id_list = Vec::new();
@@ -487,12 +549,27 @@ pub async fn build_challenge(
             .join("src");
 
         let build_result = cm.build_image(&ctx.docker, &context_path).await;
+        let is_ok = build_result.is_ok();
+        let message = build_result.map_or_else(|e| e.to_string(), |_| "ok".to_string());
 
         res.push(BuildChallengeResult {
-            challenge_name: challenge.name,
-            is_ok: build_result.is_ok(),
-            message: build_result.map_or_else(|e| e.to_string(), |_| "ok".to_string()),
+            challenge_name: challenge.name.clone(),
+            is_ok,
+            message,
         });
+
+        ctx.log
+            .add_log(
+                "INFO",
+                "CHALLENGES",
+                "BUILD",
+                format!("{} 构建题目镜像: {}", user.username, challenge.name).as_str(),
+                json!({"challenge_name": challenge.name, "success": is_ok}),
+                None,
+                user.id.into(),
+                Some(&ctx.req),
+            )
+            .await;
     }
 
     UniResponse::ok(res.into()).into()

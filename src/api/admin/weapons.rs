@@ -31,10 +31,11 @@ pub struct CreateWeaponRequest {
 /// POST /api/admin/weapons
 #[post("")]
 pub async fn create_weapon(
-    _user: SuperAdminJwtGuard,
+    user: SuperAdminJwtGuard,
     ctx: ReqCtx,
     cwr: Json<CreateWeaponRequest>,
 ) -> UniResult<weapons::Model> {
+    let user = user.into_inner();
     let cwr = cwr.into_inner();
 
     let weapon = weapons::ActiveModel {
@@ -47,6 +48,20 @@ pub async fn create_weapon(
         ..Default::default()
     };
     let weapon = weapon.insert(ctx.db.get_ref()).await?;
+
+    ctx.log
+        .add_log(
+            "INFO",
+            "WEAPONS",
+            "CREATE",
+            format!("{} 创建武器: {}", user.username, weapon.name).as_str(),
+            json!({"name": weapon.name, "category": weapon.category}),
+            None,
+            user.id.into(),
+            Some(&ctx.req),
+        )
+        .await;
+
     UniResponse::ok(weapon.into()).into()
 }
 
@@ -63,11 +78,12 @@ pub struct PatchWeaponRequest {
 /// PATCH /api/admin/weapons/{weapon_id}
 #[patch("/{weapon_id}")]
 pub async fn patch_weapon(
-    _user: SuperAdminJwtGuard,
+    user: SuperAdminJwtGuard,
     ctx: ReqCtx,
     weapon_id: Path<Uuid>,
     pwr: Json<PatchWeaponRequest>,
 ) -> UniResult<weapons::Model> {
+    let user = user.into_inner();
     let weapon_id = weapon_id.into_inner();
     let pwr = pwr.into_inner();
 
@@ -100,15 +116,30 @@ pub async fn patch_weapon(
     }
 
     let weapon = weapon.update(ctx.db.get_ref()).await?;
+
+    ctx.log
+        .add_log(
+            "INFO",
+            "WEAPONS",
+            "UPDATE",
+            format!("{} 更新武器: {}", user.username, weapon.name).as_str(),
+            json!({"weapon_id": weapon.id}),
+            None,
+            user.id.into(),
+            Some(&ctx.req),
+        )
+        .await;
+
     UniResponse::ok(weapon.into()).into()
 }
 
 #[delete("")]
 pub async fn delete_weapon(
-    _user: SuperAdminJwtGuard,
+    user: SuperAdminJwtGuard,
     ctx: ReqCtx,
     dir: Json<DeleteItemsRequest>,
 ) -> UniResult<u64> {
+    let user = user.into_inner();
     let dir = dir.into_inner();
 
     let deleted_count = weapons::Entity::delete_many()
@@ -116,6 +147,19 @@ pub async fn delete_weapon(
         .exec(ctx.db.get_ref())
         .await?
         .rows_affected;
+
+    ctx.log
+        .add_log(
+            "INFO",
+            "WEAPONS",
+            "DELETE",
+            format!("{} 删除 {} 个武器", user.username, deleted_count).as_str(),
+            json!({"deleted_count": deleted_count}),
+            None,
+            user.id.into(),
+            Some(&ctx.req),
+        )
+        .await;
 
     UniResponse::ok(deleted_count.into()).into()
 }
@@ -128,11 +172,12 @@ pub struct WeaponForm {
 // POST /api/admin/weapons/{weapon_id}/upload
 #[post("/{weapon_id}/upload")]
 pub async fn upload_weapon(
-    _user: SuperAdminJwtGuard,
+    user: SuperAdminJwtGuard,
     ctx: ReqCtx,
     weapon_id: Path<Uuid>,
     MultipartForm(form): MultipartForm<WeaponForm>,
 ) -> UniResult<()> {
+    let user = user.into_inner();
     let weapon_id = weapon_id.into_inner();
     let weapon_file = form.weapon;
     let file_name = weapon_file
@@ -167,6 +212,19 @@ pub async fn upload_weapon(
     weapon.has_file = Set(true);
     weapon.file_url = Set(s3_key);
     weapon.update(ctx.db.get_ref()).await?;
+
+    ctx.log
+        .add_log(
+            "INFO",
+            "WEAPONS",
+            "UPLOAD",
+            format!("{} 上传武器文件: {}", user.username, file_name).as_str(),
+            json!({"weapon_id": weapon_id, "file_name": file_name}),
+            None,
+            user.id.into(),
+            Some(&ctx.req),
+        )
+        .await;
 
     UniResponse::ok_none().into()
 }

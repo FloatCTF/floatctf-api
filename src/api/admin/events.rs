@@ -39,10 +39,11 @@ pub struct CreateEventRequest {
 /// POST /api/admin/events
 #[post("")]
 pub async fn create_event(
-    _user: SuperAdminJwtGuard,
+    user: SuperAdminJwtGuard,
     ctx: ReqCtx,
     cer: Json<CreateEventRequest>,
 ) -> UniResult<events::Model> {
+    let user = user.into_inner();
     let cer = cer.into_inner();
     info!("POST /api/admin/events\nCreate Event Request:{:?}", cer);
 
@@ -60,6 +61,19 @@ pub async fn create_event(
     };
 
     let event = new_event.insert(ctx.db.get_ref()).await?;
+
+    ctx.log
+        .add_log(
+            "INFO",
+            "EVENTS",
+            "CREATE",
+            format!("{} 创建比赛: {}", user.username, event.title).as_str(),
+            json!({"title": event.title, "type": event.r#type}),
+            None,
+            user.id.into(),
+            Some(&ctx.req),
+        )
+        .await;
 
     UniResponse::ok(event.into()).into()
 }
@@ -80,11 +94,12 @@ pub struct PatchEventRequest {
 /// PATCH /api/admin/events/{event_id}
 #[patch("/{event_id}")]
 pub async fn patch_event(
-    _user: SuperAdminJwtGuard,
+    user: SuperAdminJwtGuard,
     ctx: ReqCtx,
     per: Json<PatchEventRequest>,
     event_id: Path<Uuid>,
 ) -> UniResult<events::Model> {
+    let user = user.into_inner();
     let per = per.into_inner();
     let event_id = event_id.into_inner();
 
@@ -129,6 +144,19 @@ pub async fn patch_event(
     });
 
     let event = m_event.update(ctx.db.get_ref()).await?;
+
+    ctx.log
+        .add_log(
+            "INFO",
+            "EVENTS",
+            "UPDATE",
+            format!("{} 更新比赛: {}", user.username, event.title).as_str(),
+            json!({"event_id": event.id}),
+            None,
+            user.id.into(),
+            Some(&ctx.req),
+        )
+        .await;
 
     UniResponse::ok(event.into()).into()
 }
@@ -212,16 +240,30 @@ pub async fn get_event(
 /// DELETE /api/admin/events
 #[delete("")]
 pub async fn delete_event(
-    _user: SuperAdminJwtGuard,
+    user: SuperAdminJwtGuard,
     ctx: ReqCtx,
     dir: Json<DeleteItemsRequest>,
 ) -> UniResult<u64> {
+    let user = user.into_inner();
     let dir = dir.into_inner();
     let deleted_count = events::Entity::delete_many()
         .filter(events::Column::Id.is_in(dir.id_list))
         .exec(ctx.db.get_ref())
         .await?
         .rows_affected;
+
+    ctx.log
+        .add_log(
+            "INFO",
+            "EVENTS",
+            "DELETE",
+            format!("{} 删除 {} 场比赛", user.username, deleted_count).as_str(),
+            json!({"deleted_count": deleted_count}),
+            None,
+            user.id.into(),
+            Some(&ctx.req),
+        )
+        .await;
 
     UniResponse::ok(deleted_count.into()).into()
 }

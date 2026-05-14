@@ -22,10 +22,11 @@ pub struct CreateUserRequest {
 /// POST /api/admin/users
 #[post("")]
 pub async fn create_user(
-    _user: SuperAdminJwtGuard,
+    admin: SuperAdminJwtGuard,
     ctx: ReqCtx,
     cur: Json<CreateUserRequest>,
 ) -> UniResult<users::Model> {
+    let admin = admin.into_inner();
     let cur = cur.into_inner();
 
     let hashed_password = {
@@ -50,6 +51,19 @@ pub async fn create_user(
 
     let user = new_user.insert(ctx.db.get_ref()).await?;
 
+    ctx.log
+        .add_log(
+            "INFO",
+            "USERS",
+            "CREATE",
+            format!("{} 创建用户: {}", admin.username, user.username).as_str(),
+            json!({"username": user.username}),
+            None,
+            admin.id.into(),
+            Some(&ctx.req),
+        )
+        .await;
+
     UniResponse::ok(user.into()).into()
 }
 
@@ -64,11 +78,12 @@ pub struct PathUserRequest {
 /// PATCH /api/admin/users/{user_id}
 #[patch("/{user_id}")]
 pub async fn patch_user(
-    _user: SuperAdminJwtGuard,
+    admin: SuperAdminJwtGuard,
     ctx: ReqCtx,
     pur: Json<PathUserRequest>,
     user_id: Path<Uuid>,
 ) -> UniResult<users::Model> {
+    let admin = admin.into_inner();
     let pur = pur.into_inner();
     let user_id = user_id.into_inner();
     let user = users::Entity::find_by_id(user_id)
@@ -108,6 +123,19 @@ pub async fn patch_user(
     m_user.updated_at = Set(Utc::now().into());
 
     let user = m_user.update(ctx.db.get_ref()).await?;
+
+    ctx.log
+        .add_log(
+            "INFO",
+            "USERS",
+            "UPDATE",
+            format!("{} 更新用户: {}", admin.username, user.username).as_str(),
+            json!({"user_id": user.id}),
+            None,
+            admin.id.into(),
+            Some(&ctx.req),
+        )
+        .await;
 
     UniResponse::ok(user.into()).into()
 }
@@ -177,16 +205,31 @@ pub async fn get_user(
 /// DELETE /api/admin/users
 #[delete("")]
 pub async fn delete_user(
-    _user: SuperAdminJwtGuard,
+    admin: SuperAdminJwtGuard,
     ctx: ReqCtx,
     dir: Json<DeleteItemsRequest>,
 ) -> UniResult<u64> {
+    let admin = admin.into_inner();
     let dir = dir.into_inner();
     let deleted_count = users::Entity::delete_many()
         .filter(users::Column::Id.is_in(dir.id_list))
         .exec(ctx.db.get_ref())
         .await?
         .rows_affected;
+
+    ctx.log
+        .add_log(
+            "INFO",
+            "USERS",
+            "DELETE",
+            format!("{} 删除 {} 个用户", admin.username, deleted_count).as_str(),
+            json!({"deleted_count": deleted_count}),
+            None,
+            admin.id.into(),
+            Some(&ctx.req),
+        )
+        .await;
+
     UniResponse::ok(deleted_count.into()).into()
 }
 

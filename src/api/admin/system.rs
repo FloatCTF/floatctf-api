@@ -231,6 +231,10 @@ pub async fn get_changelog(_: SuperAdminJwtGuard) -> UniResult<String> {
     let changelog_path =
         std::env::var("SYSTEM_CHANGELOG_PATH").unwrap_or_else(|_| "./CHANGELOG.md".to_string());
     let changelog = std::fs::read_to_string(changelog_path).unwrap_or_default();
-    let changelog = env!("CARGO_PKG_VERSION").to_string() + "\n" + &changelog;
+    let changelog = format!(
+        "floatctf-api: {}\n{}",
+        env!("CARGO_PKG_VERSION"),
+        &changelog
+    );
     UniResponse::ok(changelog.into()).into()
 }

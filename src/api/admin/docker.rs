@@ -1,5 +1,6 @@
 use bollard::query_parameters::{
-    ListNetworksOptionsBuilder, RemoveContainerOptions, StartContainerOptions, StopContainerOptions,
+    ListImagesOptionsBuilder, ListNetworksOptionsBuilder, RemoveContainerOptions,
+    StartContainerOptions, StopContainerOptions,
 };
 
 use serde::{Deserialize, Serialize};
@@ -115,10 +116,11 @@ pub async fn get_containers(
 /// POST /api/admin/docker/containers/{container_id}/stop
 #[post("/containers/{container_id}/stop")]
 pub async fn stop_container(
-    _user: SuperAdminJwtGuard,
+    user: SuperAdminJwtGuard,
     ctx: ReqCtx,
     container_id: Path<String>,
 ) -> UniResult<()> {
+    let user = user.into_inner();
     let container_id = container_id.into_inner();
     let options = StopContainerOptions {
         t: Some(0),
@@ -128,31 +130,61 @@ pub async fn stop_container(
         .stop_container(&container_id, Some(options))
         .await
         .map_err(|e| UniError::CustomError(e.to_string()))?;
+
+    ctx.log
+        .add_log(
+            "INFO",
+            "DOCKER",
+            "STOP_CONTAINER",
+            format!("{} 停止容器: {}", user.username, container_id).as_str(),
+            json!({"container_id": container_id}),
+            None,
+            user.id.into(),
+            Some(&ctx.req),
+        )
+        .await;
+
     UniResponse::ok_none().into()
 }
 
 /// POST /api/admin/docker/containers/{container_id}/start
 #[post("/containers/{container_id}/start")]
 pub async fn start_container(
-    _user: SuperAdminJwtGuard,
+    user: SuperAdminJwtGuard,
     ctx: ReqCtx,
     container_id: Path<String>,
 ) -> UniResult<()> {
+    let user = user.into_inner();
     let container_id = container_id.into_inner();
     ctx.docker
         .start_container(&container_id, None::<StartContainerOptions>)
         .await
         .map_err(|e| UniError::CustomError(e.to_string()))?;
+
+    ctx.log
+        .add_log(
+            "INFO",
+            "DOCKER",
+            "START_CONTAINER",
+            format!("{} 启动容器: {}", user.username, container_id).as_str(),
+            json!({"container_id": container_id}),
+            None,
+            user.id.into(),
+            Some(&ctx.req),
+        )
+        .await;
+
     UniResponse::ok_none().into()
 }
 
 /// DELETE /api/admin/docker/containers/{container_id}
 #[delete("/containers/{container_id}")]
 pub async fn delete_container(
-    _user: SuperAdminJwtGuard,
+    user: SuperAdminJwtGuard,
     ctx: ReqCtx,
     container_id: Path<String>,
 ) -> UniResult<()> {
+    let user = user.into_inner();
     let container_id = container_id.into_inner();
     let options = RemoveContainerOptions {
         v: true,
@@ -163,6 +195,20 @@ pub async fn delete_container(
         .remove_container(&container_id, Some(options))
         .await
         .map_err(|e| UniError::CustomError(e.to_string()))?;
+
+    ctx.log
+        .add_log(
+            "INFO",
+            "DOCKER",
+            "DELETE_CONTAINER",
+            format!("{} 删除容器: {}", user.username, container_id).as_str(),
+            json!({"container_id": container_id}),
+            None,
+            user.id.into(),
+            Some(&ctx.req),
+        )
+        .await;
+
     UniResponse::ok_none().into()
 }
 
@@ -181,7 +227,7 @@ pub async fn get_images(
 
     let images = ctx
         .docker
-        .list_images(None::<bollard::image::ListImagesOptions<String>>)
+        .list_images(Some(ListImagesOptionsBuilder::default().build()))
         .await
         .map_err(|e| UniError::CustomError(e.to_string()))?;
 
@@ -210,10 +256,11 @@ pub async fn get_images(
 /// DELETE /api/admin/docker/images/{image_id}
 #[delete("/images/{image_id}")]
 pub async fn delete_image(
-    _user: SuperAdminJwtGuard,
+    user: SuperAdminJwtGuard,
     ctx: ReqCtx,
     image_id: Path<String>,
 ) -> UniResult<()> {
+    let user = user.into_inner();
     let image_id = image_id.into_inner();
     use bollard::auth::DockerCredentials;
     use bollard::query_parameters::{
@@ -227,6 +274,20 @@ pub async fn delete_image(
         )
         .await
         .map_err(|e| UniError::CustomError(e.to_string()))?;
+
+    ctx.log
+        .add_log(
+            "INFO",
+            "DOCKER",
+            "DELETE_IMAGE",
+            format!("{} 删除镜像: {}", user.username, image_id).as_str(),
+            json!({"image_id": image_id}),
+            None,
+            user.id.into(),
+            Some(&ctx.req),
+        )
+        .await;
+
     UniResponse::ok_none().into()
 }
 
@@ -295,10 +356,11 @@ pub async fn get_networks(
 /// POST /api/admin/docker/networks
 #[post("/networks")]
 pub async fn create_network(
-    _user: SuperAdminJwtGuard,
+    user: SuperAdminJwtGuard,
     ctx: ReqCtx,
     body: Json<CreateNetworkRequest>,
 ) -> UniResult<NetworkInfo> {
+    let user = user.into_inner();
     let body = body.into_inner();
 
     #[allow(deprecated)]
@@ -321,6 +383,19 @@ pub async fn create_network(
         .await
         .map_err(|e| UniError::CustomError(e.to_string()))?;
 
+    ctx.log
+        .add_log(
+            "INFO",
+            "DOCKER",
+            "CREATE_NETWORK",
+            format!("{} 创建网络: {}", user.username, body.name).as_str(),
+            json!({"name": body.name}),
+            None,
+            user.id.into(),
+            Some(&ctx.req),
+        )
+        .await;
+
     UniResponse::ok(
         NetworkInfo {
             name: body.name,
@@ -334,15 +409,30 @@ pub async fn create_network(
 /// DELETE /api/admin/docker/networks/{network_id}
 #[delete("/networks/{network_id}")]
 pub async fn delete_network(
-    _user: SuperAdminJwtGuard,
+    user: SuperAdminJwtGuard,
     ctx: ReqCtx,
     network_id: Path<String>,
 ) -> UniResult<()> {
+    let user = user.into_inner();
     let network_id = network_id.into_inner();
     ctx.docker
         .remove_network(&network_id)
         .await
         .map_err(|e| UniError::CustomError(e.to_string()))?;
+
+    ctx.log
+        .add_log(
+            "INFO",
+            "DOCKER",
+            "DELETE_NETWORK",
+            format!("{} 删除网络: {}", user.username, network_id).as_str(),
+            json!({"network_id": network_id}),
+            None,
+            user.id.into(),
+            Some(&ctx.req),
+        )
+        .await;
+
     UniResponse::ok_none().into()
 }
 

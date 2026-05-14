@@ -20,10 +20,12 @@ pub struct AddEventAnnouncementRequest {
 /// POST /api/admin/events/{event_id}/announcements
 #[post("")]
 pub async fn add_event_announcement(
+    user: SuperAdminJwtGuard,
     ctx: ReqCtx,
     event_id: Path<Uuid>,
     atr: Json<AddEventAnnouncementRequest>,
 ) -> UniResult<event_announcements::Model> {
+    let user = user.into_inner();
     let atr = atr.into_inner();
     let event_id = event_id.into_inner();
 
@@ -41,6 +43,19 @@ pub async fn add_event_announcement(
 
     let event_announcement = new_event_announcement.insert(ctx.db.get_ref()).await?;
 
+    ctx.log
+        .add_log(
+            "INFO",
+            "EVENT_ANNOUNCEMENTS",
+            "CREATE",
+            format!("{} 为比赛 {} 添加公告: {}", user.username, event.title, event_announcement.title).as_str(),
+            json!({"event_id": event.id, "title": event_announcement.title}),
+            None,
+            user.id.into(),
+            Some(&ctx.req),
+        )
+        .await;
+
     UniResponse::ok(event_announcement.into()).into()
 }
 
@@ -52,10 +67,12 @@ pub struct PatchEventAnnouncementRequest {
 /// PATCH /api/admin/events/{event_id}/announcements/{announcement_id}
 #[patch("/{announcement_id}")]
 pub async fn patch_event_announcement(
+    user: SuperAdminJwtGuard,
     ctx: ReqCtx,
     path: Path<(Uuid, Uuid)>,
     atr: Json<PatchEventAnnouncementRequest>,
 ) -> UniResult<event_announcements::Model> {
+    let user = user.into_inner();
     let (event_id, announcement_id) = path.into_inner();
     let atr = atr.into_inner();
 
@@ -71,16 +88,31 @@ pub async fn patch_event_announcement(
 
     let event_announcement = event_announcement.update(ctx.db.get_ref()).await?;
 
+    ctx.log
+        .add_log(
+            "INFO",
+            "EVENT_ANNOUNCEMENTS",
+            "UPDATE",
+            format!("{} 更新比赛公告", user.username).as_str(),
+            json!({"event_id": event_id, "announcement_id": announcement_id}),
+            None,
+            user.id.into(),
+            Some(&ctx.req),
+        )
+        .await;
+
     UniResponse::ok(event_announcement.into()).into()
 }
 
 /// DELETE /api/admin/events/{event_id}/announcements
 #[delete("")]
 pub async fn remove_event_announcement(
+    user: SuperAdminJwtGuard,
     ctx: ReqCtx,
     path: Path<Uuid>,
     dir: Json<DeleteItemsRequest>,
 ) -> UniResult<u64> {
+    let user = user.into_inner();
     let event_id = path.into_inner();
     let dir = dir.into_inner();
 
@@ -89,6 +121,19 @@ pub async fn remove_event_announcement(
         .filter(event_announcements::Column::Id.is_in(dir.id_list))
         .exec(ctx.db.get_ref())
         .await?;
+
+    ctx.log
+        .add_log(
+            "INFO",
+            "EVENT_ANNOUNCEMENTS",
+            "DELETE",
+            format!("{} 删除 {} 条比赛公告", user.username, deleted_count.rows_affected).as_str(),
+            json!({"event_id": event_id, "deleted_count": deleted_count.rows_affected}),
+            None,
+            user.id.into(),
+            Some(&ctx.req),
+        )
+        .await;
 
     UniResponse::ok(deleted_count.rows_affected.into()).into()
 }
