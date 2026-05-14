@@ -29,10 +29,11 @@ pub struct CreateSettingRequest {
 /// POST /api/admin/settings
 #[post("")]
 pub async fn create_setting(
-    _user: SuperAdminJwtGuard,
+    user: SuperAdminJwtGuard,
     ctx: ReqCtx,
     csr: Json<CreateSettingRequest>,
 ) -> UniResult<settings::Model> {
+    let user = user.into_inner();
     let csr = csr.into_inner();
 
     let setting = settings::ActiveModel {
@@ -44,6 +45,20 @@ pub async fn create_setting(
         ..Default::default()
     };
     let setting = setting.insert(ctx.db.get_ref()).await?;
+
+    ctx.log
+        .add_log(
+            "INFO",
+            "SETTINGS",
+            "CREATE",
+            format!("{} 创建设置: {}", user.username, setting.key).as_str(),
+            json!({"key": setting.key}),
+            None,
+            user.id.into(),
+            Some(&ctx.req),
+        )
+        .await;
+
     UniResponse::ok(setting.into()).into()
 }
 
@@ -59,11 +74,12 @@ pub struct PatchSettingRequest {
 /// PATCH /api/admin/settings/{setting_id}
 #[patch("/{setting_id}")]
 pub async fn patch_setting(
-    _user: SuperAdminJwtGuard,
+    user: SuperAdminJwtGuard,
     ctx: ReqCtx,
     setting_id: Path<Uuid>,
     psr: Json<PatchSettingRequest>,
 ) -> UniResult<settings::Model> {
+    let user = user.into_inner();
     let setting_id = setting_id.into_inner();
     let psr = psr.into_inner();
     let setting = settings::Entity::find_by_id(setting_id)
@@ -89,16 +105,31 @@ pub async fn patch_setting(
         m_setting.protected = Set(p);
     });
     let setting = m_setting.update(ctx.db.get_ref()).await?;
+
+    ctx.log
+        .add_log(
+            "INFO",
+            "SETTINGS",
+            "UPDATE",
+            format!("{} 更新设置: {}", user.username, setting.key).as_str(),
+            json!({"key": setting.key}),
+            None,
+            user.id.into(),
+            Some(&ctx.req),
+        )
+        .await;
+
     UniResponse::ok(setting.into()).into()
 }
 
 /// DELETE /api/admin/settings
 #[delete("")]
 pub async fn delete_setting(
-    _user: SuperAdminJwtGuard,
+    user: SuperAdminJwtGuard,
     ctx: ReqCtx,
     dir: Json<DeleteItemsRequest>,
 ) -> UniResult<u64> {
+    let user = user.into_inner();
     let dir = dir.into_inner();
     let mut deleted_count = 0;
     for setting_id in dir.id_list {
@@ -116,5 +147,19 @@ pub async fn delete_setting(
             deleted_count += r.rows_affected;
         }
     }
+
+    ctx.log
+        .add_log(
+            "INFO",
+            "SETTINGS",
+            "DELETE",
+            format!("{} 删除 {} 条设置", user.username, deleted_count).as_str(),
+            json!({"deleted_count": deleted_count}),
+            None,
+            user.id.into(),
+            Some(&ctx.req),
+        )
+        .await;
+
     UniResponse::ok(deleted_count.into()).into()
 }

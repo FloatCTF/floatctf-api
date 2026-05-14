@@ -71,6 +71,7 @@ pub async fn create_announcement(
     let car = car.into_inner();
     let user = user.into_inner();
     let publisher_id = user.id;
+    let admin_username = user.username.clone();
 
     // Lookup superadmin username by publisher_id
     let publisher = super_admin::Entity::find_by_id(publisher_id)
@@ -90,6 +91,20 @@ pub async fn create_announcement(
         ..Default::default()
     };
     let announcement = announcement.insert(ctx.db.get_ref()).await?;
+
+    ctx.log
+        .add_log(
+            "INFO",
+            "ANNOUNCEMENTS",
+            "CREATE",
+            format!("{} 创建公告: {}", admin_username, announcement.title).as_str(),
+            json!({"title": announcement.title}),
+            None,
+            user.id.into(),
+            Some(&ctx.req),
+        )
+        .await;
+
     UniResponse::ok(announcement.into()).into()
 }
 
@@ -102,11 +117,12 @@ pub struct PatchAnnouncementRequest {
 /// PATCH /api/admin/announcements/{announcement_id}
 #[patch("/{announcement_id}")]
 pub async fn patch_announcement(
-    _user: SuperAdminJwtGuard,
+    user: SuperAdminJwtGuard,
     ctx: ReqCtx,
     announcement_id: Path<Uuid>,
     par: Json<PatchAnnouncementRequest>,
 ) -> UniResult<announcements::Model> {
+    let user = user.into_inner();
     let announcement_id = announcement_id.into_inner();
     let par = par.into_inner();
     let announcement = announcements::Entity::find_by_id(announcement_id)
@@ -126,16 +142,31 @@ pub async fn patch_announcement(
         m_announcement.content = Set(c);
     });
     let announcement = m_announcement.update(ctx.db.get_ref()).await?;
+
+    ctx.log
+        .add_log(
+            "INFO",
+            "ANNOUNCEMENTS",
+            "UPDATE",
+            format!("{} 更新公告: {}", user.username, announcement.title).as_str(),
+            json!({"announcement_id": announcement.id}),
+            None,
+            user.id.into(),
+            Some(&ctx.req),
+        )
+        .await;
+
     UniResponse::ok(announcement.into()).into()
 }
 
 /// DELETE /api/admin/announcements
 #[delete("")]
 pub async fn delete_announcement(
-    _user: SuperAdminJwtGuard,
+    user: SuperAdminJwtGuard,
     ctx: ReqCtx,
     dir: Json<DeleteItemsRequest>,
 ) -> UniResult<u64> {
+    let user = user.into_inner();
     let dir = dir.into_inner();
     let mut deleted_count = 0;
     for announcement_id in dir.id_list {
@@ -147,5 +178,19 @@ pub async fn delete_announcement(
             deleted_count += r.rows_affected;
         }
     }
+
+    ctx.log
+        .add_log(
+            "INFO",
+            "ANNOUNCEMENTS",
+            "DELETE",
+            format!("{} 删除 {} 条公告", user.username, deleted_count).as_str(),
+            json!({"deleted_count": deleted_count}),
+            None,
+            user.id.into(),
+            Some(&ctx.req),
+        )
+        .await;
+
     UniResponse::ok(deleted_count.into()).into()
 }

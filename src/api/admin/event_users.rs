@@ -23,11 +23,12 @@ pub struct AddUserRequest {
 /// POST /api/admin/events/{event_id}/users
 #[post("")]
 pub async fn add_user(
-    _user: SuperAdminJwtGuard,
+    user: SuperAdminJwtGuard,
     ctx: ReqCtx,
     event_id: Path<Uuid>,
     aur: Json<AddUserRequest>,
 ) -> UniResult<()> {
+    let user = user.into_inner();
     let aur = aur.into_inner();
     let event_id = event_id.into_inner();
 
@@ -36,39 +37,68 @@ pub async fn add_user(
         .await?
         .ok_or(UniError::NotFound(format!(" {} not exist", event_id)))?;
 
+    let mut added_count = 0;
+
     if aur.user_id_list.is_some() {
         let user_id_list = aur.user_id_list.unwrap();
+        added_count = user_id_list.len();
         for user_id in user_id_list {
-            let user = users::Entity::find_by_id(user_id)
+            let u = users::Entity::find_by_id(user_id)
                 .one(ctx.db.get_ref())
                 .await?
                 .ok_or(UniError::NotFound(format!(" {} not exist", user_id)))?;
 
             let new_event_user = event_users::ActiveModel {
                 event_id: Set(event.id),
-                user_id: Set(user.id),
+                user_id: Set(u.id),
                 ..Default::default()
             };
 
             new_event_user.insert(ctx.db.get_ref()).await?;
         }
 
+        ctx.log
+            .add_log(
+                "INFO",
+                "EVENT_USERS",
+                "ADD",
+                format!("{} 为比赛 {} 添加 {} 名用户", user.username, event.title, added_count).as_str(),
+                json!({"event_id": event.id, "count": added_count}),
+                None,
+                user.id.into(),
+                Some(&ctx.req),
+            )
+            .await;
+
         return UniResponse::ok_none().into();
     }
     if aur.user_id.is_some() {
         let user_id = aur.user_id.unwrap();
-        let user = users::Entity::find_by_id(user_id)
+        let u = users::Entity::find_by_id(user_id)
             .one(ctx.db.get_ref())
             .await?
             .ok_or(UniError::NotFound(format!(" {} not exist", user_id)))?;
 
         let new_event_user = event_users::ActiveModel {
             event_id: Set(event.id),
-            user_id: Set(user.id),
+            user_id: Set(u.id),
             ..Default::default()
         };
 
         new_event_user.insert(ctx.db.get_ref()).await?;
+
+        ctx.log
+            .add_log(
+                "INFO",
+                "EVENT_USERS",
+                "ADD",
+                format!("{} 为比赛 {} 添加用户", user.username, event.title).as_str(),
+                json!({"event_id": event.id, "user_id": user_id}),
+                None,
+                user.id.into(),
+                Some(&ctx.req),
+            )
+            .await;
 
         return UniResponse::ok_none().into();
     }
@@ -79,11 +109,12 @@ pub async fn add_user(
 /// DELETE /api/admin/events/{event_id}/users
 #[delete("")]
 pub async fn remove_user(
-    _user: SuperAdminJwtGuard,
+    user: SuperAdminJwtGuard,
     ctx: ReqCtx,
     path: Path<Uuid>,
     dir: Json<DeleteItemsRequest>,
 ) -> UniResult<u64> {
+    let user = user.into_inner();
     let event_id = path.into_inner();
     let dir = dir.into_inner();
 
@@ -98,6 +129,19 @@ pub async fn remove_user(
         .exec(ctx.db.get_ref())
         .await?
         .rows_affected;
+
+    ctx.log
+        .add_log(
+            "INFO",
+            "EVENT_USERS",
+            "REMOVE",
+            format!("{} 从比赛移除 {} 名用户", user.username, deleted_count).as_str(),
+            json!({"event_id": event_id, "deleted_count": deleted_count}),
+            None,
+            user.id.into(),
+            Some(&ctx.req),
+        )
+        .await;
 
     UniResponse::ok(deleted_count.into()).into()
 }
@@ -205,10 +249,11 @@ pub async fn get_users(
 #[post("/{user_id}/banned")]
 
 pub async fn banned_user(
-    _user: SuperAdminJwtGuard,
+    user: SuperAdminJwtGuard,
     ctx: ReqCtx,
     path: Path<(Uuid, Uuid)>,
 ) -> UniResult<()> {
+    let user = user.into_inner();
     let (event_id, user_id) = path.into_inner();
 
     let event = events::Entity::find_by_id(event_id)
@@ -216,12 +261,12 @@ pub async fn banned_user(
         .await?
         .ok_or(UniError::NotFound(format!(" {} not exist", event_id)))?;
 
-    let user = users::Entity::find_by_id(user_id)
+    let u = users::Entity::find_by_id(user_id)
         .one(ctx.db.get_ref())
         .await?
         .ok_or(UniError::NotFound(format!(" {} not exist", user_id)))?;
 
-    let event_user = event_users::Entity::find_by_id((event.id, user.id))
+    let event_user = event_users::Entity::find_by_id((event.id, u.id))
         .one(ctx.db.get_ref())
         .await?
         .ok_or(UniError::NotFound(format!(
@@ -233,16 +278,30 @@ pub async fn banned_user(
     event_user.banned = Set(true);
     event_user.update(ctx.db.get_ref()).await?;
 
+    ctx.log
+        .add_log(
+            "INFO",
+            "EVENT_USERS",
+            "BAN",
+            format!("{} 封禁用户: {}", user.username, u.username).as_str(),
+            json!({"event_id": event_id, "user_id": user_id}),
+            None,
+            user.id.into(),
+            Some(&ctx.req),
+        )
+        .await;
+
     UniResponse::ok_none().into()
 }
 
 /// POST /api/admin/events/{event_id}/users/{user_id}/unbanned
 #[post("/{user_id}/unbanned")]
 pub async fn unbanned_user(
-    _user: SuperAdminJwtGuard,
+    user: SuperAdminJwtGuard,
     ctx: ReqCtx,
     path: Path<(Uuid, Uuid)>,
 ) -> UniResult<()> {
+    let user = user.into_inner();
     let (event_id, user_id) = path.into_inner();
 
     let event = events::Entity::find_by_id(event_id)
@@ -250,12 +309,12 @@ pub async fn unbanned_user(
         .await?
         .ok_or(UniError::NotFound(format!(" {} not exist", event_id)))?;
 
-    let user = users::Entity::find_by_id(user_id)
+    let u = users::Entity::find_by_id(user_id)
         .one(ctx.db.get_ref())
         .await?
         .ok_or(UniError::NotFound(format!(" {} not exist", user_id)))?;
 
-    let event_user = event_users::Entity::find_by_id((event.id, user.id))
+    let event_user = event_users::Entity::find_by_id((event.id, u.id))
         .one(ctx.db.get_ref())
         .await?
         .ok_or(UniError::NotFound(format!(
@@ -266,6 +325,19 @@ pub async fn unbanned_user(
     let mut event_user: event_users::ActiveModel = event_user.into();
     event_user.banned = Set(false);
     event_user.update(ctx.db.get_ref()).await?;
+
+    ctx.log
+        .add_log(
+            "INFO",
+            "EVENT_USERS",
+            "UNBAN",
+            format!("{} 解禁用户: {}", user.username, u.username).as_str(),
+            json!({"event_id": event_id, "user_id": user_id}),
+            None,
+            user.id.into(),
+            Some(&ctx.req),
+        )
+        .await;
 
     UniResponse::ok_none().into()
 }

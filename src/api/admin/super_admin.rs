@@ -17,10 +17,11 @@ pub struct CreateSuperAdminRequest {
 /// POST /api/admin/super_admin
 #[post("")]
 pub async fn create_super_admin(
-    _user: SuperAdminJwtGuard,
+    user: SuperAdminJwtGuard,
     ctx: ReqCtx,
     csr: Json<CreateSuperAdminRequest>,
 ) -> UniResult<super_admin::Model> {
+    let user = user.into_inner();
     let csr = csr.into_inner();
 
     let hashed_password = {
@@ -44,6 +45,19 @@ pub async fn create_super_admin(
 
     let super_admin = new_super_admin.insert(ctx.db.get_ref()).await?;
 
+    ctx.log
+        .add_log(
+            "INFO",
+            "SUPER_ADMIN",
+            "CREATE",
+            format!("{} 创建管理员: {}", user.username, super_admin.username).as_str(),
+            json!({"username": super_admin.username}),
+            None,
+            user.id.into(),
+            Some(&ctx.req),
+        )
+        .await;
+
     UniResponse::ok(super_admin.into()).into()
 }
 
@@ -57,11 +71,12 @@ pub struct PatchSuperAdminRequest {
 /// POST /api/admin/super_admin/{super_user_id}
 #[post("/{super_user_id}")]
 pub async fn patch_super_admin(
-    _user: SuperAdminJwtGuard,
+    user: SuperAdminJwtGuard,
     ctx: ReqCtx,
     psr: Json<PatchSuperAdminRequest>,
     super_user_id: Path<Uuid>,
 ) -> UniResult<super_admin::Model> {
+    let user = user.into_inner();
     let psr = psr.into_inner();
     let super_user_id = super_user_id.into_inner();
 
@@ -96,6 +111,19 @@ pub async fn patch_super_admin(
     });
 
     let super_admin = m_super_admin.update(ctx.db.get_ref()).await?;
+
+    ctx.log
+        .add_log(
+            "INFO",
+            "SUPER_ADMIN",
+            "UPDATE",
+            format!("{} 更新管理员: {}", user.username, super_admin.username).as_str(),
+            json!({"username": super_admin.username}),
+            None,
+            user.id.into(),
+            Some(&ctx.req),
+        )
+        .await;
 
     UniResponse::ok(super_admin.into()).into()
 }
@@ -144,16 +172,30 @@ pub async fn get_super_admin(
 /// DELETE /api/admin/super_admin
 #[delete("")]
 pub async fn delete_super_admin(
-    _user: SuperAdminJwtGuard,
+    user: SuperAdminJwtGuard,
     ctx: ReqCtx,
     dir: Json<DeleteItemsRequest>,
 ) -> UniResult<u64> {
+    let user = user.into_inner();
     let dir = dir.into_inner();
 
     let r = super_admin::Entity::delete_many()
         .filter(super_admin::Column::Id.is_in(dir.id_list))
         .exec(ctx.db.get_ref())
         .await?;
+
+    ctx.log
+        .add_log(
+            "INFO",
+            "SUPER_ADMIN",
+            "DELETE",
+            format!("{} 删除 {} 个管理员", user.username, r.rows_affected).as_str(),
+            json!({"deleted_count": r.rows_affected}),
+            None,
+            user.id.into(),
+            Some(&ctx.req),
+        )
+        .await;
 
     UniResponse::ok(r.rows_affected.into()).into()
 }

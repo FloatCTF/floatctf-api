@@ -50,6 +50,20 @@ pub async fn upload_image(
         .map_err(|e| UniError::InternalError(format!("Failed to upload image to S3: {}", e)))?;
 
     let render_path = format!("/public/{}", image_path);
+
+    ctx.log
+        .add_log(
+            "INFO",
+            "UPLOAD",
+            "UPLOAD_IMAGE",
+            format!("上传图片 {}", image_path).as_str(),
+            json!({}),
+            None,
+            None,
+            Some(&ctx.req),
+        )
+        .await;
+
     UniResponse::ok(render_path.into()).into()
 }
 
@@ -83,9 +97,23 @@ pub async fn upload_avatar(
     let avatar_url = format!("/public/{}", image_path);
 
     // Update user's avatar
+    let user_id = user.id;
     let mut m_user = user.into_active_model();
     m_user.avatar = Set(Some(avatar_url.clone()));
     m_user.update(ctx.db.get_ref()).await?;
+
+    ctx.log
+        .add_log(
+            "INFO",
+            "UPLOAD",
+            "UPLOAD_AVATAR",
+            format!("更新头像 {}", avatar_url).as_str(),
+            json!({}),
+            user_id.into(),
+            None,
+            Some(&ctx.req),
+        )
+        .await;
 
     UniResponse::ok(avatar_url.into()).into()
 }

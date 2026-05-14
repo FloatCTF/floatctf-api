@@ -27,10 +27,11 @@ pub struct CreateScheduledTaskRequest {
 /// POST /api/admin/scheduled_tasks
 #[post("")]
 pub async fn create_scheduled_task(
-    _user: SuperAdminJwtGuard,
+    user: SuperAdminJwtGuard,
     ctx: ReqCtx,
     ctr: Json<CreateScheduledTaskRequest>,
 ) -> UniResult<scheduled_tasks::Model> {
+    let user = user.into_inner();
     let ctr = ctr.into_inner();
     let now = Utc::now();
 
@@ -53,6 +54,20 @@ pub async fn create_scheduled_task(
     };
 
     let task = new_task.insert(ctx.db.get_ref()).await?;
+
+    ctx.log
+        .add_log(
+            "INFO",
+            "SCHEDULED_TASKS",
+            "CREATE",
+            format!("{} 创建定时任务: {}", user.username, task.task_name).as_str(),
+            json!({"task_name": task.task_name, "task_key": task.task_key}),
+            None,
+            user.id.into(),
+            Some(&ctx.req),
+        )
+        .await;
+
     UniResponse::ok(task.into()).into()
 }
 
@@ -76,11 +91,12 @@ pub struct PatchScheduledTaskRequest {
 /// PATCH /api/admin/scheduled_tasks/{task_id}
 #[patch("/{task_id}")]
 pub async fn patch_scheduled_task(
-    _user: SuperAdminJwtGuard,
+    user: SuperAdminJwtGuard,
     ctx: ReqCtx,
     task_id: Path<Uuid>,
     ptr: Json<PatchScheduledTaskRequest>,
 ) -> UniResult<scheduled_tasks::Model> {
+    let user = user.into_inner();
     let task_id = task_id.into_inner();
     let ptr = ptr.into_inner();
 
@@ -228,10 +244,11 @@ pub async fn get_scheduled_task(
 /// POST /api/admin/scheduled_tasks/{task_id}/run
 #[post("/{task_id}/run")]
 pub async fn run_scheduled_task(
-    _user: SuperAdminJwtGuard,
+    user: SuperAdminJwtGuard,
     ctx: ReqCtx,
     task_id: Path<Uuid>,
 ) -> UniResult<scheduled_tasks::Model> {
+    let user = user.into_inner();
     let task_id = task_id.into_inner();
 
     let task = scheduled_tasks::Entity::find_by_id(task_id)
@@ -245,16 +262,31 @@ pub async fn run_scheduled_task(
     m_task.updated_at = Set(Utc::now().into());
 
     let task = m_task.update(ctx.db.get_ref()).await?;
+
+    ctx.log
+        .add_log(
+            "INFO",
+            "SCHEDULED_TASKS",
+            "RUN",
+            format!("{} 手动执行定时任务: {}", user.username, task.task_name).as_str(),
+            json!({"task_id": task.id}),
+            None,
+            user.id.into(),
+            Some(&ctx.req),
+        )
+        .await;
+
     UniResponse::ok(task.into()).into()
 }
 
 /// DELETE /api/admin/scheduled_tasks
 #[delete("")]
 pub async fn delete_scheduled_task(
-    _user: SuperAdminJwtGuard,
+    user: SuperAdminJwtGuard,
     ctx: ReqCtx,
     dir: Json<DeleteItemsRequest>,
 ) -> UniResult<u64> {
+    let user = user.into_inner();
     let dir = dir.into_inner();
     let mut deleted_count = 0;
     for task_id in dir.id_list {
@@ -272,5 +304,19 @@ pub async fn delete_scheduled_task(
             deleted_count += r.rows_affected;
         }
     }
+
+    ctx.log
+        .add_log(
+            "INFO",
+            "SCHEDULED_TASKS",
+            "DELETE",
+            format!("{} 删除 {} 个定时任务", user.username, deleted_count).as_str(),
+            json!({"deleted_count": deleted_count}),
+            None,
+            user.id.into(),
+            Some(&ctx.req),
+        )
+        .await;
+
     UniResponse::ok(deleted_count.into()).into()
 }

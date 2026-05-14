@@ -82,10 +82,11 @@ pub async fn get_discussion(
 /// DELETE /api/admin/discussions
 #[delete("")]
 pub async fn delete_discussions(
-    _user: SuperAdminJwtGuard,
+    user: SuperAdminJwtGuard,
     ctx: ReqCtx,
     dir: Json<DeleteItemsRequest>,
 ) -> UniResult<u64> {
+    let user = user.into_inner();
     let dir = dir.into_inner();
     let mut deleted_count = 0;
     for discussion_id in dir.id_list {
@@ -97,6 +98,20 @@ pub async fn delete_discussions(
             deleted_count += r.rows_affected;
         }
     }
+
+    ctx.log
+        .add_log(
+            "INFO",
+            "DISCUSSIONS",
+            "DELETE",
+            format!("{} 删除 {} 条讨论", user.username, deleted_count).as_str(),
+            json!({"deleted_count": deleted_count}),
+            None,
+            user.id.into(),
+            Some(&ctx.req),
+        )
+        .await;
+
     UniResponse::ok(deleted_count.into()).into()
 }
 
@@ -131,10 +146,11 @@ pub async fn get_discussion_comments(
 /// DELETE /api/admin/discussions/{discussion_id}/comments/{comment_id}
 #[delete("/{discussion_id}/comments/{comment_id}")]
 pub async fn delete_comment(
-    _user: SuperAdminJwtGuard,
+    user: SuperAdminJwtGuard,
     ctx: ReqCtx,
     path: Path<(Uuid, Uuid)>,
 ) -> UniResult<()> {
+    let user = user.into_inner();
     let (discussion_id, comment_id) = path.into_inner();
 
     let comment = discussion_comments::Entity::find_by_id(comment_id)
@@ -151,5 +167,19 @@ pub async fn delete_comment(
     }
 
     comment.delete(ctx.db.get_ref()).await?;
+
+    ctx.log
+        .add_log(
+            "INFO",
+            "DISCUSSIONS",
+            "DELETE_COMMENT",
+            format!("{} 删除评论", user.username).as_str(),
+            json!({"comment_id": comment_id, "discussion_id": discussion_id}),
+            None,
+            user.id.into(),
+            Some(&ctx.req),
+        )
+        .await;
+
     UniResponse::ok_none().into()
 }

@@ -23,11 +23,12 @@ pub struct AddChallengeRequest {
 /// POST /api/admin/events/{event_id}/challenges
 #[post("")]
 pub async fn add_challenge(
-    _user: SuperAdminJwtGuard,
+    user: SuperAdminJwtGuard,
     ctx: ReqCtx,
     event_id: Path<Uuid>,
     acr: Json<AddChallengeRequest>,
 ) -> UniResult<Vec<event_challenges::Model>> {
+    let user = user.into_inner();
     let acr = acr.into_inner();
     let event_id = event_id.into_inner();
 
@@ -68,8 +69,6 @@ pub async fn add_challenge(
             // 不存在，执行插入
             let points = {
                 match toml::from_str::<toml::Value>(&challenge.toml_str) {
-                    // 只有 添加到 event_challenges 才会有 points
-                    // 所以这里的 points 是从 challenge.toml_str 中解析出来的
                     Ok(value) => value
                         .get("points")
                         .and_then(|v| v.as_float())
@@ -92,17 +91,31 @@ pub async fn add_challenge(
         }
     }
 
+    ctx.log
+        .add_log(
+            "INFO",
+            "EVENT_CHALLENGES",
+            "ADD",
+            format!("{} 为比赛 {} 添加 {} 道题目", user.username, event.title, event_challenges_list.len()).as_str(),
+            json!({"event_id": event.id, "count": event_challenges_list.len()}),
+            None,
+            user.id.into(),
+            Some(&ctx.req),
+        )
+        .await;
+
     UniResponse::ok(event_challenges_list.into()).into()
 }
 
 /// DELETE /api/admin/events/{event_id}/challenges
 #[delete("")]
 pub async fn remove_challenge(
-    _user: SuperAdminJwtGuard,
+    user: SuperAdminJwtGuard,
     ctx: ReqCtx,
     event_id: Path<Uuid>,
     dir: Json<DeleteItemsRequest>,
 ) -> UniResult<u64> {
+    let user = user.into_inner();
     let event_id = event_id.into_inner();
     let dir = dir.into_inner();
 
@@ -112,6 +125,19 @@ pub async fn remove_challenge(
         .exec(ctx.db.get_ref())
         .await?
         .rows_affected;
+
+    ctx.log
+        .add_log(
+            "INFO",
+            "EVENT_CHALLENGES",
+            "REMOVE",
+            format!("{} 从比赛移除 {} 道题目", user.username, deleted_count).as_str(),
+            json!({"event_id": event_id, "deleted_count": deleted_count}),
+            None,
+            user.id.into(),
+            Some(&ctx.req),
+        )
+        .await;
 
     UniResponse::ok(deleted_count.into()).into()
 }
@@ -226,11 +252,12 @@ pub type HiddenChallengeRequest = AddChallengeRequest;
 /// POST /api/admin/events/{event_id}/challenges/hidden
 #[post("/hidden")]
 pub async fn hidden_challenges(
-    _user: SuperAdminJwtGuard,
+    user: SuperAdminJwtGuard,
     ctx: ReqCtx,
     event_id: Path<Uuid>,
     hcr: Json<HiddenChallengeRequest>,
 ) -> UniResult<Vec<event_challenges::Model>> {
+    let user = user.into_inner();
     let hcr = hcr.into_inner();
     let event_id = event_id.into_inner();
     let event = events::Entity::find_by_id(event_id)
@@ -282,6 +309,19 @@ pub async fn hidden_challenges(
         }
     }
 
+    ctx.log
+        .add_log(
+            "INFO",
+            "EVENT_CHALLENGES",
+            "HIDE",
+            format!("{} 隐藏 {} 道题目", user.username, event_challenges_list.len()).as_str(),
+            json!({"event_id": event.id, "count": event_challenges_list.len()}),
+            None,
+            user.id.into(),
+            Some(&ctx.req),
+        )
+        .await;
+
     UniResponse::ok(event_challenges_list.into()).into()
 }
 
@@ -289,11 +329,12 @@ pub type OpenChallengeRequest = AddChallengeRequest;
 /// POST /api/admin/events/{event_id}/challenges/open
 #[post("/open")]
 pub async fn open_challenges(
-    _user: SuperAdminJwtGuard,
+    user: SuperAdminJwtGuard,
     ctx: ReqCtx,
     event_id: Path<Uuid>,
     ocr: Json<OpenChallengeRequest>,
 ) -> UniResult<Vec<event_challenges::Model>> {
+    let user = user.into_inner();
     let ocr = ocr.into_inner();
     let event_id = event_id.into_inner();
 
@@ -345,6 +386,19 @@ pub async fn open_challenges(
             event_challenges_list.push(event_challenge);
         }
     }
+
+    ctx.log
+        .add_log(
+            "INFO",
+            "EVENT_CHALLENGES",
+            "OPEN",
+            format!("{} 开放 {} 道题目", user.username, event_challenges_list.len()).as_str(),
+            json!({"event_id": event.id, "count": event_challenges_list.len()}),
+            None,
+            user.id.into(),
+            Some(&ctx.req),
+        )
+        .await;
 
     UniResponse::ok(event_challenges_list.into()).into()
 }

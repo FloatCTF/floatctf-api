@@ -22,9 +22,10 @@ pub struct SqlResult {
 #[post("/exec_sql")]
 async fn exec_sql(
     ctx: ReqCtx,
-    _user: SuperAdminJwtGuard,
+    user: SuperAdminJwtGuard,
     ss: Json<SqlStatement>,
 ) -> UniResult<SqlResult> {
+    let user = user.into_inner();
     let sql = ss.into_inner().sql;
 
     let sql_command = |sql: &str| {
@@ -65,13 +66,28 @@ async fn exec_sql(
             .await
         {
             Ok(res) => {
+                let elapsed = start_time.elapsed().as_millis();
+                let rows_affected = res.rows_affected();
+
+                ctx.log
+                    .add_log(
+                        "INFO",
+                        "DATABASE",
+                        "EXEC_SQL",
+                        format!("{} 执行 SQL, 影响 {} 行", user.username, rows_affected).as_str(),
+                        json!({"rows_affected": rows_affected, "elapsed_ms": elapsed}),
+                        None,
+                        user.id.into(),
+                        Some(&ctx.req),
+                    )
+                    .await;
+
                 return UniResponse::ok({
-                    let elapsed = start_time.elapsed().as_millis();
                     SqlResult {
                         sql_type: "exec".to_string(),
                         rows: vec![],
                         count: 0,
-                        rows_affected: res.rows_affected(),
+                        rows_affected,
                         elapsed_ms: elapsed,
                     }
                     .into()

@@ -22,10 +22,12 @@ pub struct AddTeamRequest {
 /// POST /api/admin/events/{event_id}/teams
 #[post("")]
 pub async fn add_team(
+    user: SuperAdminJwtGuard,
     ctx: ReqCtx,
     event_id: Path<Uuid>,
     atr: Json<AddTeamRequest>,
 ) -> UniResult<event_teams::Model> {
+    let user = user.into_inner();
     let atr = atr.into_inner();
     let event_id = event_id.into_inner();
 
@@ -43,16 +45,31 @@ pub async fn add_team(
 
     let event_team = new_event_team.insert(ctx.db.get_ref()).await?;
 
+    ctx.log
+        .add_log(
+            "INFO",
+            "EVENT_TEAMS",
+            "CREATE",
+            format!("{} 为比赛 {} 创建队伍: {}", user.username, event.title, event_team.name).as_str(),
+            json!({"event_id": event.id, "team_name": event_team.name}),
+            None,
+            user.id.into(),
+            Some(&ctx.req),
+        )
+        .await;
+
     UniResponse::ok(event_team.into()).into()
 }
 
 /// DELETE /api/admin/events/{event_id}/teams
 #[delete("")]
 pub async fn remove_team(
+    user: SuperAdminJwtGuard,
     ctx: ReqCtx,
     path: Path<Uuid>,
     dir: Json<DeleteItemsRequest>,
 ) -> UniResult<u64> {
+    let user = user.into_inner();
     let event_id = path.into_inner();
     let dir = dir.into_inner();
     let deleted_count = event_teams::Entity::delete_many()
@@ -67,6 +84,19 @@ pub async fn remove_team(
         .exec(ctx.db.get_ref())
         .await?
         .rows_affected;
+
+    ctx.log
+        .add_log(
+            "INFO",
+            "EVENT_TEAMS",
+            "DELETE",
+            format!("{} 删除 {} 支队伍", user.username, deleted_count).as_str(),
+            json!({"event_id": event_id, "deleted_count": deleted_count}),
+            None,
+            user.id.into(),
+            Some(&ctx.req),
+        )
+        .await;
 
     UniResponse::ok((deleted_count + d).into()).into()
 }
@@ -248,11 +278,12 @@ pub struct AddUserToTeamRequest {
 /// POST /api/admin/events/{event_id}/teams/{team_id}/users
 #[post("/{team_id}/users")]
 pub async fn add_user_to_team(
-    _user: SuperAdminJwtGuard,
+    user: SuperAdminJwtGuard,
     ctx: ReqCtx,
     path: Path<(Uuid, Uuid)>,
     utt: Json<AddUserToTeamRequest>,
 ) -> UniResult<event_team_members::Model> {
+    let user = user.into_inner();
     let (event_id, team_id) = path.into_inner();
     let user_id = utt.into_inner().user_id;
 
@@ -262,14 +293,14 @@ pub async fn add_user_to_team(
         .await?
         .ok_or(UniError::NotFound(format!(" {} not exist", team_id)))?;
 
-    let user = users::Entity::find_by_id(user_id)
+    let user_model = users::Entity::find_by_id(user_id)
         .one(ctx.db.get_ref())
         .await?
         .ok_or(UniError::NotFound(format!(" {} not exist", user_id)))?;
 
     let new_event_user = event_users::ActiveModel {
         event_id: Set(event_team.event_id),
-        user_id: Set(user.id),
+        user_id: Set(user_model.id),
         ..Default::default()
     };
 
@@ -278,11 +309,24 @@ pub async fn add_user_to_team(
     let new_team_user = event_team_members::ActiveModel {
         event_id: Set(event_team.event_id),
         team_id: Set(event_team.id),
-        user_id: Set(user.id),
+        user_id: Set(user_model.id),
         ..Default::default()
     };
 
     let team_user = new_team_user.insert(ctx.db.get_ref()).await?;
+
+    ctx.log
+        .add_log(
+            "INFO",
+            "EVENT_TEAMS",
+            "ADD_MEMBER",
+            format!("{} 将用户 {} 加入队伍 {}", user.username, user_model.username, event_team.name).as_str(),
+            json!({"team_id": team_id, "user_id": user_id}),
+            None,
+            user.id.into(),
+            Some(&ctx.req),
+        )
+        .await;
 
     UniResponse::ok(team_user.into()).into()
 }
@@ -290,11 +334,12 @@ pub async fn add_user_to_team(
 /// DELETE /api/admin/events/{event_id}/teams/{team_id}/users
 #[delete("/{team_id}/users")]
 pub async fn remove_user_from_team(
-    _user: SuperAdminJwtGuard,
+    user: SuperAdminJwtGuard,
     ctx: ReqCtx,
     path: Path<(Uuid, Uuid)>,
     dir: Json<DeleteItemsRequest>,
 ) -> UniResult<u64> {
+    let user = user.into_inner();
     let (event_id, team_id) = path.into_inner();
     let dir = dir.into_inner();
     let deleted_count = event_team_members::Entity::delete_many()
@@ -305,16 +350,30 @@ pub async fn remove_user_from_team(
         .await?
         .rows_affected;
 
+    ctx.log
+        .add_log(
+            "INFO",
+            "EVENT_TEAMS",
+            "REMOVE_MEMBER",
+            format!("{} 从队伍移除 {} 名成员", user.username, deleted_count).as_str(),
+            json!({"team_id": team_id, "deleted_count": deleted_count}),
+            None,
+            user.id.into(),
+            Some(&ctx.req),
+        )
+        .await;
+
     UniResponse::ok(deleted_count.into()).into()
 }
 
 /// POST /api/admin/events/{event_id}/teams/{team_id}/banned
 #[post("/{team_id}/banned")]
 pub async fn ban_team(
-    _user: SuperAdminJwtGuard,
+    user: SuperAdminJwtGuard,
     ctx: ReqCtx,
     path: Path<(Uuid, Uuid)>,
 ) -> UniResult<()> {
+    let user = user.into_inner();
     let (event_id, team_id) = path.into_inner();
 
     let event_team = event_teams::Entity::find_by_id(team_id)
@@ -326,7 +385,20 @@ pub async fn ban_team(
     let mut event_team: event_teams::ActiveModel = event_team.into();
     event_team.banned = Set(true);
 
-    let _event_team = event_team.update(ctx.db.get_ref()).await?;
+    let event_team = event_team.update(ctx.db.get_ref()).await?;
+
+    ctx.log
+        .add_log(
+            "INFO",
+            "EVENT_TEAMS",
+            "BAN",
+            format!("{} 封禁队伍: {}", user.username, event_team.name).as_str(),
+            json!({"team_id": team_id, "team_name": event_team.name}),
+            None,
+            user.id.into(),
+            Some(&ctx.req),
+        )
+        .await;
 
     UniResponse::ok_none().into()
 }
@@ -334,10 +406,11 @@ pub async fn ban_team(
 /// POST /api/admin/events/{event_id}/teams/{team_id}/unbanned
 #[post("/{team_id}/unbanned")]
 pub async fn unbanned_team(
-    _user: SuperAdminJwtGuard,
+    user: SuperAdminJwtGuard,
     ctx: ReqCtx,
     path: Path<(Uuid, Uuid)>,
 ) -> UniResult<()> {
+    let user = user.into_inner();
     let (event_id, team_id) = path.into_inner();
 
     let event_team = event_teams::Entity::find_by_id(team_id)
@@ -349,7 +422,20 @@ pub async fn unbanned_team(
     let mut event_team: event_teams::ActiveModel = event_team.into();
     event_team.banned = Set(false);
 
-    let _event_team = event_team.update(ctx.db.get_ref()).await?;
+    let event_team = event_team.update(ctx.db.get_ref()).await?;
+
+    ctx.log
+        .add_log(
+            "INFO",
+            "EVENT_TEAMS",
+            "UNBAN",
+            format!("{} 解禁队伍: {}", user.username, event_team.name).as_str(),
+            json!({"team_id": team_id, "team_name": event_team.name}),
+            None,
+            user.id.into(),
+            Some(&ctx.req),
+        )
+        .await;
 
     UniResponse::ok_none().into()
 }

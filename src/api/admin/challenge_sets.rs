@@ -17,10 +17,11 @@ pub struct CreateChallengeSetRequest {
 /// POST /api/admin/challenge_sets
 #[post("")]
 pub async fn create_challenge_set(
-    _user: SuperAdminJwtGuard,
+    user: SuperAdminJwtGuard,
     ctx: ReqCtx,
     csr: Json<CreateChallengeSetRequest>,
 ) -> UniResult<challenge_sets::Model> {
+    let user = user.into_inner();
     let csr = csr.into_inner();
     let challenge_set = challenge_sets::ActiveModel {
         name: Set(csr.name),
@@ -41,6 +42,19 @@ pub async fn create_challenge_set(
         }
     }
 
+    ctx.log
+        .add_log(
+            "INFO",
+            "CHALLENGE_SETS",
+            "CREATE",
+            format!("{} 创建题目集: {}", user.username, challenge_set.name).as_str(),
+            json!({"name": challenge_set.name}),
+            None,
+            user.id.into(),
+            Some(&ctx.req),
+        )
+        .await;
+
     UniResponse::ok_none().into()
 }
 
@@ -53,11 +67,12 @@ pub struct PatchChallengeSetRequest {
 /// PATCH /api/admin/challenge_sets/{challenge_set_id}
 #[patch("/{challenge_set_id}")]
 pub async fn patch_challenge_set(
-    _user: SuperAdminJwtGuard,
+    user: SuperAdminJwtGuard,
     ctx: ReqCtx,
     challenge_set_id: Path<Uuid>,
     psr: Json<PatchChallengeSetRequest>,
 ) -> UniResult<challenge_sets::Model> {
+    let user = user.into_inner();
     let challenge_set_id = challenge_set_id.into_inner();
     let psr = psr.into_inner();
     let challenge_set = challenge_sets::Entity::find_by_id(challenge_set_id)
@@ -74,22 +89,51 @@ pub async fn patch_challenge_set(
         .map(|description| m_challenge_set.description = Set(Some(description)));
 
     let challenge_set = m_challenge_set.update(ctx.db.get_ref()).await?;
+
+    ctx.log
+        .add_log(
+            "INFO",
+            "CHALLENGE_SETS",
+            "UPDATE",
+            format!("{} 更新题目集: {}", user.username, challenge_set.name).as_str(),
+            json!({"challenge_set_id": challenge_set.id}),
+            None,
+            user.id.into(),
+            Some(&ctx.req),
+        )
+        .await;
+
     UniResponse::ok(challenge_set.into()).into()
 }
 
 /// DELETE /api/admin/challenge_sets
 #[delete("")]
 pub async fn delete_challenge_set(
-    _user: SuperAdminJwtGuard,
+    user: SuperAdminJwtGuard,
     ctx: ReqCtx,
     dir: Json<DeleteItemsRequest>,
 ) -> UniResult<u64> {
+    let user = user.into_inner();
     let dir = dir.into_inner();
     let deleted_count = challenge_sets::Entity::delete_many()
         .filter(challenge_sets::Column::Id.is_in(dir.id_list))
         .exec(ctx.db.get_ref())
         .await?
         .rows_affected;
+
+    ctx.log
+        .add_log(
+            "INFO",
+            "CHALLENGE_SETS",
+            "DELETE",
+            format!("{} 删除 {} 个题目集", user.username, deleted_count).as_str(),
+            json!({"deleted_count": deleted_count}),
+            None,
+            user.id.into(),
+            Some(&ctx.req),
+        )
+        .await;
+
     UniResponse::ok(deleted_count.into()).into()
 }
 
@@ -180,11 +224,12 @@ pub async fn get_challenge_set(
 /// DELETE /api/admin/challenge_sets/{challenge_set_id}/challenges
 #[delete("/{challenge_set_id}/challenges")]
 pub async fn delete_challenge_from_set(
-    _user: SuperAdminJwtGuard,
+    user: SuperAdminJwtGuard,
     ctx: ReqCtx,
     challenge_set_id: Path<Uuid>,
     dir: Json<DeleteItemsRequest>,
 ) -> UniResult<u64> {
+    let user = user.into_inner();
     let challenge_set_id = challenge_set_id.into_inner();
     let dir = dir.into_inner();
 
@@ -194,6 +239,20 @@ pub async fn delete_challenge_from_set(
         .exec(ctx.db.get_ref())
         .await?
         .rows_affected;
+
+    ctx.log
+        .add_log(
+            "INFO",
+            "CHALLENGE_SETS",
+            "DELETE",
+            format!("{} 从题目集移除 {} 道题目", user.username, deleted_count).as_str(),
+            json!({"challenge_set_id": challenge_set_id, "deleted_count": deleted_count}),
+            None,
+            user.id.into(),
+            Some(&ctx.req),
+        )
+        .await;
+
     UniResponse::ok(deleted_count.into()).into()
 }
 
@@ -204,13 +263,15 @@ pub struct AddChallengeToSetRequest {
 /// POST /api/admin/challenge_sets/{challenge_set_id}/challenges
 #[post("/{challenge_set_id}/challenges")]
 pub async fn add_challenge_to_set(
-    _user: SuperAdminJwtGuard,
+    user: SuperAdminJwtGuard,
     ctx: ReqCtx,
     challenge_set_id: Path<Uuid>,
     acr: Json<AddChallengeToSetRequest>,
 ) -> UniResult<()> {
+    let user = user.into_inner();
     let challenge_set_id = challenge_set_id.into_inner();
     let acr = acr.into_inner();
+    let count = acr.challenge_id_list.len();
     for challenge_id in acr.challenge_id_list {
         challenge_set_items::ActiveModel {
             set_id: Set(challenge_set_id),
@@ -220,5 +281,19 @@ pub async fn add_challenge_to_set(
         .insert(ctx.db.get_ref())
         .await?;
     }
+
+    ctx.log
+        .add_log(
+            "INFO",
+            "CHALLENGE_SETS",
+            "ADD_CHALLENGES",
+            format!("{} 向题目集添加 {} 道题目", user.username, count).as_str(),
+            json!({"challenge_set_id": challenge_set_id, "count": count}),
+            None,
+            user.id.into(),
+            Some(&ctx.req),
+        )
+        .await;
+
     UniResponse::ok_none().into()
 }

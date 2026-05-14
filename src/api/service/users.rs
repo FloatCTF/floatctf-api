@@ -148,6 +148,8 @@ pub async fn patch_me(user: UserJwtGuard, ctx: ReqCtx, pmr: Json<PatchMeRequest>
     let pmr = pmr.into_inner();
     let user = user.into_inner();
 
+    let user_id = user.id;
+    let username = user.username.clone();
     let mut m_user = user.into_active_model();
     pmr.nickname.map(|n| {
         m_user.nickname = Set(n);
@@ -173,6 +175,19 @@ pub async fn patch_me(user: UserJwtGuard, ctx: ReqCtx, pmr: Json<PatchMeRequest>
     }
 
     m_user.update(ctx.db.get_ref()).await?;
+
+    ctx.log
+        .add_log(
+            "INFO",
+            "USER",
+            "UPDATE_PROFILE",
+            format!("{} 更新个人信息", username).as_str(),
+            json!({}),
+            user_id.into(),
+            None,
+            Some(&ctx.req),
+        )
+        .await;
 
     UniResponse::ok_none().into()
 }
@@ -245,6 +260,19 @@ pub async fn send_reset_email(ctx: ReqCtx, rpr: Json<ResetPasswordRequest>) -> U
         .await
         .map_err(|e| UniError::CustomError(format!("Failed to send email: {}", e)))?;
 
+    ctx.log
+        .add_log(
+            "INFO",
+            "AUTH",
+            "RESET_PASSWORD_REQUEST",
+            format!("{} 请求重置密码", user.username).as_str(),
+            json!({}),
+            user.id.into(),
+            None,
+            Some(&ctx.req),
+        )
+        .await;
+
     UniResponse::ok_none().into()
 }
 
@@ -280,6 +308,8 @@ pub async fn reset_password(
         .await?
         .ok_or_else(|| UniError::CustomError("User not found".to_string()))?;
 
+    let user_id = user.id;
+    let username = user.username.clone();
     let mut m_user = user.into_active_model();
     let hashed_password = {
         let salt = SaltString::generate(&mut OsRng);
@@ -296,6 +326,19 @@ pub async fn reset_password(
     m_user.password = Set(hashed_password);
 
     m_user.update(ctx.db.get_ref()).await?;
+
+    ctx.log
+        .add_log(
+            "INFO",
+            "AUTH",
+            "RESET_PASSWORD",
+            format!("{} 重置密码成功", username).as_str(),
+            json!({}),
+            user_id.into(),
+            None,
+            Some(&ctx.req),
+        )
+        .await;
 
     UniResponse::ok_none().into()
 }

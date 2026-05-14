@@ -144,6 +144,19 @@ pub async fn launch_instance(
         .await
         .map_err(|e| UniError::CustomError(format!("when launch instance:{}", e)))?;
 
+    ctx.log
+        .add_log(
+            "INFO",
+            "INSTANCE",
+            "LAUNCH",
+            format!("启动题目 {} 的实例", lir.challenge_id).as_str(),
+            json!({"event_id": lir.event_id}),
+            user.id.into(),
+            None,
+            Some(&ctx.req),
+        )
+        .await;
+
     UniResponse::ok(instance.into()).into()
 }
 
@@ -159,6 +172,19 @@ pub async fn destroy_instance(
     event::common::destroy_instance(&ctx.db, &ctx.docker, instance_id, &user)
         .await
         .map_err(|e| UniError::CustomError(format!("destroy_instance:{}", e)))?;
+
+    ctx.log
+        .add_log(
+            "INFO",
+            "INSTANCE",
+            "DESTROY",
+            format!("销毁实例 {}", instance_id).as_str(),
+            json!({}),
+            user.id.into(),
+            None,
+            Some(&ctx.req),
+        )
+        .await;
 
     UniResponse::ok_none().into()
 }
