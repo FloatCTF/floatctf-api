@@ -22,6 +22,7 @@ pub use super::event_writeup::Entity as EventWriteup;
 pub use super::events::Entity as Events;
 pub use super::gameboxes::Entity as Gameboxes;
 pub use super::instances::Entity as Instances;
+pub use super::kv_store::Entity as KvStore;
 pub use super::logs::Entity as Logs;
 pub use super::scheduled_tasks::Entity as ScheduledTasks;
 pub use super::settings::Entity as Settings;

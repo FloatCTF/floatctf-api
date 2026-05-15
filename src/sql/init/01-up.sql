@@ -361,3 +361,12 @@ CREATE TABLE IF NOT EXISTS "discussion_likes" (
     "created_at" TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE ("discussion_id", "user_id")
 );
+
+
+CREATE TABLE IF NOT EXISTS "kv_store" (
+    "key"         TEXT PRIMARY KEY,
+    "value"       JSONB NOT NULL,
+    "expires_at"  TIMESTAMPTZ,
+    "created_at"  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    "updated_at"  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
