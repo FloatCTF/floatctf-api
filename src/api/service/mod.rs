@@ -5,6 +5,7 @@ mod challenge_writeups;
 mod challenges;
 mod discussions;
 mod download;
+mod event_calendar;
 mod events;
 mod instances;
 mod submit;
@@ -164,6 +165,8 @@ pub fn config(cfg: &mut ServiceConfig) {
             // POST /api/events/{event_id}/teams/{team_id}/quit
             .service(events::quit_team),
     );
+    // GET /api/event_calendar (public, no auth required)
+    cfg.service(scope("/event_calendar").service(event_calendar::get_event_calendar));
 }
 
 /// 计算下一次动态得分。

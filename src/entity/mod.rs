@@ -24,6 +24,7 @@ pub mod event_writeup;
 pub mod events;
 pub mod gameboxes;
 pub mod instances;
+pub mod kv_store;
 pub mod logs;
 pub mod scheduled_tasks;
 pub mod sea_orm_active_enums;

@@ -73,3 +73,7 @@ CREATE INDEX idx_discussions_created ON "discussions"("created_at" DESC);
 CREATE INDEX idx_discussion_comments_discussion ON "discussion_comments"("discussion_id");
 CREATE INDEX idx_discussion_comments_author ON "discussion_comments"("author_id");
 CREATE INDEX idx_discussion_likes_discussion ON "discussion_likes"("discussion_id");
+
+
+CREATE INDEX IF NOT EXISTS "idx_kv_store_expires_at"
+    ON "kv_store" ("expires_at") WHERE "expires_at" IS NOT NULL;
