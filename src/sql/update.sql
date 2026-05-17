@@ -1,4 +1,5 @@
 ALTER TABLE users ADD COLUMN avatar TEXT DEFAULT NULL;
+
 CREATE TABLE IF NOT EXISTS "kv_store" (
     "key"         TEXT PRIMARY KEY,
     "value"       JSONB NOT NULL,

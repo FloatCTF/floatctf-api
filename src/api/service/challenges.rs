@@ -43,13 +43,18 @@ pub async fn get_challenges(
     let stmt = apply_filters(stmt, query_params.filter.clone(), &mappings);
     let stmt = stmt.order_by_desc(challenges::Column::UpdatedAt);
 
-    let (items, total_items) =
+    let (mut items, total_items) =
         if let (Some(limit), Some(page)) = (query_params.limit, query_params.page) {
             paginate_query(stmt, ctx.db.get_ref(), limit, page).await?
         } else {
             let items = stmt.all(ctx.db.get_ref()).await?;
             (items.clone(), items.len())
         };
+
+    // 清除 toml_str，防止泄漏静态 flag
+    for item in &mut items {
+        item.toml_str.clear();
+    }
 
     query_params.total = Some(total_items);
 
@@ -69,7 +74,10 @@ pub async fn get_challenge(
         .one(ctx.db.get_ref())
         .await?
     {
-        Some(model) => UniResponse::ok(model.into()).into(),
+        Some(mut model) => {
+            model.toml_str.clear();
+            UniResponse::ok(model.into()).into()
+        }
         None => UniError::NotFound(format!(" {} not exist", challenge_id)).into(),
     }
 }
@@ -84,13 +92,17 @@ pub async fn get_challenge_instance(
     let user = user.into_inner();
     let challenge_id = challenge_id.into_inner();
 
-    let instance = instances::Entity::find()
+    let mut instance = instances::Entity::find()
         .filter(instances::Column::ChallengeId.eq(challenge_id))
         .filter(instances::Column::Status.eq(InstanceStatus::Running))
         .filter(instances::Column::UserId.eq(user.id))
         .filter(instances::Column::Ref.eq("JeopardyPractice"))
         .one(ctx.db.get_ref())
         .await?;
+
+    if let Some(ref mut inst) = instance {
+        inst.flag.clear();
+    }
 
     UniResponse::ok(instance).into()
 }
