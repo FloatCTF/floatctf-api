@@ -213,7 +213,7 @@ pub async fn get_event_challenges(
 
     let mut result = Vec::new();
     for (event_challenge, challenge) in c_ec {
-        if let Some(c) = challenge {
+        if let Some(mut c) = challenge {
             let solved_count = event_challenge_solves::Entity::find()
                 .filter(event_challenge_solves::Column::EventId.eq(*id))
                 .filter(event_challenge_solves::Column::ChallengeId.eq(c.id))
@@ -290,6 +290,7 @@ pub async fn get_event_challenges(
                     .map_err(|e| {
                         UniError::CustomError(format!("calculate_next_dynamic_score error: {}", e))
                     })?;
+            c.toml_str.clear();
             result.push(EventChallengeResult {
                 challenge: c,
                 current_points,
@@ -342,10 +343,13 @@ pub async fn get_event_instances(
 
     let instances_result = instances
         .into_iter()
-        .map(|i| EventInstanceResult {
-            instance: i.instance,
-            challenge_name: i.challenge_name,
-            user_nickname: i.nickname,
+        .map(|mut i| {
+            i.instance.flag.clear();
+            EventInstanceResult {
+                instance: i.instance,
+                challenge_name: i.challenge_name,
+                user_nickname: i.nickname,
+            }
         })
         .collect::<Vec<_>>();
 
@@ -377,11 +381,12 @@ pub async fn get_event_challenge_instance(
         .map_err(|e| UniError::CustomError(format!("build event context error: {}", e)))?;
 
     let strategy = event::EventStrategyFactory::create(&event_ctx.event.r#type);
-    let instance = strategy
+    let mut instance = strategy
         .get_instance_by_challenge_id(&event_ctx, challenge_id)
         .await
         .map_err(|e| UniError::CustomError(format!("get_instance_by_challenge_id error: {}", e)))?;
 
+    instance.flag.clear();
     UniResponse::ok(instance.into()).into()
 }
 
